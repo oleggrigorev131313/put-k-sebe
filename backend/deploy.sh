@@ -24,6 +24,11 @@ need curl
 echo "== Путь к себе: автоматическое развёртывание =="
 echo "Будут использованы существующие облако, папка и YDB."
 echo "Новая база данных создаваться не будет."
+echo "Будут созданы Lockbox secret, Cloud Function и API Gateway."
+echo "Серверные вызовы тарифицируются по действующим тарифам Yandex Cloud."
+echo
+read -r -p "Продолжить развёртывание? [y/N] " CONFIRM
+[[ "$CONFIRM" == "y" || "$CONFIRM" == "Y" ]] || { echo "Отменено, ресурсы не изменены."; exit 0; }
 echo
 
 CURRENT_CLOUD="$(yc config get cloud-id 2>/dev/null || true)"
@@ -112,10 +117,11 @@ yc serverless function version create \
   --runtime python312 \
   --entrypoint index.handler \
   --memory 512m \
-  --execution-timeout 20s \
+  --execution-timeout 30s \
   --source-path "$ZIP_FILE" \
   --service-account-id "$SA_ID" \
-  --environment "YDB_ENDPOINT=$YDB_ENDPOINT,YDB_DATABASE=$YDB_DATABASE" \
+  --environment "YDB_ENDPOINT=$YDB_ENDPOINT" \
+  --environment "YDB_DATABASE=$YDB_DATABASE" \
   --secret "environment-variable=BOT_TOKEN,id=$SECRET_ID,version-id=$VERSION_ID,key=bot_token" \
   --description "Put-k-sebe API deployment" >/dev/null
 
