@@ -6,7 +6,7 @@ import logging
 import os
 import time
 import uuid
-from threading import Lock
+from threading import RLock
 from urllib.parse import parse_qsl
 
 import ydb
@@ -23,7 +23,7 @@ MAX_AUTH_AGE_SECONDS = 86_400
 
 _driver = None
 _pool = None
-_db_lock = Lock()
+_db_lock = RLock()
 _schema_ready = False
 
 
