@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fbfbfd">
+<meta name="description" content="Путь к себе — личная рабочая тетрадь для работы с мыслями, эмоциями и привычками.">
+<title>Путь к себе</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:#fbfbfd;--ink:#20212b;--muted:#81869a;--line:#e9eaf2;--lav:#eff0ff;--blue:#737fe0;--green:#409e78;--shadow:0 10px 34px rgba(59,65,111,.07);--r:22px;font-family:Manrope,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;color:var(--ink);background:radial-gradient(ellipse at 12% 0%,#f0f1ff,transparent 34%),radial-gradient(ellipse at 90% 30%,#f6f2ff,transparent 30%),var(--bg)}
+button,input,textarea,select{font:inherit}button{cursor:pointer}.shell{max-width:680px;min-height:100vh;margin:auto;padding:env(safe-area-inset-top) 18px calc(92px + env(safe-area-inset-bottom))}
+header{height:62px;display:flex;align-items:center;justify-content:space-between}.brand{display:flex;align-items:center;gap:9px;font-weight:700}.mark{width:31px;height:31px;border-radius:11px;background:linear-gradient(145deg,#fff,#e7eaff);display:grid;place-items:center;color:var(--blue);font-size:21px;box-shadow:var(--shadow)}
+.icon{width:39px;height:39px;border:1px solid var(--line);border-radius:50%;background:#fff;color:#626b9c;font-weight:800;box-shadow:var(--shadow)}
+main{padding:8px 0 24px}.eyebrow{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:#969aac;font-weight:800}.title{font-size:28px;letter-spacing:-1px;line-height:1.2;margin:6px 0 8px;font-weight:800}.sub{font-size:13px;color:var(--muted);line-height:1.6;margin:0 0 16px}
+.card{background:rgba(255,255,255,.86);border:1px solid rgba(231,232,243,.94);border-radius:var(--r);padding:18px;box-shadow:var(--shadow);backdrop-filter:blur(16px)}
+.hero{padding:24px;background:linear-gradient(135deg,rgba(255,255,255,.97),rgba(240,242,255,.9));position:relative;overflow:hidden}.hero:after{content:"";position:absolute;width:170px;height:170px;right:-70px;top:-75px;border-radius:50%;background:radial-gradient(circle,#dfe4ff,transparent 70%);pointer-events:none}.hero h1{font-size:30px;line-height:1.12;letter-spacing:-1.3px;margin:9px 0}.hero p{font-size:13px;color:#747a90;line-height:1.6;max-width:450px;margin:8px 0 18px}
+.btn{border:0;border-radius:15px;padding:13px 17px;font-size:13px;font-weight:800;transition:transform .15s}.btn:active{transform:scale(.98)}.primary{background:#282a38;color:#fff;box-shadow:0 8px 20px #282a3822}.secondary{background:#eef0ff;color:#5966c2}.outline{background:#fff;border:1px solid var(--line);color:#5f6682}.full{width:100%}
+.section{display:flex;align-items:center;justify-content:space-between;margin:24px 2px 11px}.section h2{font-size:16px;margin:0}.textbtn{border:0;background:none;color:var(--blue);font-size:12px;font-weight:800}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.quick{min-height:112px;border:1px solid var(--line);border-radius:19px;background:rgba(255,255,255,.82);padding:15px;text-align:left;box-shadow:var(--shadow);color:var(--ink)}.qi{width:34px;height:34px;border-radius:12px;background:var(--lav);display:grid;place-items:center;color:var(--blue);font-size:18px;margin-bottom:11px}.quick b{font-size:13px;display:block}.quick small{display:block;color:var(--muted);font-size:11px;line-height:1.4;margin-top:4px}
+.statrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat strong{font-size:31px;letter-spacing:-1.2px;display:block}.stat span{font-size:11px;color:var(--muted)}
+.field{margin:15px 0}.field label{font-size:12px;font-weight:800;display:block;margin-bottom:7px}.input,.area,.select{width:100%;border:1px solid var(--line);background:#fff;border-radius:14px;padding:13px;color:var(--ink);font-size:13px;outline:none}.area{min-height:86px;resize:vertical;line-height:1.5}.input:focus,.area:focus,.select:focus{border-color:#aab1f0;box-shadow:0 0 0 3px #e9ebff}
+.range{display:flex;align-items:center;gap:12px}.range input{flex:1;accent-color:var(--blue)}.range strong{width:40px;text-align:center;color:#6873cd}.chips{display:flex;flex-wrap:wrap;gap:7px}.chip{border:1px solid var(--line);background:#fff;border-radius:30px;padding:8px 11px;color:#757b91;font-size:11px;font-weight:700}.chip.active{background:#eff0ff;color:#5966c2;border-color:#ccd1ff}
+.entry{margin:10px 0}.entry h3{font-size:14px;margin:9px 0 5px}.entry p{font-size:12px;line-height:1.5;color:#73798d;margin:4px 0}.meta{display:flex;justify-content:space-between;font-size:10px;color:#9599a9}
+.pattern{display:flex;gap:12px;margin:10px 0;align-items:flex-start}.picon{width:38px;height:38px;flex:none;border-radius:13px;background:#f0f1ff;color:var(--blue);display:grid;place-items:center}.pattern b{font-size:13px}.pattern p{font-size:11px;color:var(--muted);margin:4px 0;line-height:1.45}
+.chart{width:100%;height:170px}.chart svg{width:100%;height:100%}.empty{text-align:center;padding:27px 18px}.empty .symbol{font-size:32px;margin-bottom:8px}.empty h3{font-size:15px;margin:0 0 7px}.empty p{font-size:12px;line-height:1.5;color:var(--muted);max-width:300px;margin:0 auto 15px}
+.note{background:#f7f7fb;border:1px solid var(--line);border-radius:14px;padding:12px;color:#777d90;font-size:10px;line-height:1.5;margin-top:16px}.nav{position:fixed;z-index:10;bottom:0;left:50%;transform:translateX(-50%);width:min(100%,680px);display:grid;grid-template-columns:repeat(5,1fr);padding:9px 7px calc(9px + env(safe-area-inset-bottom));background:rgba(255,255,255,.91);backdrop-filter:blur(18px);border-top:1px solid #ececf3}.nav button{border:0;background:none;color:#9a9eae;font-size:10px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:3px;padding:3px 0}.nav button.active{color:#5966c8}.nav i{font-style:normal;font-size:21px;line-height:24px}
+.modalbg{position:fixed;z-index:30;inset:0;background:#22233355;display:grid;align-items:end;padding:12px}.modal{background:white;border-radius:24px;padding:21px;max-height:85vh;overflow:auto;width:min(100%,620px);margin:auto}.modal h2{font-size:19px;margin:0 0 8px}.modal p{font-size:12px;line-height:1.55;color:var(--muted)}.modalhead{display:flex;justify-content:flex-end;margin-bottom:6px}.toast{position:fixed;z-index:50;bottom:95px;left:50%;transform:translate(-50%,12px);opacity:0;pointer-events:none;background:#282a38;color:white;padding:11px 16px;border-radius:30px;font-size:12px;transition:.2s;max-width:90%;text-align:center}.toast.show{opacity:1;transform:translate(-50%,0)}
+@media(min-width:600px){.shell{padding-left:28px;padding-right:28px}.hero{padding:29px}.title{font-size:31px}}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="shell">
+<header><div class="brand"><span class="mark">✳</span><span>Путь <b>к себе</b></span></div><button class="icon" id="settings" aria-label="Настройки">О</button></header>
+<main id="app" aria-live="polite"></main>
+</div>
+<nav class="nav" aria-label="Навигация">
+<button data-page="home" class="active"><i>⌂</i>Главная</button>
+<button data-page="journal"><i>✎</i>Дневник</button>
+<button data-page="patterns"><i>◉</i>Паттерны</button>
+<button data-page="progress"><i>⌁</i>Прогресс</button>
+<button data-page="library"><i>▤</i>Практики</button>
+</nav>
+<div class="toast" id="toast" role="status"></div>
+<script>
+(function(){
+"use strict";
+var KEY="put-k-sebe-v1",app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".nav button"));
+var tg=window.Telegram&&window.Telegram.WebApp;
+if(tg){try{tg.ready();tg.expand();tg.setHeaderColor("#fbfbfd");tg.setBackgroundColor("#fbfbfd");}catch(e){}}
+var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.first_name;
+document.getElementById("settings").textContent=(first||"О").charAt(0).toUpperCase();
+var defaults={entries:[],patterns:[{id:"p1",name:"Я должен быть успешным",detail:"Моя ценность зависит от достижений"},{id:"p2",name:"Я не справлюсь",detail:"Ожидание неудачи до начала действия"},{id:"p3",name:"Все оценивают меня",detail:"Страх чужого мнения и критики"},{id:"p4",name:"Нужно выбрать идеально",detail:"Страх ошибиться и потерять время"}],completed:[]};
+var state=load(),page="home",step=0,draft=blank();
+function load(){try{var x=JSON.parse(localStorage.getItem(KEY));return x&&Array.isArray(x.entries)?Object.assign({},defaults,x):JSON.parse(JSON.stringify(defaults));}catch(e){return JSON.parse(JSON.stringify(defaults));}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
+function blank(){return{date:new Date().toISOString(),situation:"",emotion:"Тревога",intensity:6,thought:"",before:80,forText:"",against:"",balanced:"",action:"",after:50,pattern:""};}
+function esc(s){return String(s||"").replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+function date(s){return new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short"}).format(new Date(s));}
+function toast(s){var t=document.getElementById("toast");t.textContent=s;t.classList.add("show");setTimeout(function(){t.classList.remove("show");},2400);}
+function go(p){page=p;nav.forEach(function(n){n.classList.toggle("active",n.dataset.page===p);});render();window.scrollTo(0,0);}
+nav.forEach(function(n){n.addEventListener("click",function(){go(n.dataset.page);});});
+document.getElementById("settings").addEventListener("click",settings);
+function button(text,action,kind){return '<button class="btn '+(kind||"primary")+'" data-act="'+action+'">'+text+'</button>';}
+function section(title,link){return '<div class="section"><h2>'+title+'</h2>'+(link?'<button class="textbtn" data-go="'+link+'">Подробнее →</button>':"")+'</div>';}
+function home(){
+var n=state.entries.length,days={};state.entries.forEach(function(e){days[new Date(e.date).toDateString()]=1;});
+var last=state.entries[0];
+return '<section class="hero card"><div class="eyebrow">Личное пространство</div><h1>Привет, '+esc(first||"Олег")+' ✦</h1><p>Не нужно менять всю жизнь за один день. Достаточно лучше понять себя и сделать следующий небольшой шаг.</p>'+button("Записать мысль →","new")+'</section>'+
+section("Твой путь","progress")+'<div class="statrow"><div class="card stat"><strong>'+n+'</strong><span>записей в дневнике</span></div><div class="card stat"><strong>'+Object.keys(days).length+'</strong><span>дней с записями</span></div></div>'+
+section("Что можно сделать")+'<div class="grid"><button class="quick" data-act="new"><span class="qi">✎</span><b>Разобрать мысль</b><small>Ситуация, эмоция, факты и новый взгляд</small></button><button class="quick" data-go="patterns"><span class="qi">◎</span><b>Мои паттерны</b><small>Замечать повторяющиеся сценарии</small></button><button class="quick" data-go="progress"><span class="qi">⌁</span><b>Мой прогресс</b><small>История реальных записей</small></button><button class="quick" data-go="library"><span class="qi">▤</span><b>Практики</b><small>Небольшие упражнения</small></button></div>'+
+section("Последняя запись","journal")+(last?'<article class="card entry"><div class="meta"><span>'+date(last.date)+'</span><span>'+esc(last.emotion)+' · '+last.intensity+'/10</span></div><h3>'+esc(last.thought||"Запись")+'</h3><p>'+esc(last.balanced||last.situation)+'</p></article>':'<div class="card empty"><div class="symbol">☁</div><h3>Начни с одной мысли</h3><p>Запиши ситуацию, которая занимает внимание. Здесь постепенно появится твоя личная история изменений.</p>'+button("Создать первую запись","new","secondary")+'</div>')+
+'<div class="note">Инструмент самостоятельной рефлексии. Не является диагностикой или заменой профессиональной помощи.</div>';
+}
+var labels=["Что произошло?","Что ты почувствовал?","Какая мысль возникла?","Проверим факты","Более сбалансированный взгляд","Следующий небольшой шаг"];
+function field(label,key,ph){return '<div class="field"><label>'+label+'</label><textarea class="area" data-field="'+key+'" placeholder="'+ph+'">'+esc(draft[key])+'</textarea></div>';}
+function range(label,key,max,suffix){return '<div class="field"><label>'+label+'</label><div class="range"><input type="range" min="0" max="'+max+'" value="'+draft[key]+'" data-range="'+key+'"><strong id="v-'+key+'">'+draft[key]+(suffix||"")+'</strong></div></div>';}
+function wizard(){
+var bodies=[
+field("Опиши конкретную ситуацию","situation","Например: отправил предложение клиенту, но не получил ответ."),
+'<div class="field"><label>Эмоция</label><div class="chips">'+["Тревога","Злость","Стыд","Грусть","Разочарование","Страх","Вина","Растерянность"].map(function(x){return '<button class="chip '+(draft.emotion===x?"active":"")+'" data-emotion="'+x+'">'+x+'</button>';}).join("")+'</div></div>'+range("Интенсивность эмоции","intensity",10,"/10"),
+field("Автоматическая мысль","thought","Например: «Я никогда не смогу нормально зарабатывать».")+range("Насколько веришь этой мысли?","before",100,"%"),
+'<div class="grid"><div class="field"><label>Факты за мысль</label><textarea class="area" data-field="forText" placeholder="Что подтверждает?">'+esc(draft.forText)+'</textarea></div><div class="field"><label>Факты против</label><textarea class="area" data-field="against" placeholder="Что не учитывает эта мысль?">'+esc(draft.against)+'</textarea></div></div>',
+field("Более сбалансированная формулировка","balanced","Не позитивная, а более точная мысль.")+range("Уверенность в исходной мысли теперь","after",100,"%"),
+field("Какой небольшой шаг ты можешь сделать?","action","Действие на 10–15 минут.")+'<div class="field"><label>С каким паттерном это связано?</label><select class="select" id="patternSelect"><option value="">Не знаю / не хочу указывать</option>'+state.patterns.map(function(p){return '<option value="'+p.id+'" '+(draft.pattern===p.id?"selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select></div>'
+];
+return '<div class="eyebrow">Рабочая тетрадь · шаг '+(step+1)+' из 6</div><h1 class="title">'+labels[step]+'</h1><p class="sub">'+["Опиши событие без оценок себя и других.","Назови эмоцию и оцени её интенсивность прямо сейчас.","Запиши первую мысль, которая возникла.","Отдели наблюдаемые факты от предположений.","Найди взгляд, который учитывает всю картину.","Выбери выполнимое действие, а не идеальный план."][step]+'</p><div class="chips stepper">'+labels.map(function(x,i){return '<span class="chip '+(i<=step?"active":"")+'">'+(i+1)+'</span>';}).join("")+'</div><section class="card">'+bodies[step]+'<div class="note">Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее и выбрать следующий посильный шаг.</div><div style="display:flex;gap:9px;margin-top:16px">'+(step?button("Назад","prev","outline"):"")+button(step===5?"Сохранить запись":"Далее →",step===5?"save":"next")+'</div><button class="textbtn" style="margin-top:13px" data-act="cancel">Отменить</button></section>';
+}
+function journal(){
+if(step<6)return wizard();
+return '<div class="eyebrow">Наблюдение без осуждения</div><h1 class="title">Дневник мыслей</h1><p class="sub">Записи помогают замечать связи между ситуациями, мыслями, эмоциями и действиями.</p>'+button("＋ Новая запись","new","full") +section("История записей")+(state.entries.length?state.entries.map(function(e){return '<article class="card entry"><div class="meta"><span>'+date(e.date)+'</span><span>'+esc(e.emotion)+' · '+e.intensity+'/10</span></div><h3>'+esc(e.thought||"Без названия")+'</h3><p><b>Новый взгляд:</b> '+esc(e.balanced||"Не заполнен")+'</p><button class="textbtn" data-entry="'+e.id+'">Открыть запись →</button></article>';}).join(""):'<div class="card empty"><div class="symbol">✎</div><h3>Здесь пока тихо</h3><p>Первая запись не обязана быть идеальной.</p></div>');
+}
+function patterns(){
+return '<div class="eyebrow">Повторяющиеся сценарии</div><h1 class="title">Мои паттерны</h1><p class="sub">Это не диагнозы и не ярлыки. Это рабочие гипотезы, которые можно уточнять по мере наблюдений.</p>'+button("＋ Добавить паттерн","add-pattern","secondary full")+section("Мои наблюдения")+(state.patterns.length?state.patterns.map(function(p){var count=state.entries.filter(function(e){return e.pattern===p.id;}).length;return '<div class="card pattern"><span class="picon">◎</span><div style="flex:1"><b>'+esc(p.name)+'</b><p>'+esc(p.detail||"Описание пока не добавлено")+'</p><p>Связанных записей: '+count+'</p></div></div>';}).join(""):'<div class="card empty"><h3>Пока нет паттернов</h3></div>');
+}
+function chart(){
+var counts=Array(6).fill(0),now=Date.now();state.entries.forEach(function(e){var d=Math.floor((now-new Date(e.date).getTime())/(7*86400000));if(d>=0&&d<6)counts[5-d]++;});
+var max=Math.max(2,...counts),points=counts.map(function(v,i){return(12+i*56)+","+(132-v/max*100);}).join(" ");
+var dots=counts.map(function(v,i){return '<circle cx="'+(12+i*56)+'" cy="'+(132-v/max*100)+'" r="4" fill="#fff" stroke="#7783df" stroke-width="2"/><text x="'+(12+i*56)+'" y="153" font-size="8" text-anchor="middle" fill="#999">'+(i+1)+'</text>';}).join("");
+return '<div class="chart"><svg viewBox="0 0 310 165" role="img" aria-label="Количество записей по неделям"><line x1="4" y1="32" x2="305" y2="32" stroke="#eceef5"/><line x1="4" y1="82" x2="305" y2="82" stroke="#eceef5"/><line x1="4" y1="132" x2="305" y2="132" stroke="#eceef5"/><polyline points="'+points+'" fill="none" stroke="#7783df" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'+dots+'</svg></div>';
+}
+function progress(){
+var n=state.entries.length,days={};state.entries.forEach(function(e){days[new Date(e.date).toDateString()]=1;});
+var before=state.entries.map(function(e){return Number(e.before)||0;}),after=state.entries.map(function(e){return Number(e.after)||0;});
+var avg=function(a){return a.length?Math.round(a.reduce(function(x,y){return x+y;},0)/a.length):null;};
+return '<div class="eyebrow">Твоя история изменений</div><h1 class="title">Прогресс</h1><p class="sub">Здесь отображаются только данные из твоих записей. Это не медицинская оценка и не измерение психологического здоровья.</p><div class="statrow"><div class="card stat"><strong>'+n+'</strong><span>записей</span></div><div class="card stat"><strong>'+Object.keys(days).length+'</strong><span>дней практики</span></div></div>'+section("Активность по неделям")+'<div class="card">'+chart()+'<div class="meta"><span>Неделя 1</span><span>Неделя 6</span></div></div>'+section("Уверенность в автоматических мыслях")+'<div class="statrow"><div class="card stat"><strong>'+(avg(before)===null?"—":avg(before)+"%")+'</strong><span>в среднем до анализа</span></div><div class="card stat"><strong>'+(avg(after)===null?"—":avg(after)+"%")+'</strong><span>в среднем после</span></div></div><div class="note">Снижение уверенности в мысли не всегда означает улучшение состояния. Используй цифры как повод для наблюдения, а не как оценку себя.</div>';
+}
+var practices=[
+{icon:"◉",title:"Поймать автоматическую мысль",time:"5–7 минут",text:"Вспомни конкретную ситуацию. Запиши, что произошло, какие слова возникли в голове и какую эмоцию ты почувствовал. Не пытайся пока менять мысль — сначала просто заметь её."},
+{icon:"⚖",title:"Проверить факты",time:"5 минут",text:"Выбери одну мысль. Запиши факты, которые её подтверждают, а затем факты, которые она не учитывает. Отделяй наблюдения от предположений."},
+{icon:"↗",title:"Найти следующий небольшой шаг",time:"3 минуты",text:"Спроси себя: какое действие займёт не больше 10–15 минут и немного приблизит меня к тому, что важно? Сделай его достаточно маленьким, чтобы начать без идеальной готовности."},
+{icon:"☁",title:"Пауза и заземление",time:"2–3 минуты",text:"Поставь ноги на пол. Назови про себя пять предметов, которые видишь, четыре телесных ощущения и три звука. Если упражнение усиливает дискомфорт, остановись."}
+];
+function library(){
+return '<div class="eyebrow">Небольшие упражнения</div><h1 class="title">Практики и библиотека</h1><p class="sub">Выбирай то, что подходит текущей ситуации. Не нужно выполнять всё подряд.</p>'+practices.map(function(p,i){return '<button class="card quick" style="width:100%;margin:7px 0;text-align:left" data-practice="'+i+'"><span class="qi">'+p.icon+'</span><b>'+p.title+'</b><small>'+p.time+'</small></button>';}).join("")+'<div class="note">Практики предназначены для самонаблюдения и обучения навыкам рефлексии. Они не заменяют индивидуальную помощь специалиста.</div>';
+}
+function render(){
+app.innerHTML=page==="home"?home():page==="journal"?journal():page==="patterns"?patterns():page==="progress"?progress():library();
+bind();
+}
+function bind(){
+app.querySelectorAll("[data-go]").forEach(function(b){b.onclick=function(){go(b.dataset.go);};});
+app.querySelectorAll("[data-act]").forEach(function(b){b.onclick=function(){act(b.dataset.act);};});
+app.querySelectorAll("[data-field]").forEach(function(el){el.oninput=function(){draft[el.dataset.field]=el.value;};});
+app.querySelectorAll("[data-range]").forEach(function(el){el.oninput=function(){draft[el.dataset.range]=Number(el.value);var t=document.getElementById("v-"+el.dataset.range);if(t)t.textContent=el.value+(el.dataset.range==="intensity"?"/10":"%");};});
+app.querySelectorAll("[data-emotion]").forEach(function(b){b.onclick=function(){draft.emotion=b.dataset.emotion;render();};});
+var ps=document.getElementById("patternSelect");if(ps)ps.onchange=function(){draft.pattern=ps.value;};
+app.querySelectorAll("[data-entry]").forEach(function(b){b.onclick=function(){entryDetail(b.dataset.entry);};});
+app.querySelectorAll("[data-practice]").forEach(function(b){b.onclick=function(){practiceDetail(Number(b.dataset.practice));};});
+}
+function act(a){
+if(a==="new"){draft=blank();step=0;go("journal");}
+if(a==="next"){if(step<5)step++;render();}
+if(a==="prev"){if(step>0)step--;render();}
+if(a==="cancel"){step=6;go("journal");}
+if(a==="save"){if(!draft.situation.trim()&&!draft.thought.trim()){toast("Добавь хотя бы ситуацию или мысль.");return;}draft.date=new Date().toISOString();draft.id=Date.now().toString();state.entries.unshift(Object.assign({},draft));save();step=6;toast("Запись сохранена на этом устройстве");go("journal");}
+if(a==="add-pattern"){modal('<h2>Новый паттерн</h2><p>Запиши повторяющуюся мысль или сценарий нейтральными словами — это рабочее наблюдение, а не ярлык.</p><div class="field"><label>Название</label><input class="input" id="pn" placeholder="Например: я должен всё сделать идеально"></div><div class="field"><label>Когда появляется? (необязательно)</label><textarea class="area" id="pd"></textarea></div><button class="btn primary full" id="psave">Сохранить паттерн</button>');document.getElementById("psave").onclick=function(){var name=document.getElementById("pn").value.trim(),detail=document.getElementById("pd").value.trim();if(!name){toast("Добавь название паттерна");return;}state.patterns.push({id:"p"+Date.now(),name:name,detail:detail});save();closeModal();render();};}
+}
+function modal(content){var d=document.createElement("div");d.className="modalbg";d.id="modal";d.innerHTML='<section class="modal"><div class="modalhead"><button class="icon" id="close">×</button></div>'+content+'</section>';document.body.appendChild(d);d.onclick=function(e){if(e.target===d)closeModal();};document.getElementById("close").onclick=closeModal;}
+function closeModal(){var m=document.getElementById("modal");if(m)m.remove();}
+function entryDetail(id){var e=state.entries.find(function(x){return x.id===id;});if(!e)return;modal('<div class="eyebrow">'+date(e.date)+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация:</b> '+esc(e.situation)+'</p><p><b>Эмоция:</b> '+esc(e.emotion)+' · '+e.intensity+'/10</p><p><b>Факты за:</b> '+esc(e.forText)+'</p><p><b>Факты против:</b> '+esc(e.against)+'</p><p><b>Сбалансированный взгляд:</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг:</b> '+esc(e.action)+'</p><button class="btn outline full" id="del">Удалить запись</button>');document.getElementById("del").onclick=function(){if(confirm("Удалить эту запись?")){state.entries=state.entries.filter(function(x){return x.id!==id;});save();closeModal();render();}};}
+function practiceDetail(i){var p=practices[i];modal('<div class="eyebrow">Практика · '+p.time+'</div><h2>'+p.icon+' '+p.title+'</h2><p>'+p.text+'</p><button class="btn primary full" id="done">Отметить выполненной</button>');document.getElementById("done").onclick=function(){var k=new Date().toDateString()+"-"+i;if(state.completed.indexOf(k)<0)state.completed.push(k);save();closeModal();toast("Практика отмечена");};}
+function settings(){modal('<h2>Настройки и данные</h2><p>Записи хранятся локально в браузере или Telegram WebView на этом устройстве. Они не отправляются на сервер и не синхронизируются между устройствами.</p><button class="btn secondary full" id="export">Скачать резервную копию JSON</button><div style="height:9px"></div><button class="btn outline full" id="import">Восстановить из JSON</button><input type="file" id="file" accept="application/json" hidden><div style="height:9px"></div><button class="btn outline full" id="clear">Удалить все мои данные</button><div class="note">Не записывай сведения, по которым тебя можно идентифицировать, если не хочешь хранить их в браузере устройства. Очистка данных браузера может удалить записи.</div>');
+document.getElementById("export").onclick=function(){var blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="put-k-sebe-backup.json";a.click();URL.revokeObjectURL(url);};
+var f=document.getElementById("file");document.getElementById("import").onclick=function(){f.click();};f.onchange=async function(){try{var x=JSON.parse(await f.files[0].text());if(!Array.isArray(x.entries)||!Array.isArray(x.patterns))throw Error();state=Object.assign({},defaults,x);save();closeModal();render();toast("Данные восстановлены");}catch(e){toast("Не удалось прочитать файл");}};
+document.getElementById("clear").onclick=function(){if(confirm("Удалить все записи и паттерны? Сначала скачай резервную копию, если она нужна.")){state=JSON.parse(JSON.stringify(defaults));save();closeModal();render();}};
+}
+render();
+})();
+</script>
+</body>
+</html>
