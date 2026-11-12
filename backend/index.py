@@ -268,7 +268,7 @@ def handler(event, context):
         if method == "GET":
             _ensure_schema()
             state = _read_state(user_id)
-            _record_event(user_id, "app_opened")
+            # No persistent usage event is recorded until the user has submitted consented state.
             return _json_response(
                 200,
                 {"found": state is not None, "state": state},
