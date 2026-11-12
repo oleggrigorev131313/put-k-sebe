@@ -239,7 +239,7 @@ function bind(){
 app.querySelectorAll("[data-go]").forEach(function(b){b.onclick=function(){go(b.dataset.go);};});
 app.querySelectorAll("[data-act]").forEach(function(b){b.onclick=function(){act(b.dataset.act);};});
 app.querySelectorAll("[data-field]").forEach(function(el){el.oninput=function(){draft[el.dataset.field]=el.value;};});
-app.querySelectorAll("[data-range]").forEach(function(el){el.oninput=function(){draft[el.dataset.range]=Number(el.value);var t=document.getElementById("v-"+el.dataset.range);if(t)t.textContent=el.value+(el.dataset.range==="intensity"?"/10":"%");};});
+app.querySelectorAll("[data-range]").forEach(function(el){el.oninput=function(){draft[el.dataset.range]=Number(el.value);var t=document.getElementById("v-"+el.dataset.range);if(t)t.textContent=el.value+((el.dataset.range==="intensity"||el.dataset.range==="emotionAfter")?"/10":"%");};});
 app.querySelectorAll("[data-emotion]").forEach(function(b){b.onclick=function(){var list=selectedEmotions(),v=b.dataset.emotion,i=list.indexOf(v);if(i>=0)list.splice(i,1);else list.push(v);draft.emotion=list[0]||"";render();};});
 var ps=document.getElementById("patternSelect");if(ps)ps.onchange=function(){draft.pattern=ps.value;};
 app.querySelectorAll("[data-onboard-field]").forEach(function(el){el.oninput=function(){onboardingDraft[el.dataset.onboardField]=el.value;};});
