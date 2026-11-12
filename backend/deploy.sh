@@ -7,6 +7,7 @@ SERVICE_ACCOUNT_NAME="put-k-sebe-backend"
 GATEWAY_SA_NAME="put-k-sebe-gateway"
 DB_NAME="put-k-sebe-db"
 SECRET_NAME="put-k-sebe-telegram-bot"
+ADMIN_SECRET_NAME="put-k-sebe-admin-password"
 FUNCTION_NAME="put-k-sebe-api"
 GATEWAY_NAME="put-k-sebe-gateway"
 REPO_URL="https://github.com/oleggrigorev131313/put-k-sebe.git"
@@ -108,6 +109,24 @@ if ! yc lockbox secret list-access-bindings "$SECRET_ID" 2>/dev/null | grep -q "
 fi
 echo "    Lockbox secret готов."
 
+echo "Подготавливаю пароль админ-панели в Lockbox..."
+ADMIN_SECRETS_JSON="$(yc lockbox secret list --format json)" || fail "Не удалось прочитать список Lockbox secrets"
+ADMIN_SECRET_ID="$(printf '%s' "$ADMIN_SECRETS_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("secrets",[]); print(next((x["id"] for x in a if x.get("name")=="put-k-sebe-admin-password"), ""))')"
+if [[ -z "$ADMIN_SECRET_ID" ]]; then
+  read -rsp "Придумай пароль админ-панели (не используй пароль от других сервисов): " ADMIN_PASSWORD
+  echo
+  [[ ${#ADMIN_PASSWORD} -ge 16 ]] || fail "Пароль должен содержать не менее 16 символов"
+  CREATED_ADMIN_SECRET="$(printf '%s' "$ADMIN_PASSWORD" | python3 -c 'import json,sys; print(json.dumps([{"key":"admin_password","text_value":sys.stdin.read()}]))' | yc lockbox secret create --name "$ADMIN_SECRET_NAME" --description "Admin dashboard password for Put-k-sebe" --payload - --format json)" || fail "Не удалось создать пароль в Lockbox"
+  unset ADMIN_PASSWORD
+  ADMIN_SECRET_ID="$(printf '%s' "$CREATED_ADMIN_SECRET" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+fi
+ADMIN_SECRET_INFO="$(yc lockbox secret get "$ADMIN_SECRET_ID" --format json)"
+ADMIN_VERSION_ID="$(printf '%s' "$ADMIN_SECRET_INFO" | python3 -c 'import json,sys; print(json.load(sys.stdin)["current_version"]["id"])')"
+if ! yc lockbox secret list-access-bindings "$ADMIN_SECRET_ID" 2>/dev/null | grep -q "$SA_ID"; then
+  yc lockbox secret add-access-binding --id "$ADMIN_SECRET_ID" --role lockbox.payloadViewer --service-account-id "$SA_ID"
+fi
+echo "    Пароль админ-панели хранится в Lockbox."
+
 echo "[5/8] Создаю приватный бакет для ZIP-файла функции..."
 BUCKET_NAME="put-k-sebe-fn-${CLOUD_ID:0:20}"
 OBJECT_KEY="functions/put-k-sebe-api.zip"
@@ -151,6 +170,7 @@ yc serverless function version create \
   --service-account-id "$SA_ID" \
   --environment "YDB_ENDPOINT=$YDB_ENDPOINT,YDB_DATABASE=$YDB_DATABASE" \
   --secret "environment-variable=BOT_TOKEN,id=$SECRET_ID,version-id=$VERSION_ID,key=bot_token" \
+  --secret "environment-variable=ADMIN_PASSWORD,id=$ADMIN_SECRET_ID,version-id=$ADMIN_VERSION_ID,key=admin_password" \
   --description "Put-k-sebe API deployment" >/dev/null
 
 # Cloud Functions copies the package during version creation; remove the temporary object.
@@ -166,8 +186,8 @@ info:
 x-yc-apigateway:
   cors:
     origin: '*'
-    methods: [GET, PUT, DELETE, OPTIONS]
-    allowedHeaders: [Content-Type, X-Telegram-Init-Data]
+    methods: [GET, PUT, DELETE, POST, OPTIONS]
+    allowedHeaders: [Content-Type, X-Telegram-Init-Data, X-Admin-Password]
     maxAge: 3600
 paths:
   /health:
@@ -176,6 +196,28 @@ paths:
       responses:
         "200":
           description: Health status
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /v1/events:
+    post:
+      operationId: postAnalyticsEvent
+      responses:
+        "202":
+          description: Event accepted
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /v1/admin/analytics:
+    get:
+      operationId: getAdminAnalytics
+      responses:
+        "200":
+          description: Aggregate product analytics
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
