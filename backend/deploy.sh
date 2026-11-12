@@ -118,8 +118,7 @@ yc serverless function version create \
   --execution-timeout 30s \
   --source-path "$ZIP_FILE" \
   --service-account-id "$SA_ID" \
-  --environment "YDB_ENDPOINT=$YDB_ENDPOINT" \
-  --environment "YDB_DATABASE=$YDB_DATABASE" \
+  --environment "YDB_ENDPOINT=$YDB_ENDPOINT,YDB_DATABASE=$YDB_DATABASE" \
   --secret "environment-variable=BOT_TOKEN,id=$SECRET_ID,version-id=$VERSION_ID,key=bot_token" \
   --description "Put-k-sebe API deployment" >/dev/null
 
