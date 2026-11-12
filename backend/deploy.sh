@@ -153,6 +153,9 @@ yc serverless function version create \
   --secret "environment-variable=BOT_TOKEN,id=$SECRET_ID,version-id=$VERSION_ID,key=bot_token" \
   --description "Put-k-sebe API deployment" >/dev/null
 
+# Cloud Functions copies the package during version creation; remove the temporary object.
+yc storage s3api delete-object --bucket "$BUCKET_NAME" --key "$OBJECT_KEY" >/dev/null 2>&1 || true
+
 echo "[7/8] Готовлю спецификацию API Gateway..."
 SPEC_FILE="$WORKDIR/backend/api-gateway.generated.yaml"
 cat > "$SPEC_FILE" <<YAML
