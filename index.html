@@ -50,7 +50,7 @@ main{padding:8px 0 24px}.eyebrow{font-size:10px;letter-spacing:1.6px;text-transf
 <script>
 (function(){
 "use strict";
-var KEY="put-k-sebe-v1",API_BASE="https://d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net",app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".nav button"));
+var KEY="put-k-sebe-v1",API_BASE="https://d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net",CLOUD_SYNC_ENABLED=false,app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".nav button"));
 var tg=window.Telegram&&window.Telegram.WebApp;
 if(tg){try{tg.ready();tg.expand();tg.setHeaderColor("#fbfbfd");tg.setBackgroundColor("#fbfbfd");}catch(e){}}
 var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.first_name;
@@ -77,7 +77,7 @@ sessionStorage.setItem("pks_onboarding_started","1");trackEvent("onboarding_star
 }catch(e){trackEvent("app_open");}
 }
 async function cloudSaveNow(showToast){
-if(!API_BASE||!tg||!tg.initData||!cloudReady)return;
+if(!CLOUD_SYNC_ENABLED||!API_BASE||!tg||!tg.initData||!cloudReady)return;
 cloudStatus="syncing";
 var snapshot=JSON.stringify(state);
 var r=await fetch(API_BASE+"/v1/state",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({state:JSON.parse(snapshot)})});
@@ -86,7 +86,7 @@ cloudStatus="synced";cloudErrorText="";
 if(showToast)toast("Запись синхронизирована с аккаунтом");
 }
 function scheduleCloudSave(){
-if(!cloudReady||!API_BASE)return;
+if(!CLOUD_SYNC_ENABLED||!cloudReady||!API_BASE)return;
 if(cloudSyncTimer)clearTimeout(cloudSyncTimer);
 cloudStatus="pending";
 cloudSyncTimer=setTimeout(function(){cloudSaveNow(true).catch(function(e){cloudReady=false;cloudStatus="error";cloudErrorText=e&&e.message?e.message:"Ошибка соединения";if(!cloudErrorShown){cloudErrorShown=true;toast("Облако не подтвердило сохранение. Запись пока только на устройстве.");}render();});},650);
@@ -105,7 +105,7 @@ out.onboarding=(remote&&remote.onboarding)||(local&&local.onboarding)||null;
 return out;
 }
 async function initCloud(){
-if(!API_BASE){cloudStatus="paused";render();return;}
+if(!CLOUD_SYNC_ENABLED||!API_BASE){cloudStatus="paused";render();return;}
 if(!tg){cloudStatus="not_telegram";render();return;}
 if(!tg.initData){cloudStatus="telegram_data_missing";render();return;}
 cloudStatus="connecting";
