@@ -4,6 +4,7 @@ set -Eeuo pipefail
 CLOUD_ID="b1g4vj1h1a2ebmrl0geu"
 FOLDER_ID="b1gf2t5b7torui7nm4be"
 SERVICE_ACCOUNT_NAME="put-k-sebe-backend"
+GATEWAY_SA_NAME="put-k-sebe-gateway"
 DB_NAME="put-k-sebe-db"
 SECRET_NAME="put-k-sebe-telegram-bot"
 FUNCTION_NAME="put-k-sebe-api"
@@ -40,6 +41,12 @@ echo "[1/8] Получаю сервисный аккаунт и базу дан�
 SA_JSON="$(yc iam service-account get "$SERVICE_ACCOUNT_NAME" --format json)" || fail "Не найден сервисный аккаунт $SERVICE_ACCOUNT_NAME"
 SA_ID="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 
+GATEWAY_SA_JSON="$(yc iam service-account get "$GATEWAY_SA_NAME" --format json 2>/dev/null || true)"
+if [[ -z "$GATEWAY_SA_JSON" ]]; then
+  GATEWAY_SA_JSON="$(yc iam service-account create "$GATEWAY_SA_NAME" --description "API Gateway invoker for Put-k-sebe" --format json)" || fail "Не удалось создать сервисный аккаунт API Gateway"
+fi
+GATEWAY_SA_ID="$(printf '%s' "$GATEWAY_SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+
 DB_JSON="$(yc ydb database get "$DB_NAME" --format json)" || fail "Не найдена база $DB_NAME"
 DB_STATUS="$(printf '%s' "$DB_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')"
 [[ "$DB_STATUS" == "RUNNING" ]] || fail "YDB находится в статусе $DB_STATUS, а не RUNNING"
@@ -47,7 +54,8 @@ readarray -t DB_CFG < <(printf '%s' "$DB_JSON" | python3 -c 'import json,sys; u=
 YDB_ENDPOINT="${DB_CFG[0]}"
 YDB_DATABASE="${DB_CFG[1]}"
 
-echo "    Сервисный аккаунт: $SA_ID"
+echo "    Backend SA: $SA_ID"
+echo "    Gateway SA: $GATEWAY_SA_ID"
 echo "    База: $DB_NAME ($DB_STATUS)"
 
 echo "[2/8] Скачиваю исходники из GitHub (без git clone)..."
@@ -124,8 +132,12 @@ if [[ -z "$FUNCTION_JSON" ]]; then
 fi
 FUNCTION_ID="$(printf '%s' "$FUNCTION_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 
-if ! yc serverless function list-access-bindings "$FUNCTION_ID" 2>/dev/null | grep -q "$SA_ID"; then
-  yc serverless function add-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --subject "serviceAccount:$SA_ID"
+if ! yc serverless function list-access-bindings "$FUNCTION_ID" 2>/dev/null | grep -q "$GATEWAY_SA_ID"; then
+  yc serverless function add-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --subject "serviceAccount:$GATEWAY_SA_ID" || fail "Не удалось разрешить API Gateway вызывать Cloud Function"
+fi
+# The initial deployment attempt may have granted invoker to the backend identity.
+if yc serverless function list-access-bindings "$FUNCTION_ID" 2>/dev/null | grep -q "$SA_ID"; then
+  yc serverless function remove-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --service-account-id "$SA_ID" >/dev/null 2>&1 || true
 fi
 
 yc serverless function version create \
@@ -164,7 +176,7 @@ paths:
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
-        service_account_id: "$SA_ID"
+        service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
   /v1/state:
     get:
