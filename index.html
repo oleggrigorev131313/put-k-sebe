@@ -50,15 +50,58 @@ main{padding:8px 0 24px}.eyebrow{font-size:10px;letter-spacing:1.6px;text-transf
 <script>
 (function(){
 "use strict";
-var KEY="put-k-sebe-v1",app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".nav button"));
+var KEY="put-k-sebe-v1",API_BASE="",app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".nav button"));
 var tg=window.Telegram&&window.Telegram.WebApp;
 if(tg){try{tg.ready();tg.expand();tg.setHeaderColor("#fbfbfd");tg.setBackgroundColor("#fbfbfd");}catch(e){}}
 var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.first_name;
 document.getElementById("settings").textContent=(first||"О").charAt(0).toUpperCase();
-var defaults={entries:[],patterns:[{id:"p1",name:"Я должен быть успешным",detail:"Моя ценность зависит от достижений"},{id:"p2",name:"Я не справлюсь",detail:"Ожидание неудачи до начала действия"},{id:"p3",name:"Все оценивают меня",detail:"Страх чужого мнения и критики"},{id:"p4",name:"Нужно выбрать идеально",detail:"Страх ошибиться и потерять время"}],completed:[]};
-var state=load(),page="home",step=6,draft=blank();
+var defaults={entries:[],patterns:[{id:"p1",name:"Я должен быть успешным",detail:"Моя ценность зависит от достижений"},{id:"p2",name:"Я не справлюсь",detail:"Ожидание неудачи до начала действия"},{id:"p3",name:"Все оценивают меня",detail:"Страх чужого мнения и критики"},{id:"p4",name:"Нужно выбрать идеально",detail:"Страх ошибиться и потерять время"}],completed:[],onboarding:null};
+var state=load(),page=state.onboarding?"home":"onboarding",step=6,draft=blank(),onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
+var cloudReady=false,cloudSyncTimer=null,cloudErrorShown=false;
 function load(){try{var x=JSON.parse(localStorage.getItem(KEY));return x&&Array.isArray(x.entries)?Object.assign({},defaults,x):JSON.parse(JSON.stringify(defaults));}catch(e){return JSON.parse(JSON.stringify(defaults));}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
+function saveLocalOnly(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
+function save(){saveLocalOnly();scheduleCloudSave();}
+function apiHeaders(){return {"Content-Type":"application/json","X-Telegram-Init-Data":tg&&tg.initData?tg.initData:""};}
+async function cloudSaveNow(){
+if(!API_BASE||!tg||!tg.initData||!cloudReady)return;
+var r=await fetch(API_BASE+"/v1/state",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({state:state})});
+if(!r.ok)throw new Error("Cloud save failed: "+r.status);
+}
+function scheduleCloudSave(){
+if(!cloudReady||!API_BASE)return;
+if(cloudSyncTimer)clearTimeout(cloudSyncTimer);
+cloudSyncTimer=setTimeout(function(){cloudSaveNow().catch(function(){cloudReady=false;if(!cloudErrorShown){cloudErrorShown=true;toast("Не удалось синхронизировать данные. Пока они сохранены на устройстве.");}});},650);
+}
+function mergeStates(remote,local){
+var out=Object.assign({},remote||{},local||{});
+function mergeById(a,b){
+var m={};
+(a||[]).concat(b||[]).forEach(function(x){if(x&&typeof x==="object"){var k=x.id||JSON.stringify(x);m[k]=x;}});
+return Object.keys(m).map(function(k){return m[k];});
+}
+out.entries=mergeById(remote&&remote.entries,local&&local.entries).sort(function(a,b){return new Date(b.date||0)-new Date(a.date||0);});
+out.patterns=mergeById(remote&&remote.patterns,local&&local.patterns);
+out.completed=Array.from(new Set([].concat((remote&&remote.completed)||[],(local&&local.completed)||[])));
+out.onboarding=(remote&&remote.onboarding)||(local&&local.onboarding)||null;
+return out;
+}
+async function initCloud(){
+if(!API_BASE||!tg||!tg.initData){render();return;}
+try{
+var r=await fetch(API_BASE+"/v1/state",{method:"GET",headers:apiHeaders(),cache:"no-store"});
+if(!r.ok)throw new Error("Cloud load failed: "+r.status);
+var result=await r.json();
+if(result.found&&result.state)state=mergeStates(result.state,state);
+onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
+saveLocalOnly();cloudReady=true;await cloudSaveNow();
+if(!state.onboarding)page="onboarding";else if(page==="onboarding")page="home";
+render();
+}catch(e){
+cloudReady=false;render();
+if(!cloudErrorShown){cloudErrorShown=true;toast("Облако пока недоступно. Записи останутся на этом устройстве.");}
+}
+}
+function emptyOnboarding(){return{main_issue:"",areas:[],thoughts:[],reactions:[],desired_changes:"",consent:false};}
 function blank(){return{date:new Date().toISOString(),situation:"",emotion:"Тревога",intensity:6,thought:"",before:80,forText:"",against:"",balanced:"",action:"",after:50,pattern:""};}
 function esc(s){return String(s||"").replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
 function date(s){return new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short"}).format(new Date(s));}
@@ -79,6 +122,24 @@ section("Последняя запись","journal")+(last?'<article class="card
 '<div class="note">Инструмент самостоятельной рефлексии. Не является диагностикой или заменой профессиональной помощи.</div>';
 }
 
+var onboardingAreas=["Работа и деньги","Отношения","Самооценка и внешность","Будущее и решения","Общение и окружение","Здоровье и энергия","Другое"];
+var onboardingThoughts=["Я не справлюсь","Я недостаточно хорош","Меня осудят","Я всё испорчу","Нужно сделать идеально","У меня ничего не получится","Я отстаю от других","Я должен всё контролировать"];
+var onboardingReactions=["Откладываю и избегаю","Перфекционизм и переделывание","Прокручиваю мысли по кругу","Злюсь и срываюсь","Закрываюсь от людей","Стараюсь всем угодить","Теряю мотивацию и бросаю"];
+function onboardingTags(key,items){
+var selected=onboardingDraft[key]||[];
+return '<div class="chips">'+items.map(function(x){return '<button class="chip '+(selected.indexOf(x)>=0?"active":"")+'" data-onboard-toggle="'+key+'" data-value="'+esc(x)+'">'+esc(x)+'</button>';}).join("")+'</div>';
+}
+function onboarding(){
+return '<div class="eyebrow">Первое знакомство · 2–3 минуты</div><h1 class="title">С чего начнём?</h1><p class="sub">Эта анкета поможет настроить пространство под твои задачи. Ответы — не диагноз и не психологический тест. Приложение сможет предлагать гипотезы о повторяющихся сценариях, а ты сам решишь, подходят ли они.</p>'+
+'<section class="card"><div class="field"><label>1. Что сейчас больше всего беспокоит?</label><textarea class="area" data-onboard-field="main_issue" placeholder="Опиши своими словами — можно коротко.">'+esc(onboardingDraft.main_issue)+'</textarea></div>'+
+'<div class="field"><label>2. В каких сферах это проявляется?</label>'+onboardingTags("areas",onboardingAreas)+'</div>'+
+'<div class="field"><label>3. Какие мысли тебе знакомы?</label><p class="sub" style="margin:0 0 9px">Отметь те, которые иногда возникают.</p>'+onboardingTags("thoughts",onboardingThoughts)+'</div>'+
+'<div class="field"><label>4. Как ты обычно реагируешь?</label>'+onboardingTags("reactions",onboardingReactions)+'</div>'+
+'<div class="field"><label>5. Что хотелось бы изменить?</label><textarea class="area" data-onboard-field="desired_changes" placeholder="Например: меньше откладывать, спокойнее относиться к ошибкам, лучше понимать свои желания...">'+esc(onboardingDraft.desired_changes)+'</textarea></div>'+
+'<div class="note">Записи и ответы анкеты будут храниться в твоём аккаунте приложения. При облачной синхронизации они будут передаваться в Yandex Cloud. Административная статистика не будет показывать содержание дневника. Не указывай пароли, документы, адреса и данные других людей.</div>'+
+'<label style="display:flex;gap:9px;align-items:flex-start;font-size:12px;margin:14px 0"><input type="checkbox" id="onboardConsent" '+(onboardingDraft.consent?"checked":"")+' style="margin-top:3px"> Я понимаю, что мои ответы и записи будут обрабатываться приложением и сохраняться для синхронизации между устройствами.</label>'+
+button("Сохранить ответы →","finish-onboarding","full")+'<button class="textbtn" style="margin-top:12px" data-act="skip-onboarding">Пока пропустить</button></section>';
+}
 function subscription(){
 return '<div class="eyebrow">Доступ к возможностям приложения</div><h1 class="title">Тарифы и подписка</h1><p class="sub">Путь к себе — инструмент для регулярной работы. Твои записи и история должны оставаться доступными, даже если ты не продлеваешь Premium.</p>'+
 '<div class="card plan-card"><div class="meta"><span>БЕСПЛАТНЫЙ ТАРИФ</span><span class="status-pill green">Доступен</span></div><h2 style="font-size:19px;margin:12px 0 4px">Базовый</h2><div class="plan-price">0 ₽</div><p class="sub" style="margin:5px 0 0">Бесплатно, без ограничения по времени</p><ul class="plan-list"><li>Дневник мыслей и история записей</li><li>Ручное ведение паттернов</li><li>Базовые практики и упражнения</li><li>Просмотр и экспорт личных данных</li></ul></div>'+
@@ -131,10 +192,10 @@ var practices=[
 {icon:"☁",title:"Пауза и заземление",time:"2–3 минуты",text:"Поставь ноги на пол. Назови про себя пять предметов, которые видишь, четыре телесных ощущения и три звука. Если упражнение усиливает дискомфорт, остановись."}
 ];
 function library(){
-return '<div class="eyebrow">Небольшие упражнения</div><h1 class="title">Практики и библиотека</h1><p class="sub">Выбирай то, что подходит текущей ситуации. Не нужно выполнять всё подряд.</p>'+practices.map(function(p,i){return '<button class="card quick" style="width:100%;margin:7px 0;text-align:left" data-practice="'+i+'"><span class="qi">'+p.icon+'</span><b>'+p.title+'</b><small>'+p.time+'</small></button>';}).join("")+'<div class="note">Практики предназначены для самонаблюдения и обучения навыкам рефлексии. Они не заменяют индивидуальную помощь специалиста.</div>';
+return '<div class="eyebrow">Небольшие упражнения</div><h1 class="title">Практики и библиотека</h1><p class="sub">Выбирай то, что подходит текущей ситуации. Не нужно выполнять всё подряд.</p>'+practices.map(function(p,i){var key=new Date().toDateString()+"-"+i,done=state.completed.indexOf(key)>=0;return '<button class="card quick" style="width:100%;margin:7px 0;text-align:left" data-practice="'+i+'"><span class="qi">'+(done?"✓":p.icon)+'</span><b>'+p.title+(done?' · Выполнено сегодня':'')+'</b><small>'+p.time+(done?' · Готово':'')+'</small></button>';}).join("")+'<div class="note">Практики предназначены для самонаблюдения и обучения навыкам рефлексии. Они не заменяют индивидуальную помощь специалисту.</div>';
 }
 function render(){
-app.innerHTML=page==="home"?home():page==="journal"?journal():page==="patterns"?patterns():page==="progress"?progress():page==="subscription"?subscription():library();
+app.innerHTML=page==="onboarding"?onboarding():page==="home"?home():page==="journal"?journal():page==="patterns"?patterns():page==="progress"?progress():page==="subscription"?subscription():library();
 bind();
 }
 function bind(){
@@ -144,10 +205,20 @@ app.querySelectorAll("[data-field]").forEach(function(el){el.oninput=function(){
 app.querySelectorAll("[data-range]").forEach(function(el){el.oninput=function(){draft[el.dataset.range]=Number(el.value);var t=document.getElementById("v-"+el.dataset.range);if(t)t.textContent=el.value+(el.dataset.range==="intensity"?"/10":"%");};});
 app.querySelectorAll("[data-emotion]").forEach(function(b){b.onclick=function(){draft.emotion=b.dataset.emotion;render();};});
 var ps=document.getElementById("patternSelect");if(ps)ps.onchange=function(){draft.pattern=ps.value;};
+app.querySelectorAll("[data-onboard-field]").forEach(function(el){el.oninput=function(){onboardingDraft[el.dataset.onboardField]=el.value;};});
+app.querySelectorAll("[data-onboard-toggle]").forEach(function(b){b.onclick=function(){var k=b.dataset.onboardToggle,v=b.dataset.value,a=onboardingDraft[k]||[],i=a.indexOf(v);if(i>=0)a.splice(i,1);else a.push(v);onboardingDraft[k]=a;render();};});
+var oc=document.getElementById("onboardConsent");if(oc)oc.onchange=function(){onboardingDraft.consent=oc.checked;};
 app.querySelectorAll("[data-entry]").forEach(function(b){b.onclick=function(){entryDetail(b.dataset.entry);};});
 app.querySelectorAll("[data-practice]").forEach(function(b){b.onclick=function(){practiceDetail(Number(b.dataset.practice));};});
 }
 function act(a){
+if(a==="finish-onboarding"){
+var consent=document.getElementById("onboardConsent");
+onboardingDraft.consent=!!(consent&&consent.checked);
+if(!onboardingDraft.consent){toast("Подтверди согласие на обработку данных.");return;}
+state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false});save();go("home");toast("Ответы сохранены");
+}
+if(a==="skip-onboarding"){state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:false};save();go("home");}
 if(a==="new"){draft=blank();step=0;go("journal");}
 if(a==="next"){if(step<5)step++;render();}
 if(a==="prev"){if(step>0)step--;render();}
@@ -158,13 +229,18 @@ if(a==="add-pattern"){modal('<h2>Новый паттерн</h2><p>Запиши �
 function modal(content){var d=document.createElement("div");d.className="modalbg";d.id="modal";d.innerHTML='<section class="modal"><div class="modalhead"><button class="icon" id="close">×</button></div>'+content+'</section>';document.body.appendChild(d);d.onclick=function(e){if(e.target===d)closeModal();};document.getElementById("close").onclick=closeModal;}
 function closeModal(){var m=document.getElementById("modal");if(m)m.remove();}
 function entryDetail(id){var e=state.entries.find(function(x){return x.id===id;});if(!e)return;modal('<div class="eyebrow">'+date(e.date)+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация:</b> '+esc(e.situation)+'</p><p><b>Эмоция:</b> '+esc(e.emotion)+' · '+e.intensity+'/10</p><p><b>Факты за:</b> '+esc(e.forText)+'</p><p><b>Факты против:</b> '+esc(e.against)+'</p><p><b>Сбалансированный взгляд:</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг:</b> '+esc(e.action)+'</p><button class="btn outline full" id="del">Удалить запись</button>');document.getElementById("del").onclick=function(){if(confirm("Удалить эту запись?")){state.entries=state.entries.filter(function(x){return x.id!==id;});save();closeModal();render();}};}
-function practiceDetail(i){var p=practices[i];modal('<div class="eyebrow">Практика · '+p.time+'</div><h2>'+p.icon+' '+p.title+'</h2><p>'+p.text+'</p><button class="btn primary full" id="done">Отметить выполненной</button>');document.getElementById("done").onclick=function(){var k=new Date().toDateString()+"-"+i;if(state.completed.indexOf(k)<0)state.completed.push(k);save();closeModal();toast("Практика отмечена");};}
-function settings(){modal('<h2>Настройки и данные</h2><p>Записи хранятся локально в браузере или Telegram WebView на этом устройстве. Они не отправляются на сервер и не синхронизируются между устройствами.</p><button class="btn secondary full" id="export">Скачать резервную копию JSON</button><div style="height:9px"></div><button class="btn outline full" id="import">Восстановить из JSON</button><input type="file" id="file" accept="application/json" hidden><div style="height:9px"></div><button class="btn outline full" id="clear">Удалить все мои данные</button><div class="note">Не записывай сведения, по которым тебя можно идентифицировать, если не хочешь хранить их в браузере устройства. Очистка данных браузера может удалить записи.</div>');
+function practiceDetail(i){
+var p=practices[i],k=new Date().toDateString()+"-"+i,isDone=state.completed.indexOf(k)>=0;
+modal('<div class="eyebrow">Практика · '+p.time+'</div><h2>'+p.icon+' '+p.title+'</h2><p>'+p.text+'</p><button class="btn primary full" id="done">'+(isDone?"Снять отметку":"Отметить выполненной")+'</button>');
+document.getElementById("done").onclick=function(){var at=state.completed.indexOf(k);if(at>=0){state.completed.splice(at,1);toast("Отметка снята");}else{state.completed.push(k);toast("Практика отмечена выполненной");}save();closeModal();render();};
+}
+function settings(){modal('<h2>Настройки и данные</h2><p>'+(API_BASE&&tg&&tg.initData?"При открытии в Telegram записи синхронизируются с твоим аккаунтом в Yandex Cloud и дополнительно сохраняются на устройстве.":"Пока облачная синхронизация не подключена: записи хранятся локально в браузере или Telegram WebView на этом устройстве.")+'</p><button class="btn secondary full" id="export">Скачать резервную копию JSON</button><div style="height:9px"></div><button class="btn outline full" id="import">Восстановить из JSON</button><input type="file" id="file" accept="application/json" hidden><div style="height:9px"></div><button class="btn outline full" id="clear">Удалить все мои данные</button><div class="note">Не записывай сведения, по которым тебя можно идентифицировать, если не хочешь хранить их в браузере устройства. Очистка данных браузера может удалить записи.</div>');
 document.getElementById("export").onclick=function(){var blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="put-k-sebe-backup.json";a.click();URL.revokeObjectURL(url);};
 var f=document.getElementById("file");document.getElementById("import").onclick=function(){f.click();};f.onchange=async function(){try{var x=JSON.parse(await f.files[0].text());if(!Array.isArray(x.entries)||!Array.isArray(x.patterns))throw Error();state=Object.assign({},defaults,x);save();closeModal();render();toast("Данные восстановлены");}catch(e){toast("Не удалось прочитать файл");}};
-document.getElementById("clear").onclick=function(){if(confirm("Удалить все записи и паттерны? Сначала скачай резервную копию, если она нужна.")){state=JSON.parse(JSON.stringify(defaults));save();closeModal();render();}};
+document.getElementById("clear").onclick=async function(){if(confirm("Удалить все записи, паттерны и ответы анкеты? Сначала скачай резервную копию, если она нужна.")){if(cloudReady&&API_BASE&&tg&&tg.initData){try{var r=await fetch(API_BASE+"/v1/state",{method:"DELETE",headers:apiHeaders()});if(!r.ok)throw new Error("delete failed");}catch(e){toast("Не удалось удалить облачные данные. Проверь соединение.");return;}}state=JSON.parse(JSON.stringify(defaults));onboardingDraft=emptyOnboarding();saveLocalOnly();closeModal();go("onboarding");}};
 }
 render();
+initCloud();
 })();
 </script>
 </body>
