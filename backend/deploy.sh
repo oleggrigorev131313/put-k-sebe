@@ -9,7 +9,7 @@ SECRET_NAME="put-k-sebe-telegram-bot"
 FUNCTION_NAME="put-k-sebe-api"
 GATEWAY_NAME="put-k-sebe-gateway"
 REPO_URL="https://github.com/oleggrigorev131313/put-k-sebe.git"
-WORKDIR="$HOME/put-k-sebe-deploy"
+WORKDIR="$(mktemp -d /tmp/put-k-sebe.XXXXXX)"
 BUILD_DIR="$WORKDIR/.build"
 ZIP_FILE="$WORKDIR/backend.zip"
 
@@ -17,7 +17,7 @@ fail() { echo; echo "ОШИБКА: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "Не найдена команда: $1"; }
 
 need yc
-need git
+need tar
 need python3
 need curl
 
@@ -50,14 +50,12 @@ YDB_DATABASE="${DB_CFG[1]}"
 echo "    Сервисный аккаунт: $SA_ID"
 echo "    База: $DB_NAME ($DB_STATUS)"
 
-echo "[2/8] Загружаю исходники из GitHub..."
-if [[ -d "$WORKDIR/.git" ]]; then
-  git -C "$WORKDIR" fetch origin main
-  git -C "$WORKDIR" reset --hard origin/main
-else
-  rm -rf "$WORKDIR"
-  git clone --depth 1 "$REPO_URL" "$WORKDIR"
-fi
+echo "[2/8] Скачиваю исходники из GitHub (без git clone)..."
+ARCHIVE_FILE="$WORKDIR/repository.tar.gz"
+ARCHIVE_URL="https://codeload.github.com/oleggrigorev131313/put-k-sebe/tar.gz/refs/heads/main"
+curl -fLsS --retry 3 --connect-timeout 15 "$ARCHIVE_URL" -o "$ARCHIVE_FILE" || fail "Не удалось скачать архив репозитория"
+tar -xzf "$ARCHIVE_FILE" --strip-components=1 -C "$WORKDIR" || fail "Не удалось распаковать архив репозитория"
+rm -f "$ARCHIVE_FILE"
 [[ -f "$WORKDIR/backend/index.py" ]] || fail "В репозитории нет backend/index.py"
 [[ -f "$WORKDIR/backend/requirements.txt" ]] || fail "Нет backend/requirements.txt"
 
