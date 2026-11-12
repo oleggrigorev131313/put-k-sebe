@@ -20,11 +20,11 @@ Backend для Telegram Mini App на Yandex Cloud: API Gateway → Cloud Functi
 
 ## Развёртывание
 
-Из корня Cloud Shell:
+Одна команда в Cloud Shell:
 
-    git clone https://github.com/oleggrigorev131313/put-k-sebe.git
-    cd put-k-sebe
-    bash backend/deploy.sh
+    curl -fsSL https://raw.githubusercontent.com/oleggrigorev131313/put-k-sebe/main/backend/deploy.sh -o /tmp/put-k-sebe-deploy.sh && bash /tmp/put-k-sebe-deploy.sh
+
+Скрипт сам клонирует актуальный репозиторий во временную рабочую папку. Он сначала покажет список создаваемых ресурсов и спросит подтверждение. При первом запуске токен Telegram-бота вводится скрыто и сохраняется в Lockbox.
 
 Скрипт использует уже созданные облако, папку, базу и сервисный аккаунт. Он создаёт Lockbox secret при первом запуске, Cloud Function и API Gateway. Токен бота вводится через скрытый prompt в терминале.
 
