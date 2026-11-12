@@ -43,7 +43,7 @@ SA_ID="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json.load(s
 
 GATEWAY_SA_JSON="$(yc iam service-account get "$GATEWAY_SA_NAME" --format json 2>/dev/null || true)"
 if [[ -z "$GATEWAY_SA_JSON" ]]; then
-  GATEWAY_SA_JSON="$(yc iam service-account create "$GATEWAY_SA_NAME" --description "API Gateway invoker for Put-k-sebe" --format json)" || fail "Не удалось создать сервисный аккаунт API Gateway"
+  GATEWAY_SA_JSON="$(yc iam service-account create --name "$GATEWAY_SA_NAME" --description "API Gateway invoker for Put-k-sebe" --format json)" || fail "Не удалось создать сервисный аккаунт API Gateway"
 fi
 GATEWAY_SA_ID="$(printf '%s' "$GATEWAY_SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 
