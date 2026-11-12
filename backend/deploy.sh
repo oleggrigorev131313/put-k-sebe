@@ -102,7 +102,7 @@ echo "    Lockbox secret готов."
 echo "[5/8] Создаю или обновляю Cloud Function..."
 FUNCTION_JSON="$(yc serverless function get "$FUNCTION_NAME" --format json 2>/dev/null || true)"
 if [[ -z "$FUNCTION_JSON" ]]; then
-  FUNCTION_JSON="$(yc serverless function create --name "$FUNCTION_NAME" --description "API for Put-k-sebe Telegram Mini App" --format json)"
+  FUNCTION_JSON="$(yc serverless function create "$FUNCTION_NAME" --description "API for Put-k-sebe Telegram Mini App" --format json)"
 fi
 FUNCTION_ID="$(printf '%s' "$FUNCTION_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 
@@ -114,7 +114,7 @@ yc serverless function version create \
   --function-id "$FUNCTION_ID" \
   --runtime python312 \
   --entrypoint index.handler \
-  --memory 512m \
+  --memory 512MB \
   --execution-timeout 30s \
   --source-path "$ZIP_FILE" \
   --service-account-id "$SA_ID" \
@@ -183,7 +183,7 @@ YAML
 echo "[7/8] Создаю или обновляю API Gateway..."
 GATEWAY_JSON="$(yc serverless api-gateway get "$GATEWAY_NAME" --format json 2>/dev/null || true)"
 if [[ -z "$GATEWAY_JSON" ]]; then
-  GATEWAY_JSON="$(yc serverless api-gateway create --name "$GATEWAY_NAME" --description "API for Put-k-sebe Telegram Mini App" --spec "$SPEC_FILE" --format json)"
+  GATEWAY_JSON="$(yc serverless api-gateway create "$GATEWAY_NAME" --description "API for Put-k-sebe Telegram Mini App" --spec "$SPEC_FILE" --format json)"
 else
   yc serverless api-gateway update "$GATEWAY_NAME" --spec "$SPEC_FILE" >/dev/null
   GATEWAY_JSON="$(yc serverless api-gateway get "$GATEWAY_NAME" --format json)"
