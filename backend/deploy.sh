@@ -108,7 +108,7 @@ if [[ -z "$BUCKET_JSON" ]]; then
   yc storage bucket create --name "$BUCKET_NAME" --max-size 104857600 >/dev/null || fail "Не удалось создать приватный бакет $BUCKET_NAME"
 fi
 FOLDER_BINDINGS="$(yc resource-manager folder list-access-bindings "$FOLDER_ID" --format json)" || fail "Не удалось прочитать права папки"
-HAS_STORAGE_VIEWER="$(printf '%s' "$FOLDER_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",[]); print("yes" if any(x.get("role_id")=="storage.viewer" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$SA_ID")"
+HAS_STORAGE_VIEWER="$(printf '%s' "$FOLDER_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",[]); print("yes" if any(x.get("role_id",x.get("roleId"))=="storage.viewer" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$SA_ID")"
 if [[ "$HAS_STORAGE_VIEWER" != "yes" ]]; then
   yc resource-manager folder add-access-binding "$FOLDER_ID" \
     --role storage.viewer \
