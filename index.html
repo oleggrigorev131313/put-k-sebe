@@ -50,7 +50,7 @@ main{padding:8px 0 24px}.eyebrow{font-size:10px;letter-spacing:1.6px;text-transf
 <script>
 (function(){
 "use strict";
-var KEY="put-k-sebe-v1",API_BASE="",app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".nav button"));
+var KEY="put-k-sebe-v1",API_BASE="https://d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net",app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".nav button"));
 var tg=window.Telegram&&window.Telegram.WebApp;
 if(tg){try{tg.ready();tg.expand();tg.setHeaderColor("#fbfbfd");tg.setBackgroundColor("#fbfbfd");}catch(e){}}
 var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.first_name;
@@ -62,6 +62,20 @@ function load(){try{var x=JSON.parse(localStorage.getItem(KEY));if(!x||!Array.is
 function saveLocalOnly(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
 function save(){saveLocalOnly();scheduleCloudSave();}
 function apiHeaders(){return {"Content-Type":"application/json","X-Telegram-Init-Data":tg&&tg.initData?tg.initData:""};}
+function trackEvent(name){
+if(!API_BASE||!tg||!tg.initData)return;
+fetch(API_BASE+"/v1/events",{method:"POST",headers:apiHeaders(),body:JSON.stringify({event:name})}).catch(function(){});
+}
+function trackInitialSession(){
+try{
+if(!sessionStorage.getItem("pks_session_open")){
+sessionStorage.setItem("pks_session_open","1");trackEvent("app_open");
+}
+if(page==="onboarding"&&!sessionStorage.getItem("pks_onboarding_started")){
+sessionStorage.setItem("pks_onboarding_started","1");trackEvent("onboarding_started");
+}
+}catch(e){trackEvent("app_open");}
+}
 async function cloudSaveNow(showToast){
 if(!API_BASE||!tg||!tg.initData||!cloudReady)return;
 cloudStatus="syncing";
@@ -251,14 +265,14 @@ app.querySelectorAll("[data-practice]").forEach(function(b){b.onclick=function()
 function act(a){
 if(a==="finish-onboarding"){
 onboardingDraft.consent=false;
-state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false,analysisStatus:"pending"});saveLocalOnly();go("home");toast("Ответы сохранены. Персональный анализ появится после подключения AI.");
+state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false,analysisStatus:"pending"});saveLocalOnly();trackEvent("onboarding_completed");go("home");toast("Ответы сохранены. Персональный анализ появится после подключения AI.");
 }
 if(a==="skip-onboarding"){state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:false};saveLocalOnly();go("home");}
 if(a==="new"){draft=blank();step=0;go("journal");}
 if(a==="next"){if(step<5)step++;render();}
 if(a==="prev"){if(step>0)step--;render();}
 if(a==="cancel"){step=6;go("journal");}
-if(a==="save"){if(!draft.situation.trim()&&!draft.thought.trim()){toast("Добавь хотя бы ситуацию или мысль.");return;}draft.date=new Date().toISOString();draft.id=Date.now().toString();state.entries.unshift(Object.assign({},draft));save();step=6;toast(cloudReady?"Запись сохранена. Отправляю в облако…":"Запись сохранена на устройстве. Облако пока не подключено.");go("journal");}
+if(a==="save"){if(!draft.situation.trim()&&!draft.thought.trim()){toast("Добавь хотя бы ситуацию или мысль.");return;}draft.date=new Date().toISOString();draft.id=Date.now().toString();state.entries.unshift(Object.assign({},draft));save();trackEvent("diary_entry_created");step=6;toast(cloudReady?"Запись сохранена. Отправляю в облако…":"Запись сохранена на устройстве. Облако пока не подключено.");go("journal");}
 if(a==="add-pattern-in-entry"){modal('<h2>Добавить паттерн к записи</h2><p>Предыдущие ответы останутся на месте. Создай паттерн — он сразу появится в списке шестого шага.</p><div class="field"><label>Название паттерна</label><input class="input" id="pn" placeholder="Например: я должен всё делать идеально"></div><div class="field"><label>В каких ситуациях он проявляется? (необязательно)</label><textarea class="area" id="pd" placeholder="Опиши повторяющуюся мысль или сценарий"></textarea></div><button class="btn primary full" id="psave">Сохранить и выбрать паттерн</button>');document.getElementById("psave").onclick=function(){var name=document.getElementById("pn").value.trim(),detail=document.getElementById("pd").value.trim();if(!name){toast("Добавь название паттерна");return;}var id="p"+Date.now();state.patterns.push({id:id,name:name,detail:detail,status:"confirmed",source:"manual",createdAt:new Date().toISOString()});draft.pattern=id;draft.patternReviewPending=false;save();closeModal();render();toast("Паттерн добавлен. Остальные ответы сохранены.");};}
 if(a==="add-pattern"){modal('<h2>Новый паттерн</h2><p>Запиши повторяющуюся мысль или сценарий нейтральными словами — это рабочее наблюдение, а не ярлык.</p><div class="field"><label>Название</label><input class="input" id="pn" placeholder="Например: я должен всё сделать идеально"></div><div class="field"><label>Когда появляется? (необязательно)</label><textarea class="area" id="pd"></textarea></div><button class="btn primary full" id="psave">Сохранить паттерн</button>');document.getElementById("psave").onclick=function(){var name=document.getElementById("pn").value.trim(),detail=document.getElementById("pd").value.trim();if(!name){toast("Добавь название паттерна");return;}state.patterns.push({id:"p"+Date.now(),name:name,detail:detail,status:"confirmed",source:"manual",createdAt:new Date().toISOString()});save();closeModal();render();};}
 }
@@ -266,9 +280,10 @@ function modal(content){var d=document.createElement("div");d.className="modalbg
 function closeModal(){var m=document.getElementById("modal");if(m)m.remove();}
 function entryDetail(id){var e=state.entries.find(function(x){return x.id===id;});if(!e)return;modal('<div class="eyebrow">'+date(e.date)+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация:</b> '+esc(e.situation)+'</p><p><b>Эмоция:</b> '+esc(e.emotion)+' · '+e.intensity+'/10</p><p><b>Факты за:</b> '+esc(e.forText)+'</p><p><b>Факты против:</b> '+esc(e.against)+'</p><p><b>Сбалансированный взгляд:</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг:</b> '+esc(e.action)+'</p><button class="btn outline full" id="del">Удалить запись</button>');document.getElementById("del").onclick=function(){if(confirm("Удалить эту запись?")){state.entries=state.entries.filter(function(x){return x.id!==id;});save();closeModal();render();}};}
 function practiceDetail(i){
+trackEvent("practice_opened");
 var p=practices[i],k=new Date().toDateString()+"-"+i,isDone=(state.practiceHistory||[]).some(function(x){return x.practiceId===i&&new Date(x.completedAt).toDateString()===new Date().toDateString();});
 modal('<div class="eyebrow">Практика · '+p.time+'</div><h2>'+p.icon+' '+p.title+'</h2><p>'+p.text+'</p><button class="btn primary full" id="done">'+(isDone?"Снять отметку":"Отметить выполненной")+'</button>');
-document.getElementById("done").onclick=function(){state.practiceHistory=state.practiceHistory||[];var at=state.practiceHistory.findIndex(function(x){return x.practiceId===i&&new Date(x.completedAt).toDateString()===new Date().toDateString();});if(at>=0){state.practiceHistory.splice(at,1);toast("Отметка снята");}else{state.practiceHistory.push({id:"ph"+Date.now(),practiceId:i,title:p.title,completedAt:new Date().toISOString()});toast("Практика добавлена в историю");}save();closeModal();render();};
+document.getElementById("done").onclick=function(){state.practiceHistory=state.practiceHistory||[];var at=state.practiceHistory.findIndex(function(x){return x.practiceId===i&&new Date(x.completedAt).toDateString()===new Date().toDateString();});if(at>=0){state.practiceHistory.splice(at,1);toast("Отметка снята");}else{state.practiceHistory.push({id:"ph"+Date.now(),practiceId:i,title:p.title,completedAt:new Date().toISOString()});trackEvent("practice_completed");toast("Практика добавлена в историю");}save();closeModal();render();};
 }
 function settings(){modal('<h2>Настройки и данные</h2><p>'+(({
 synced:"Облачная синхронизация подтверждена: последние изменения отправлены в Yandex Cloud.",
@@ -288,6 +303,7 @@ var f=document.getElementById("file");document.getElementById("import").onclick=
 document.getElementById("clear").onclick=async function(){if(confirm("Удалить все записи, паттерны и ответы анкеты? Сначала скачай резервную копию, если она нужна.")){if(cloudReady&&API_BASE&&tg&&tg.initData){try{var r=await fetch(API_BASE+"/v1/state",{method:"DELETE",headers:apiHeaders()});if(!r.ok)throw new Error("delete failed");}catch(e){toast("Не удалось удалить облачные данные. Проверь соединение.");return;}}state=JSON.parse(JSON.stringify(defaults));onboardingDraft=emptyOnboarding();saveLocalOnly();closeModal();go("onboarding");}};
 }
 render();
+trackInitialSession();
 initCloud();
 })();
 </script>
