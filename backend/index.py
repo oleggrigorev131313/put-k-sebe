@@ -157,7 +157,7 @@ def _telegram_user(init_data):
         f"{key}={values[key]}" for key in sorted(values)
     )
     secret_key = hmac.new(
-        b"WebAppData", BOT_TOKEN.encode("utf-8"), hashlib.sha256
+        BOT_TOKEN.encode("utf-8"), b"WebAppData", hashlib.sha256
     ).digest()
     calculated = hmac.new(
         secret_key, check_string.encode("utf-8"), hashlib.sha256
