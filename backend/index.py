@@ -16,6 +16,7 @@ LOG = logging.getLogger("put-k-sebe")
 LOG.setLevel(logging.INFO)
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 YDB_ENDPOINT = os.environ["YDB_ENDPOINT"]
 YDB_DATABASE = os.environ["YDB_DATABASE"]
 MAX_BODY_BYTES = 300_000
@@ -105,8 +106,8 @@ def _json_response(status, payload):
             "Content-Type": "application/json; charset=utf-8",
             "Cache-Control": "no-store",
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET,PUT,DELETE,OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type,X-Telegram-Init-Data",
+            "Access-Control-Allow-Methods": "GET,PUT,DELETE,POST,OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type,X-Telegram-Init-Data,X-Admin-Password",
         },
         "body": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
         "isBase64Encoded": False,
@@ -264,6 +265,73 @@ def handler(event, context):
         if path == "/health" and method == "GET":
             _ensure_schema()
             return _json_response(200, {"ok": True, "service": "put-k-sebe-api"})
+
+        if path == "/v1/events" and method == "POST":
+            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            try:
+                payload = json.loads(body or "{}")
+                event_name = payload.get("event")
+                allowed = {
+                    "app_open", "onboarding_started", "onboarding_completed",
+                    "diary_entry_created", "practice_opened", "practice_completed",
+                }
+                if event_name not in allowed:
+                    raise ValueError("Invalid event")
+                _ensure_schema()
+                _record_event(user_id, event_name)
+                return _json_response(202, {"ok": True})
+            except (json.JSONDecodeError, ValueError, TypeError) as exc:
+                return _json_response(400, {"error": str(exc)})
+
+        if path == "/v1/admin/analytics" and method == "GET":
+            if not ADMIN_PASSWORD or not hmac.compare_digest(
+                headers.get("x-admin-password", ""), ADMIN_PASSWORD
+            ):
+                return _json_response(401, {"error": "unauthorized"})
+            _ensure_schema()
+            result = _db().execute_with_retries(
+                """
+                SELECT user_id, event_name, created_at
+                FROM analytics_events
+                ORDER BY created_at DESC
+                LIMIT 50000;
+                """
+            )
+            rows = []
+            for result_set in result:
+                for row in result_set.rows:
+                    rows.append({
+                        "user_id": str(row.user_id),
+                        "event": str(row.event_name),
+                        "created_at": row.created_at.isoformat() if hasattr(row.created_at, "isoformat") else str(row.created_at),
+                    })
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone.utc)
+            def parsed(value):
+                try:
+                    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+                except Exception:
+                    return now
+            counts = {}
+            daily = {}
+            unique_all, dau, wau, mau = set(), set(), set(), set()
+            for row in rows:
+                uid = row["user_id"]
+                dt = parsed(row["created_at"])
+                unique_all.add(uid)
+                counts[row["event"]] = counts.get(row["event"], 0) + 1
+                if row["event"] == "app_open":
+                    day = dt.date().isoformat()
+                    daily[day] = daily.get(day, 0) + 1
+                    if dt.date() == now.date(): dau.add(uid)
+                    if dt >= now - timedelta(days=7): wau.add(uid)
+                    if dt >= now - timedelta(days=30): mau.add(uid)
+            return _json_response(200, {
+                "ok": True, "users": len(unique_all), "dau": len(dau),
+                "wau": len(wau), "mau": len(mau), "events": counts,
+                "daily_opens": [{"date": k, "opens": v} for k, v in sorted(daily.items())[-30:]],
+                "total_events_loaded": len(rows), "truncated": len(rows) >= 50000
+            })
 
         if path != "/v1/state":
             return _json_response(404, {"error": "not_found"})
