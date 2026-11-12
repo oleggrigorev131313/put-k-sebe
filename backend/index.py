@@ -218,6 +218,8 @@ def _validate_state(value):
     entries = value.get("entries", [])
     patterns = value.get("patterns", [])
     completed = value.get("completed", [])
+    practice_history = value.get("practiceHistory", [])
+    chat = value.get("chat", [])
     onboarding = value.get("onboarding")
 
     if not isinstance(entries, list) or len(entries) > 2_000:
@@ -226,6 +228,10 @@ def _validate_state(value):
         raise ValueError("Invalid patterns")
     if not isinstance(completed, list) or len(completed) > 5_000:
         raise ValueError("Invalid completed practices")
+    if not isinstance(practice_history, list) or len(practice_history) > 5_000:
+        raise ValueError("Invalid practice history")
+    if not isinstance(chat, list) or len(chat) > 300:
+        raise ValueError("Invalid assistant chat history")
     if onboarding is not None and not isinstance(onboarding, dict):
         raise ValueError("Invalid onboarding data")
 
@@ -233,10 +239,12 @@ def _validate_state(value):
         "entries": entries,
         "patterns": patterns,
         "completed": completed,
+        "practiceHistory": practice_history,
+        "chat": chat,
         "onboarding": onboarding,
     }
     # Keep optional application metadata, but do not accept arbitrary top-level keys.
-    for key in ("settings", "meta"):
+    for key in ("settings", "meta", "aiProfile"):
         if key in value and isinstance(value[key], dict):
             clean[key] = value[key]
 
