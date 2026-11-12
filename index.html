@@ -55,10 +55,10 @@ var tg=window.Telegram&&window.Telegram.WebApp;
 if(tg){try{tg.ready();tg.expand();tg.setHeaderColor("#fbfbfd");tg.setBackgroundColor("#fbfbfd");}catch(e){}}
 var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.first_name;
 document.getElementById("settings").textContent=(first||"О").charAt(0).toUpperCase();
-var defaults={entries:[],patterns:[{id:"p1",name:"Я должен быть успешным",detail:"Моя ценность зависит от достижений"},{id:"p2",name:"Я не справлюсь",detail:"Ожидание неудачи до начала действия"},{id:"p3",name:"Все оценивают меня",detail:"Страх чужого мнения и критики"},{id:"p4",name:"Нужно выбрать идеально",detail:"Страх ошибиться и потерять время"}],completed:[],onboarding:null};
+var defaults={entries:[],patterns:[],completed:[],practiceHistory:[],onboarding:null,chat:[]};
 var state=load(),page=state.onboarding?"home":"onboarding",step=6,draft=blank(),onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
 var cloudReady=false,cloudSyncTimer=null,cloudErrorShown=false,cloudStatus="paused",cloudErrorText="";
-function load(){try{var x=JSON.parse(localStorage.getItem(KEY));return x&&Array.isArray(x.entries)?Object.assign({},defaults,x):JSON.parse(JSON.stringify(defaults));}catch(e){return JSON.parse(JSON.stringify(defaults));}}
+function load(){try{var x=JSON.parse(localStorage.getItem(KEY));if(!x||!Array.isArray(x.entries))return JSON.parse(JSON.stringify(defaults));var out=Object.assign({},defaults,x);out.patterns=(out.patterns||[]).filter(function(p){return !(["p1","p2","p3","p4"].indexOf(p.id)>=0&&/Моя ценность зависит от достижений|Ожидание неудачи до начала действия|Страх чужого мнения и критики|Страх ошибиться и потерять время/.test(p.detail||""));});out.practiceHistory=Array.isArray(out.practiceHistory)?out.practiceHistory:[];out.chat=Array.isArray(out.chat)?out.chat:[];return out;}catch(e){return JSON.parse(JSON.stringify(defaults));}}
 function saveLocalOnly(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
 function save(){saveLocalOnly();scheduleCloudSave();}
 function apiHeaders(){return {"Content-Type":"application/json","X-Telegram-Init-Data":tg&&tg.initData?tg.initData:""};}
@@ -86,7 +86,7 @@ return Object.keys(m).map(function(k){return m[k];});
 }
 out.entries=mergeById(remote&&remote.entries,local&&local.entries).sort(function(a,b){return new Date(b.date||0)-new Date(a.date||0);});
 out.patterns=mergeById(remote&&remote.patterns,local&&local.patterns);
-out.completed=Array.from(new Set([].concat((remote&&remote.completed)||[],(local&&local.completed)||[])));
+out.completed=Array.from(new Set([].concat((remote&&remote.completed)||[],(local&&local.completed)||[])));out.practiceHistory=(remote&&remote.practiceHistory||[]).concat(local&&local.practiceHistory||[]).filter(function(x,i,a){return a.findIndex(function(y){return y.id===x.id;})===i;});out.chat=(local&&local.chat)||(remote&&remote.chat)||[];
 out.onboarding=(remote&&remote.onboarding)||(local&&local.onboarding)||null;
 return out;
 }
@@ -121,7 +121,9 @@ if(!cloudErrorShown){cloudErrorShown=true;toast("Облако недоступн
 }
 }
 function emptyOnboarding(){return{main_issue:"",areas:[],thoughts:[],reactions:[],desired_changes:"",consent:false};}
-function blank(){return{date:new Date().toISOString(),situation:"",emotion:"Тревога",intensity:6,thought:"",before:80,forText:"",against:"",balanced:"",action:"",after:50,pattern:""};}
+function blank(){return{date:new Date().toISOString(),situation:"",emotion:"Тревога",emotions:["Тревога"],intensity:6,thought:"",before:80,forText:"",against:"",balanced:"",action:"",after:50,emotionAfter:5,pattern:"",patterns:[]};}
+var emotionGroups={"Тревога и страх":["Тревога","Страх","Беспокойство","Напряжение","Паника","Неуверенность","Уязвимость","Опасение","Беспомощность"],"Грусть и утрата":["Грусть","Печаль","Одиночество","Тоска","Разочарование","Безнадёжность","Опустошённость","Сожаление","Отверженность"],"Злость и раздражение":["Злость","Гнев","Раздражение","Досада","Обида","Возмущение","Ревность","Зависть","Неприязнь"],"Стыд и вина":["Стыд","Вина","Смущение","Неловкость","Унижение","Чувство неполноценности"],"Радость и удовлетворение":["Радость","Счастье","Восторг","Удовлетворение","Гордость","Воодушевление","Благодарность","Надежда","Облегчение"],"Интерес и энергия":["Интерес","Любопытство","Вдохновение","Азарт","Увлечённость","Предвкушение","Удивление","Изумление"],"Спокойствие и близость":["Спокойствие","Умиротворение","Доверие","Теплота","Нежность","Любовь","Принятие","Безопасность","Связанность"],"Другие состояния":["Растерянность","Замешательство","Неопределённость","Отвращение","Презрение","Скука","Апатия","Безразличие","Усталость"]};
+function selectedEmotions(){if(!Array.isArray(draft.emotions))draft.emotions=draft.emotion?[draft.emotion]:[];return draft.emotions;}
 function esc(s){return String(s||"").replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
 function date(s){return new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short"}).format(new Date(s));}
 function toast(s){var t=document.getElementById("toast");t.textContent=s;t.classList.add("show");setTimeout(function(){t.classList.remove("show");},2400);}
@@ -248,7 +250,7 @@ app.querySelectorAll("[data-practice]").forEach(function(b){b.onclick=function()
 function act(a){
 if(a==="finish-onboarding"){
 onboardingDraft.consent=false;
-state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false});saveLocalOnly();go("home");toast("Ответы сохранены на этом устройстве");
+state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false,analysisStatus:"pending"});saveLocalOnly();go("home");toast("Ответы сохранены. Персональный анализ появится после подключения AI.");
 }
 if(a==="skip-onboarding"){state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:false};saveLocalOnly();go("home");}
 if(a==="new"){draft=blank();step=0;go("journal");}
