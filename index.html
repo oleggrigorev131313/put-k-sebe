@@ -94,13 +94,21 @@ async function initCloud(){
 if(!API_BASE){cloudStatus="not_configured";render();return;}
 if(!tg){cloudStatus="not_telegram";render();return;}
 if(!tg.initData){cloudStatus="telegram_data_missing";render();return;}
-if(!state.onboarding||!state.onboarding.consent){cloudReady=false;cloudStatus="consent_required";render();return;}
 cloudStatus="connecting";
 try{
 var r=await fetch(API_BASE+"/v1/state",{method:"GET",headers:apiHeaders(),cache:"no-store"});
 if(!r.ok)throw new Error("HTTP "+r.status);
 var result=await r.json();
-if(result.found&&result.state)state=mergeStates(result.state,state);
+var remoteConsent=!!(result.found&&result.state&&result.state.onboarding&&result.state.onboarding.consent);
+var localConsent=!!(state.onboarding&&state.onboarding.consent);
+// Consent is account-level: a second device can reuse the consent already stored for this Telegram account.
+// Only merge remote private data after the server-side account state shows that consent was given.
+if(remoteConsent)state=mergeStates(result.state,state);
+if(!remoteConsent&&!localConsent){
+cloudReady=false;cloudStatus="consent_required";
+onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
+page="onboarding";render();return;
+}
 onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
 saveLocalOnly();cloudReady=true;cloudStatus="connected";
 await cloudSaveNow(false);
