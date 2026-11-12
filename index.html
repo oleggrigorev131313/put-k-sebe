@@ -87,13 +87,15 @@ return out;
 }
 async function initCloud(){
 if(!API_BASE||!tg||!tg.initData){render();return;}
+if(!state.onboarding||!state.onboarding.consent){render();return;}
 try{
 var r=await fetch(API_BASE+"/v1/state",{method:"GET",headers:apiHeaders(),cache:"no-store"});
 if(!r.ok)throw new Error("Cloud load failed: "+r.status);
 var result=await r.json();
 if(result.found&&result.state)state=mergeStates(result.state,state);
 onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
-saveLocalOnly();cloudReady=true;await cloudSaveNow();
+saveLocalOnly();cloudReady=true;
+if(state.onboarding&&state.onboarding.consent)await cloudSaveNow();
 if(!state.onboarding)page="onboarding";else if(page==="onboarding")page="home";
 render();
 }catch(e){
@@ -216,9 +218,9 @@ if(a==="finish-onboarding"){
 var consent=document.getElementById("onboardConsent");
 onboardingDraft.consent=!!(consent&&consent.checked);
 if(!onboardingDraft.consent){toast("Подтверди согласие на обработку данных.");return;}
-state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false});save();go("home");toast("Ответы сохранены");
+state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false});save();go("home");toast("Ответы сохранены");initCloud();
 }
-if(a==="skip-onboarding"){var consentSkip=document.getElementById("onboardConsent");if(!(consentSkip&&consentSkip.checked)){toast("Подтверди согласие на обработку данных.");return;}state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:true};save();go("home");}
+if(a==="skip-onboarding"){var consentSkip=document.getElementById("onboardConsent");if(!(consentSkip&&consentSkip.checked)){toast("Подтверди согласие на обработку данных.");return;}state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:true};save();go("home");initCloud();}
 if(a==="new"){draft=blank();step=0;go("journal");}
 if(a==="next"){if(step<5)step++;render();}
 if(a==="prev"){if(step>0)step--;render();}
