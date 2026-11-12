@@ -55,7 +55,7 @@ if(tg){try{tg.ready();tg.expand();tg.setHeaderColor("#fbfbfd");tg.setBackgroundC
 var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.first_name;
 document.getElementById("settings").textContent=(first||"О").charAt(0).toUpperCase();
 var defaults={entries:[],patterns:[{id:"p1",name:"Я должен быть успешным",detail:"Моя ценность зависит от достижений"},{id:"p2",name:"Я не справлюсь",detail:"Ожидание неудачи до начала действия"},{id:"p3",name:"Все оценивают меня",detail:"Страх чужого мнения и критики"},{id:"p4",name:"Нужно выбрать идеально",detail:"Страх ошибиться и потерять время"}],completed:[]};
-var state=load(),page="home",step=0,draft=blank();
+var state=load(),page="home",step=6,draft=blank();
 function load(){try{var x=JSON.parse(localStorage.getItem(KEY));return x&&Array.isArray(x.entries)?Object.assign({},defaults,x):JSON.parse(JSON.stringify(defaults));}catch(e){return JSON.parse(JSON.stringify(defaults));}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
 function blank(){return{date:new Date().toISOString(),situation:"",emotion:"Тревога",intensity:6,thought:"",before:80,forText:"",against:"",balanced:"",action:"",after:50,pattern:""};}
