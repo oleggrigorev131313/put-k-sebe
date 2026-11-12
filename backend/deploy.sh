@@ -84,7 +84,7 @@ PY
 
 echo "[4/8] Подготавливаю токен бота в Lockbox..."
 SECRETS_JSON="$(yc lockbox secret list --format json)" || fail "Не удалось прочитать список Lockbox secrets"
-SECRET_ID="$(printf '%s' "$SECRETS_JSON" | python3 -c 'import json,sys; a=json.load(sys.stdin); print(next((x["id"] for x in a if x.get("name")=="put-k-sebe-telegram-bot"), ""))')"
+SECRET_ID="$(printf '%s' "$SECRETS_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("secrets",[]); print(next((x["id"] for x in a if x.get("name")=="put-k-sebe-telegram-bot"), ""))')"
 if [[ -z "$SECRET_ID" ]]; then
   read -rsp "Вставь токен Telegram-бота (ввод скрыт): " BOT_TOKEN
   echo
@@ -107,7 +107,9 @@ BUCKET_JSON="$(yc storage bucket get "$BUCKET_NAME" --format json 2>/dev/null ||
 if [[ -z "$BUCKET_JSON" ]]; then
   yc storage bucket create --name "$BUCKET_NAME" --max-size 104857600 >/dev/null || fail "Не удалось создать приватный бакет $BUCKET_NAME"
 fi
-if ! yc resource-manager folder list-access-bindings "$FOLDER_ID" --format json | grep -q "$SA_ID.*storage.viewer\|storage.viewer.*$SA_ID"; then
+FOLDER_BINDINGS="$(yc resource-manager folder list-access-bindings "$FOLDER_ID" --format json)" || fail "Не удалось прочитать права папки"
+HAS_STORAGE_VIEWER="$(printf '%s' "$FOLDER_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",[]); print("yes" if any(x.get("role_id")=="storage.viewer" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$SA_ID")"
+if [[ "$HAS_STORAGE_VIEWER" != "yes" ]]; then
   yc resource-manager folder add-access-binding "$FOLDER_ID" \
     --role storage.viewer \
     --subject "serviceAccount:$SA_ID" >/dev/null || fail "Не удалось выдать сервисному аккаунту storage.viewer"
