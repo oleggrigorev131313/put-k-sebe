@@ -190,7 +190,7 @@ paths:
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
-        service_account_id: "$SA_ID"
+        service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
     put:
       operationId: saveState
@@ -200,7 +200,7 @@ paths:
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
-        service_account_id: "$SA_ID"
+        service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
     delete:
       operationId: deleteState
@@ -210,7 +210,7 @@ paths:
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
-        service_account_id: "$SA_ID"
+        service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
 YAML
 
