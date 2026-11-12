@@ -218,7 +218,7 @@ onboardingDraft.consent=!!(consent&&consent.checked);
 if(!onboardingDraft.consent){toast("Подтверди согласие на обработку данных.");return;}
 state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false});save();go("home");toast("Ответы сохранены");
 }
-if(a==="skip-onboarding"){state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:false};save();go("home");}
+if(a==="skip-onboarding"){var consentSkip=document.getElementById("onboardConsent");if(!(consentSkip&&consentSkip.checked)){toast("Подтверди согласие на обработку данных.");return;}state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:true};save();go("home");}
 if(a==="new"){draft=blank();step=0;go("journal");}
 if(a==="next"){if(step<5)step++;render();}
 if(a==="prev"){if(step>0)step--;render();}
