@@ -17,6 +17,7 @@ LOG.setLevel(logging.INFO)
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ANALYTICS_SECRET = os.environ.get("ANALYTICS_SECRET", BOT_TOKEN)
 YDB_ENDPOINT = os.environ["YDB_ENDPOINT"]
 YDB_DATABASE = os.environ["YDB_DATABASE"]
 MAX_BODY_BYTES = 300_000
@@ -79,6 +80,11 @@ def _ensure_schema():
 
 def _record_event(user_id, event_name, metadata=None):
     pool = _db()
+    analytics_user_id = hmac.new(
+        ANALYTICS_SECRET.encode("utf-8"),
+        ("put-k-sebe-analytics:" + str(user_id)).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
     pool.execute_with_retries(
         """
         DECLARE $event_id AS Utf8;
@@ -92,7 +98,7 @@ def _record_event(user_id, event_name, metadata=None):
         """,
         parameters={
             "$event_id": str(uuid.uuid4()),
-            "$user_id": user_id,
+            "$user_id": analytics_user_id,
             "$event_name": event_name,
             "$metadata_json": json.dumps(metadata or {}, ensure_ascii=False),
         },
