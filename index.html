@@ -50,14 +50,14 @@ main{padding:8px 0 24px}.eyebrow{font-size:10px;letter-spacing:1.6px;text-transf
 <script>
 (function(){
 "use strict";
-var KEY="put-k-sebe-v1",API_BASE="https://d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net",app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".nav button"));
+var KEY="put-k-sebe-v1",API_BASE="",app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".nav button"));
 var tg=window.Telegram&&window.Telegram.WebApp;
 if(tg){try{tg.ready();tg.expand();tg.setHeaderColor("#fbfbfd");tg.setBackgroundColor("#fbfbfd");}catch(e){}}
 var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.first_name;
 document.getElementById("settings").textContent=(first||"О").charAt(0).toUpperCase();
 var defaults={entries:[],patterns:[{id:"p1",name:"Я должен быть успешным",detail:"Моя ценность зависит от достижений"},{id:"p2",name:"Я не справлюсь",detail:"Ожидание неудачи до начала действия"},{id:"p3",name:"Все оценивают меня",detail:"Страх чужого мнения и критики"},{id:"p4",name:"Нужно выбрать идеально",detail:"Страх ошибиться и потерять время"}],completed:[],onboarding:null};
 var state=load(),page=state.onboarding?"home":"onboarding",step=6,draft=blank(),onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
-var cloudReady=false,cloudSyncTimer=null,cloudErrorShown=false,cloudStatus="starting",cloudErrorText="";
+var cloudReady=false,cloudSyncTimer=null,cloudErrorShown=false,cloudStatus="paused",cloudErrorText="";
 function load(){try{var x=JSON.parse(localStorage.getItem(KEY));return x&&Array.isArray(x.entries)?Object.assign({},defaults,x):JSON.parse(JSON.stringify(defaults));}catch(e){return JSON.parse(JSON.stringify(defaults));}}
 function saveLocalOnly(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
 function save(){saveLocalOnly();scheduleCloudSave();}
@@ -91,7 +91,7 @@ out.onboarding=(remote&&remote.onboarding)||(local&&local.onboarding)||null;
 return out;
 }
 async function initCloud(){
-if(!API_BASE){cloudStatus="not_configured";render();return;}
+if(!API_BASE){cloudStatus="paused";render();return;}
 if(!tg){cloudStatus="not_telegram";render();return;}
 if(!tg.initData){cloudStatus="telegram_data_missing";render();return;}
 cloudStatus="connecting";
@@ -141,7 +141,7 @@ telegram_data_missing:['#a05d37','Открой Mini App через кнопку 
 not_telegram:['#a05d37','Открой приложение из Telegram Mini App'],
 not_configured:['#a05d37','Адрес облачного API не настроен'],
 error:['#a05d37','Облачная синхронизация не работает: '+(cloudErrorText||'ошибка соединения')],
-starting:['#7a7d8c','Проверяем подключение к облаку…']
+starting:['#7a7d8c','Облачное соединение не используется'],paused:['#7a7d8c','Облачная синхронизация временно отключена. Данные сохраняются только на этом устройстве']
 };
 var item=info[cloudStatus]||info.starting;
 return '<div class="note" style="margin-top:10px;color:'+item[0]+'">'+esc(item[1])+'</div>';
@@ -149,7 +149,7 @@ return '<div class="note" style="margin-top:10px;color:'+item[0]+'">'+esc(item[1
 function home(){
 var n=state.entries.length,days={};state.entries.forEach(function(e){days[new Date(e.date).toDateString()]=1;});
 var last=state.entries[0];
-return '<section class="hero card"><div class="eyebrow">Личное пространство</div><h1>Привет, '+esc(first||"Олег")+' ✦</h1><p>Не нужно менять всю жизнь за один день. Достаточно лучше понять себя и сделать следующий небольшой шаг.</p>'+button("Записать мысль →","new")+'</section>'+cloudStatusBanner()+
+return '<section class="hero card"><div class="eyebrow">Личное пространство</div><h1>Привет, '+esc(first||"Олег")+' ✦</h1><p>Не нужно менять всю жизнь за один день. Достаточно лучше понять себя и сделать следующий небольшой шаг.</p>'+button("Записать мысль →","new")+'</section>'+
 '<section class="card billing-teaser" style="margin-top:14px"><div><div class="eyebrow">Тариф и доступ</div><b style="display:block;font-size:14px;margin:5px 0">Базовый доступ · бесплатно</b><span class="billtag">МОДЕЛЬ ПОДПИСКИ</span></div><button class="btn secondary" data-go="subscription">Тарифы →</button></section>'+
 section("Твой путь","progress")+'<div class="statrow"><div class="card stat"><strong>'+n+'</strong><span>записей в дневнике</span></div><div class="card stat"><strong>'+Object.keys(days).length+'</strong><span>дней с записями</span></div></div>'+
 section("Что можно сделать")+'<div class="grid"><button class="quick" data-act="new"><span class="qi">✎</span><b>Разобрать мысль</b><small>Ситуация, эмоция, факты и новый взгляд</small></button><button class="quick" data-go="patterns"><span class="qi">◎</span><b>Мои паттерны</b><small>Замечать повторяющиеся сценарии</small></button><button class="quick" data-go="progress"><span class="qi">⌁</span><b>Мой прогресс</b><small>История реальных записей</small></button><button class="quick" data-go="library"><span class="qi">▤</span><b>Практики</b><small>Небольшие упражнения</small></button></div>'+
@@ -171,8 +171,7 @@ return '<div class="eyebrow">Первое знакомство · 2–3 мину
 '<div class="field"><label>3. Какие мысли тебе знакомы?</label><p class="sub" style="margin:0 0 9px">Отметь те, которые иногда возникают.</p>'+onboardingTags("thoughts",onboardingThoughts)+'</div>'+
 '<div class="field"><label>4. Как ты обычно реагируешь?</label>'+onboardingTags("reactions",onboardingReactions)+'</div>'+
 '<div class="field"><label>5. Что хотелось бы изменить?</label><textarea class="area" data-onboard-field="desired_changes" placeholder="Например: меньше откладывать, спокойнее относиться к ошибкам, лучше понимать свои желания...">'+esc(onboardingDraft.desired_changes)+'</textarea></div>'+
-'<div class="note">Записи и ответы анкеты будут храниться в твоём аккаунте приложения. При облачной синхронизации они будут передаваться в Yandex Cloud. Административная статистика не будет показывать содержание дневника. Не указывай пароли, документы, адреса и данные других людей.</div>'+
-'<label style="display:flex;gap:9px;align-items:flex-start;font-size:12px;margin:14px 0"><input type="checkbox" id="onboardConsent" '+(onboardingDraft.consent?"checked":"")+' style="margin-top:3px"> Я понимаю, что мои ответы и записи будут обрабатываться приложением и сохраняться для синхронизации между устройствами.</label>'+
+'<div class="note">Ответы анкеты и записи сохраняются локально в браузере или Telegram на этом устройстве. Облачная синхронизация временно отключена. Для переноса данных на другое устройство используй резервную копию JSON в настройках. Не указывай пароли, документы, адреса и данные других людей.</div>'+
 button("Сохранить ответы →","finish-onboarding","full")+'<button class="textbtn" style="margin-top:12px" data-act="skip-onboarding">Пока пропустить</button></section>';
 }
 function subscription(){
@@ -248,12 +247,10 @@ app.querySelectorAll("[data-practice]").forEach(function(b){b.onclick=function()
 }
 function act(a){
 if(a==="finish-onboarding"){
-var consent=document.getElementById("onboardConsent");
-onboardingDraft.consent=!!(consent&&consent.checked);
-if(!onboardingDraft.consent){toast("Подтверди согласие на обработку данных.");return;}
-state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false});save();go("home");toast("Ответы сохранены");initCloud();
+onboardingDraft.consent=false;
+state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false});saveLocalOnly();go("home");toast("Ответы сохранены на этом устройстве");
 }
-if(a==="skip-onboarding"){var consentSkip=document.getElementById("onboardConsent");if(!(consentSkip&&consentSkip.checked)){toast("Подтверди согласие на обработку данных.");return;}state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:true};save();go("home");initCloud();}
+if(a==="skip-onboarding"){state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:false};saveLocalOnly();go("home");}
 if(a==="new"){draft=blank();step=0;go("journal");}
 if(a==="next"){if(step<5)step++;render();}
 if(a==="prev"){if(step>0)step--;render();}
@@ -279,7 +276,8 @@ telegram_data_missing:"Telegram не передал initData. Нужно отк�
 not_telegram:"Открой Mini App из Telegram, чтобы использовать облачное хранение.",
 not_configured:"Адрес API не настроен.",
 error:"Ошибка облачного соединения: "+(cloudErrorText||"неизвестная ошибка"),
-starting:"Статус облачного соединения пока не определён."
+starting:"Облачное соединение не используется.",
+ paused:"Облачная синхронизация временно отключена. Данные сохраняются только на этом устройстве."
 })[cloudStatus]||"Статус облачного соединения пока не определён.")+'</p><button class="btn secondary full" id="export">Скачать резервную копию JSON</button><div style="height:9px"></div><button class="btn outline full" id="import">Восстановить из JSON</button><input type="file" id="file" accept="application/json" hidden><div style="height:9px"></div><button class="btn outline full" id="clear">Удалить все мои данные</button><div class="note">Не записывай сведения, по которым тебя можно идентифицировать, если не хочешь хранить их в браузере устройства. Очистка данных браузера может удалить записи.</div>');
 document.getElementById("export").onclick=function(){var blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="put-k-sebe-backup.json";a.click();URL.revokeObjectURL(url);};
 var f=document.getElementById("file");document.getElementById("import").onclick=function(){f.click();};f.onchange=async function(){try{var x=JSON.parse(await f.files[0].text());if(!Array.isArray(x.entries)||!Array.isArray(x.patterns))throw Error();state=Object.assign({},defaults,x);save();closeModal();render();toast("Данные восстановлены");}catch(e){toast("Не удалось прочитать файл");}};
