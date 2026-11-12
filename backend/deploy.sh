@@ -165,7 +165,7 @@ info:
   version: "1.0.0"
 x-yc-apigateway:
   cors:
-    origin: true
+    origin: '*'
     methods: [GET, PUT, DELETE, OPTIONS]
     allowedHeaders: [Content-Type, X-Telegram-Init-Data]
     maxAge: 3600
