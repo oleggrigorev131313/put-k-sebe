@@ -83,15 +83,16 @@ print("Пакет собран:", os.path.getsize(target), "байт")
 PY
 
 echo "[4/8] Подготавливаю токен бота в Lockbox..."
-SECRET_JSON="$(yc lockbox secret get "$SECRET_NAME" --format json 2>/dev/null || true)"
-if [[ -z "$SECRET_JSON" ]]; then
+SECRETS_JSON="$(yc lockbox secret list --format json)" || fail "Не удалось прочитать список Lockbox secrets"
+SECRET_ID="$(printf '%s' "$SECRETS_JSON" | python3 -c 'import json,sys; a=json.load(sys.stdin); print(next((x["id"] for x in a if x.get("name")=="put-k-sebe-telegram-bot"), ""))')"
+if [[ -z "$SECRET_ID" ]]; then
   read -rsp "Вставь токен Telegram-бота (ввод скрыт): " BOT_TOKEN
   echo
   [[ -n "$BOT_TOKEN" ]] || fail "Токен не может быть пустым"
-  SECRET_JSON="$(printf '%s' "$BOT_TOKEN" | python3 -c 'import json,sys; print(json.dumps([{"key":"bot_token","text_value":sys.stdin.read()}]))' | yc lockbox secret create --name "$SECRET_NAME" --description "Telegram bot token for Put-k-sebe backend" --payload - --format json)" || fail "Не удалось создать секрет в Lockbox"
+  CREATED_SECRET="$(printf '%s' "$BOT_TOKEN" | python3 -c 'import json,sys; print(json.dumps([{"key":"bot_token","text_value":sys.stdin.read()}]))' | yc lockbox secret create --name "$SECRET_NAME" --description "Telegram bot token for Put-k-sebe backend" --payload - --format json)" || fail "Не удалось создать секрет в Lockbox"
   unset BOT_TOKEN
+  SECRET_ID="$(printf '%s' "$CREATED_SECRET" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 fi
-SECRET_ID="$(printf '%s' "$SECRET_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 SECRET_INFO="$(yc lockbox secret get "$SECRET_ID" --format json)"
 VERSION_ID="$(printf '%s' "$SECRET_INFO" | python3 -c 'import json,sys; print(json.load(sys.stdin)["current_version"]["id"])')"
 if ! yc lockbox secret list-access-bindings "$SECRET_ID" 2>/dev/null | grep -q "$SA_ID"; then
@@ -99,7 +100,22 @@ if ! yc lockbox secret list-access-bindings "$SECRET_ID" 2>/dev/null | grep -q "
 fi
 echo "    Lockbox secret готов."
 
-echo "[5/8] Создаю или обновляю Cloud Function..."
+echo "[5/8] Создаю приватный бакет для ZIP-файла функции..."
+BUCKET_NAME="put-k-sebe-fn-${CLOUD_ID:0:20}"
+OBJECT_KEY="functions/put-k-sebe-api.zip"
+BUCKET_JSON="$(yc storage bucket get "$BUCKET_NAME" --format json 2>/dev/null || true)"
+if [[ -z "$BUCKET_JSON" ]]; then
+  yc storage bucket create --name "$BUCKET_NAME" --max-size 104857600 >/dev/null || fail "Не удалось создать приватный бакет $BUCKET_NAME"
+fi
+if ! yc resource-manager folder list-access-bindings "$FOLDER_ID" --format json | grep -q "$SA_ID.*storage.viewer\|storage.viewer.*$SA_ID"; then
+  yc resource-manager folder add-access-binding "$FOLDER_ID" \
+    --role storage.viewer \
+    --subject "serviceAccount:$SA_ID" >/dev/null || fail "Не удалось выдать сервисному аккаунту storage.viewer"
+fi
+yc storage s3api put-object --body "$ZIP_FILE" --bucket "$BUCKET_NAME" --key "$OBJECT_KEY" >/dev/null || fail "Не удалось загрузить ZIP-файл в Object Storage"
+echo "    Архив загружен в закрытый бакет: $BUCKET_NAME"
+
+echo "[6/8] Создаю или обновляю Cloud Function..."
 FUNCTION_JSON="$(yc serverless function get "$FUNCTION_NAME" --format json 2>/dev/null || true)"
 if [[ -z "$FUNCTION_JSON" ]]; then
   FUNCTION_JSON="$(yc serverless function create "$FUNCTION_NAME" --description "API for Put-k-sebe Telegram Mini App" --format json)"
@@ -116,13 +132,14 @@ yc serverless function version create \
   --entrypoint index.handler \
   --memory 512MB \
   --execution-timeout 30s \
-  --source-path "$ZIP_FILE" \
+  --package-bucket-name "$BUCKET_NAME" \
+  --package-object-name "$OBJECT_KEY" \
   --service-account-id "$SA_ID" \
   --environment "YDB_ENDPOINT=$YDB_ENDPOINT,YDB_DATABASE=$YDB_DATABASE" \
   --secret "environment-variable=BOT_TOKEN,id=$SECRET_ID,version-id=$VERSION_ID,key=bot_token" \
   --description "Put-k-sebe API deployment" >/dev/null
 
-echo "[6/8] Готовлю спецификацию API Gateway..."
+echo "[7/8] Готовлю спецификацию API Gateway..."
 SPEC_FILE="$WORKDIR/backend/api-gateway.generated.yaml"
 cat > "$SPEC_FILE" <<YAML
 openapi: "3.0.0"
@@ -180,7 +197,7 @@ paths:
         payload_format_version: "1.0"
 YAML
 
-echo "[7/8] Создаю или обновляю API Gateway..."
+echo "[8/8] Создаю или обновляю API Gateway..."
 GATEWAY_JSON="$(yc serverless api-gateway get "$GATEWAY_NAME" --format json 2>/dev/null || true)"
 if [[ -z "$GATEWAY_JSON" ]]; then
   GATEWAY_JSON="$(yc serverless api-gateway create "$GATEWAY_NAME" --description "API for Put-k-sebe Telegram Mini App" --spec "$SPEC_FILE" --format json)"
@@ -193,7 +210,7 @@ GATEWAY_JSON="$(yc serverless api-gateway get "$GATEWAY_ID" --format json)"
 GATEWAY_DOMAIN="$(printf '%s' "$GATEWAY_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("domain") or d.get("domain_name") or d.get("domainName") or "")')"
 [[ -n "$GATEWAY_DOMAIN" ]] || fail "API Gateway создан, но поле domain не найдено. ID: $GATEWAY_ID"
 
-echo "[8/8] Проверяю API..."
+echo "[9/9] Проверяю API..."
 API_URL="https://$GATEWAY_DOMAIN"
 for attempt in 1 2 3 4 5 6; do
   if curl -fsS "$API_URL/health" >/tmp/put-k-sebe-health.json; then break; fi
