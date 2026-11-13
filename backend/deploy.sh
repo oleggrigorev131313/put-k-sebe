@@ -63,7 +63,7 @@ echo "    База: $DB_NAME ($DB_STATUS)"
 
 echo "[2/8] Скачиваю исходники из GitHub (без git clone)..."
 ARCHIVE_FILE="$WORKDIR/repository.tar.gz"
-ARCHIVE_URL="https://codeload.github.com/oleggrigorev131313/put-k-sebe/tar.gz/refs/heads/main"
+ARCHIVE_URL="https://codeload.github.com/oleggrigorev131313/put-k-sebe/tar.gz/refs/heads/feat/personal-practices-progress"
 curl -fLsS --retry 3 --connect-timeout 15 "$ARCHIVE_URL" -o "$ARCHIVE_FILE" || fail "Не удалось скачать архив репозитория"
 tar -xzf "$ARCHIVE_FILE" --strip-components=1 -C "$WORKDIR" || fail "Не удалось распаковать архив репозитория"
 rm -f "$ARCHIVE_FILE"
