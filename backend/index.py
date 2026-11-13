@@ -544,6 +544,11 @@ def _deepseek_analyze_entry(user_id, entry_id):
                 "created_at": str(row.created_at),
             })
 
+    from datetime import datetime, timezone
+    used_today, _ = _daily_ai_usage(user_id, datetime.now(timezone.utc).date().isoformat())
+    if used_today >= 5:
+        return _json_response(429, {"error":"daily_analysis_limit","limit":5,"used":used_today,
+                                    "message":"На сегодня использованы все 5 индивидуальных анализов."})
     stage = "prepare_prompt"
     fields = [
         ("Ситуация", "situation"), ("Эмоция", "emotion"),
@@ -586,24 +591,8 @@ def _deepseek_analyze_entry(user_id, entry_id):
         output_tokens = int(usage.get("completion_tokens", 0))
         created = datetime.now(timezone.utc).isoformat()
         stage = "save_analysis_to_ydb"
-        _db().execute_with_retries(
-            """
-            DECLARE $user_id AS Utf8;
-            DECLARE $entry_id AS Utf8;
-            DECLARE $analysis_text AS Utf8;
-            DECLARE $input_tokens AS Uint64;
-            DECLARE $output_tokens AS Uint64;
-            DECLARE $created_at AS Utf8;
-            UPSERT INTO ai_analyses
-                (user_id, entry_id, analysis_text, input_tokens, output_tokens, created_at)
-            VALUES
-                ($user_id, $entry_id, $analysis_text, $input_tokens, $output_tokens, $created_at);
-            """,
-            parameters={
-                "$user_id": user_id, "$entry_id": cache_entry_id, "$analysis_text": analysis,
-                "$input_tokens": input_tokens, "$output_tokens": output_tokens, "$created_at": created,
-            },
-        )
+        _save_ai_result(user_id, cache_entry_id, analysis,
+                        {"input_tokens": input_tokens, "output_tokens": output_tokens}, created)
         return _json_response(200, {
             "ok": True, "cached": False, "analysis": analysis,
             "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
@@ -635,6 +624,128 @@ def _deepseek_analyze_entry(user_id, entry_id):
             "stage": stage,
             "detail": stage + ": " + type(exc).__name__,
         })
+
+
+
+def _daily_ai_usage(user_id, day_key):
+    result = _db().execute_with_retries(
+        """
+        DECLARE $user_id AS Utf8;
+        SELECT entry_id, created_at FROM ai_analyses WHERE user_id = $user_id;
+        """,
+        parameters={"$user_id": user_id},
+    )
+    count = 0
+    summary_exists = False
+    for result_set in result:
+        for row in result_set.rows:
+            entry_id, created_at = str(row.entry_id), str(row.created_at)
+            if created_at.startswith(day_key):
+                if entry_id.startswith("daily-summary:"):
+                    summary_exists = True
+                else:
+                    count += 1
+    return count, summary_exists
+
+
+def _save_ai_result(user_id, cache_key, text_value, usage, created):
+    _db().execute_with_retries(
+        """
+        DECLARE $user_id AS Utf8;
+        DECLARE $entry_id AS Utf8;
+        DECLARE $analysis_text AS Utf8;
+        DECLARE $input_tokens AS Uint64;
+        DECLARE $output_tokens AS Uint64;
+        DECLARE $created_at AS Utf8;
+        UPSERT INTO ai_analyses
+            (user_id, entry_id, analysis_text, input_tokens, output_tokens, created_at)
+        VALUES
+            ($user_id, $entry_id, $analysis_text, $input_tokens, $output_tokens, $created_at);
+        """,
+        parameters={
+            "$user_id": user_id, "$entry_id": cache_key, "$analysis_text": text_value,
+            "$input_tokens": int(usage.get("input_tokens", 0)),
+            "$output_tokens": int(usage.get("output_tokens", 0)), "$created_at": created,
+        },
+    )
+
+
+def _deepseek_daily_summary(user_id):
+    from datetime import datetime, timezone
+    import urllib.error
+    now = datetime.now(timezone.utc)
+    day_key = now.date().isoformat()
+    cache_key = "daily-summary:" + day_key
+    state = _read_state(user_id)
+    if not isinstance(state, dict):
+        return _json_response(404, {"error": "user_state_not_found"})
+    todays = []
+    for item in state.get("entries") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            entry_date = datetime.fromisoformat(str(item.get("date", "")).replace("Z", "+00:00"))
+            if entry_date.tzinfo is None:
+                entry_date = entry_date.replace(tzinfo=timezone.utc)
+            if entry_date.astimezone(timezone.utc).date() == now.date():
+                todays.append(item)
+        except (ValueError, TypeError):
+            continue
+    if not todays:
+        return _json_response(400, {"error": "no_entries_today", "message": "Сегодня пока нет записей для сводки."})
+    cached = _db().execute_with_retries(
+        """
+        DECLARE $user_id AS Utf8;
+        DECLARE $entry_id AS Utf8;
+        SELECT analysis_text, input_tokens, output_tokens, created_at
+        FROM ai_analyses WHERE user_id = $user_id AND entry_id = $entry_id;
+        """,
+        parameters={"$user_id": user_id, "$entry_id": cache_key},
+    )
+    for result_set in cached:
+        for row in result_set.rows:
+            return _json_response(200, {"ok": True, "cached": True, "summary": str(row.analysis_text),
+                "usage": {"input_tokens": int(row.input_tokens), "output_tokens": int(row.output_tokens)},
+                "created_at": str(row.created_at)})
+    snippets = []
+    for i, entry in enumerate(todays[-30:], 1):
+        fields = [("Ситуация","situation"),("Эмоция","emotion"),("Интенсивность","intensity"),
+                  ("Автоматическая мысль","thought"),("Факты за","forText"),("Факты против","against"),
+                  ("Сбалансированный взгляд","balanced"),("Следующий шаг","action")]
+        snippets.append("Запись " + str(i) + ":\n" + "\n".join(
+            label + ": " + str(entry.get(key, ""))[:900] for label, key in fields))
+    system_prompt = (
+        "Ты — бережный аналитик приложения «Путь к себе», работающий в рамках КПТ и саморефлексии. "
+        "Составь дневную сводку по записям одного человека. Не ставь диагнозов и не делай выводов о личности. "
+        "Отделяй факты от гипотез; не выдумывай повторения. На русском, до 500 слов. "
+        "Структура: 1) картина дня; 2) повторяющиеся темы (только подтверждённые); "
+        "3) связи ситуаций, мыслей и реакций; 4) что уже получилось; 5) один вопрос для наблюдения; "
+        "6) не более 3 возможных паттернов для проверки с указанием подтверждающих записей. "
+        "Назови их гипотезами и подчеркни, что пользователь сам решает, добавлять ли их."
+    )
+    try:
+        data = _deepseek_chat([{"role":"system","content":system_prompt},
+            {"role":"user","content":"Записи за "+day_key+":\n\n"+"\n\n".join(snippets)}],
+            max_tokens=4500, timeout=55)
+        choices = data.get("choices") or []
+        message = choices[0].get("message") if choices else {}
+        summary = str((message or {}).get("content") or "").strip()
+        if not summary:
+            return _json_response(502, {"error":"empty_model_response"})
+        u = data.get("usage") or {}
+        usage = {"input_tokens":int(u.get("prompt_tokens",0)),"output_tokens":int(u.get("completion_tokens",0))}
+        created = now.isoformat()
+        _save_ai_result(user_id, cache_key, summary, usage, created)
+        return _json_response(200, {"ok":True,"cached":False,"summary":summary,"usage":usage,"created_at":created})
+    except urllib.error.HTTPError as exc:
+        LOG.error("DeepSeek daily summary HTTP error status=%s", exc.code)
+        return _json_response(502, {"error":"deepseek_provider_error","provider_status":int(exc.code)})
+    except urllib.error.URLError as exc:
+        LOG.error("DeepSeek daily summary network error: %s", type(exc.reason).__name__)
+        return _json_response(502, {"error":"deepseek_network_error"})
+    except Exception as exc:
+        LOG.exception("DeepSeek daily summary failed type=%s", type(exc).__name__)
+        return _json_response(502, {"error":"deepseek_analysis_failed","detail":type(exc).__name__})
 
 
 def _deepseek_connection_test():
@@ -701,6 +812,15 @@ def handler(event, context):
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error": "deepseek_not_configured"})
             return _deepseek_connection_test()
+        if path == "/v1/ai/daily-summary" and method == "POST":
+            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            _ensure_schema()
+            if not _premium_status(user_id).get("active"):
+                return _json_response(403, {"error":"premium_required"})
+            if not DEEPSEEK_API_KEY:
+                return _json_response(503, {"error":"deepseek_not_configured"})
+            return _deepseek_daily_summary(user_id)
+
         if path == "/v1/ai/analyze-entry" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             _ensure_schema()
