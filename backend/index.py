@@ -593,8 +593,19 @@ def _openai_analyze_entry(user_id, entry_id):
             "created_at": created,
         })
     except Exception as exc:
-        LOG.error("OpenAI analysis failed: %s", type(exc).__name__)
-        return _json_response(502, {"error": "openai_analysis_failed"})
+        # Log only sanitized provider/database diagnostics; never log API keys or diary text.
+        try:
+            import urllib.error
+            if isinstance(exc, urllib.error.HTTPError):
+                provider_body = exc.read(2000).decode("utf-8", errors="replace")
+                LOG.error("OpenAI HTTP error status=%s body=%s", exc.code, provider_body[:2000])
+            elif isinstance(exc, urllib.error.URLError):
+                LOG.error("OpenAI network error reason=%s", str(exc.reason)[:300])
+            else:
+                LOG.exception("OpenAI analysis or persistence failed type=%s", type(exc).__name__)
+        except Exception:
+            LOG.error("OpenAI analysis failed type=%s", type(exc).__name__)
+        return _json_response(502, {"error": "openai_analysis_failed", "detail": type(exc).__name__})
 
 
 def _openai_connection_test():
