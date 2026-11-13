@@ -289,6 +289,17 @@ paths:
         function_id: "$FUNCTION_ID"
         service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
+  /v1/ai/usage:
+    get:
+      operationId: getDailyAiUsage
+      responses:
+        "200":
+          description: Daily AI usage and remaining quota
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
   /v1/trial:
     post:
       operationId: startPremiumTrial
