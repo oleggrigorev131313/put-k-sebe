@@ -619,11 +619,13 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
         LOG.error("DeepSeek network error reason=%s", str(exc.reason)[:300])
         return _json_response(502, {"error": "deepseek_network_error", "detail": str(exc.reason)[:300]})
     except Exception as exc:
-        LOG.exception("DeepSeek analysis failed stage=%s type=%s", stage, type(exc).__name__)
+        safe_detail = str(exc).replace("\\n", " ")[:500]
+        LOG.exception("AI analysis failed stage=%s type=%s detail=%s", stage, type(exc).__name__, safe_detail)
         return _json_response(502, {
             "error": "deepseek_analysis_failed",
             "stage": stage,
-            "detail": stage + ": " + type(exc).__name__,
+            "exception_type": type(exc).__name__,
+            "detail": stage + ": " + type(exc).__name__ + ": " + safe_detail,
         })
 
 
@@ -772,8 +774,10 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC"):
         LOG.error("DeepSeek daily summary network error: %s", type(exc.reason).__name__)
         return _json_response(502, {"error":"deepseek_network_error"})
     except Exception as exc:
-        LOG.exception("DeepSeek daily summary failed type=%s", type(exc).__name__)
-        return _json_response(502, {"error":"deepseek_analysis_failed","detail":type(exc).__name__})
+        safe_detail = str(exc).replace("\\n", " ")[:500]
+        LOG.exception("Daily summary failed type=%s detail=%s", type(exc).__name__, safe_detail)
+        return _json_response(502, {"error":"daily_summary_failed",
+            "exception_type":type(exc).__name__, "detail":type(exc).__name__ + ": " + safe_detail})
 
 
 def _deepseek_connection_test():
