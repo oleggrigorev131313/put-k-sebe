@@ -687,8 +687,9 @@ def _save_ai_result(user_id, cache_key, text_value, usage, created):
         """,
         parameters={
             "$user_id": user_id, "$entry_id": cache_key, "$analysis_text": text_value,
-            "$input_tokens": int(usage.get("input_tokens", 0)),
-            "$output_tokens": int(usage.get("output_tokens", 0)), "$created_at": created,
+            "$input_tokens": ydb.TypedValue(max(0, int(usage.get("input_tokens", 0))), ydb.PrimitiveType.Uint64),
+            "$output_tokens": ydb.TypedValue(max(0, int(usage.get("output_tokens", 0))), ydb.PrimitiveType.Uint64),
+            "$created_at": created,
         },
     )
 
