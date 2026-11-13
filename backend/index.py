@@ -23,8 +23,8 @@ YDB_DATABASE = os.environ["YDB_DATABASE"]
 MAX_BODY_BYTES = 300_000
 MAX_AUTH_AGE_SECONDS = 86_400
 TRIBUTE_API_KEY = os.environ.get("TRIBUTE_API_KEY", "")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-OPENAI_MODEL = "gpt-6.1-sol"
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+DEEPSEEK_MODEL = "deepseek-flash"
 TRIBUTE_PRODUCTS = {"177388": 30, "177544": 90, "177545": 365}
 
 _driver = None
@@ -492,9 +492,29 @@ def _handle_tribute_webhook(raw_body, signature):
         return _json_response(400, {"error": str(exc)})
 
 
-def _openai_analyze_entry(user_id, entry_id):
-    from datetime import datetime, timezone
+def _deepseek_chat(messages, max_tokens=3000, timeout=55):
     import urllib.request
+    payload = {
+        "model": DEEPSEEK_MODEL,
+        "messages": messages,
+        "thinking": {"type": "enabled"},
+        "reasoning_effort": "high",
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+    request = urllib.request.Request(
+        "https://api.deepseek.com/chat/completions",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Authorization": "Bearer " + DEEPSEEK_API_KEY, "Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _deepseek_analyze_entry(user_id, entry_id):
+    from datetime import datetime, timezone
+    import urllib.error
     _ensure_schema()
     state = _read_state(user_id)
     if not isinstance(state, dict):
@@ -519,6 +539,7 @@ def _openai_analyze_entry(user_id, entry_id):
                 "usage": {"input_tokens": int(row.input_tokens), "output_tokens": int(row.output_tokens)},
                 "created_at": str(row.created_at),
             })
+
     fields = [
         ("Ситуация", "situation"), ("Эмоция", "emotion"),
         ("Интенсивность эмоции (0–10)", "intensity"),
@@ -526,48 +547,36 @@ def _openai_analyze_entry(user_id, entry_id):
         ("Факты против мысли", "against"), ("Более сбалансированный взгляд", "balanced"),
         ("Следующий небольшой шаг", "action"),
     ]
-    entry_text = "\\n".join(label + ": " + str(entry.get(key, ""))[:1800] for label, key in fields)
-    prompt = (
-        "Проанализируй одну запись дневника в рамках навыков КПТ и бережной саморефлексии. "
+    entry_text = "\n".join(label + ": " + str(entry.get(key, ""))[:1800] for label, key in fields)
+    system_prompt = (
+        "Ты — Персональный аналитик приложения «Путь к себе». "
+        "Помогай человеку в рамках навыков КПТ и бережной саморефлексии. "
         "Отвечай по-русски, уважительно, конкретно и без шаблонных комплиментов. "
         "Не ставь диагнозов, не делай выводов о личности по одной записи, не выдавай гипотезы за факты. "
         "Не навязывай позитивное мышление. Если данных недостаточно, прямо скажи об этом. "
-        "Структура ответа: 1) Что видно в ситуации. 2) Возможная автоматическая мысль и когнитивное искажение "
-        "(только если есть основания; иначе напиши, что явного искажения не видно). "
+        "Не ищи когнитивное искажение там, где его нет. "
+        "Структура ответа: 1) Что видно в ситуации. "
+        "2) Возможная автоматическая мысль и когнитивное искажение (только если есть основания; "
+        "иначе напиши, что явного искажения не видно). "
         "3) Что запись может упускать или какие вопросы стоит себе задать. "
         "4) Более точный, сбалансированный взгляд. 5) Один небольшой практический шаг. "
-        "Не более 350 слов. Это поддержка для самонаблюдения, не психотерапия и не медицинская помощь.\\n\\n"
-        + entry_text
-    )
-    payload = {
-        "model": OPENAI_MODEL,
-        "input": prompt,
-        "reasoning": {"effort": "medium"},
-        "max_output_tokens": 900,
-        "store": False,
-    }
-    request = urllib.request.Request(
-        "https://api.openai.com/v1/responses",
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"},
-        method="POST",
+        "Не более 350 слов. Это поддержка для самонаблюдения, не психотерапия и не медицинская помощь."
     )
     try:
-        with urllib.request.urlopen(request, timeout=55) as response:
-            data = json.loads(response.read().decode("utf-8"))
-        parts = []
-        for item in data.get("output", []):
-            if item.get("type") == "message":
-                for content in item.get("content", []):
-                    if content.get("type") == "output_text":
-                        parts.append(content.get("text", ""))
-        analysis = "\\n".join(parts).strip()
+        data = _deepseek_chat(
+            [{"role": "system", "content": system_prompt}, {"role": "user", "content": entry_text}],
+            max_tokens=3000,
+            timeout=55,
+        )
+        choices = data.get("choices") or []
+        message = choices[0].get("message") if choices else {}
+        analysis = str((message or {}).get("content") or "").strip()
         if not analysis:
-            LOG.error("OpenAI analysis returned no output")
+            LOG.error("DeepSeek analysis returned no output")
             return _json_response(502, {"error": "empty_model_response"})
         usage = data.get("usage") or {}
-        input_tokens = int(usage.get("input_tokens", 0))
-        output_tokens = int(usage.get("output_tokens", 0))
+        input_tokens = int(usage.get("prompt_tokens", 0))
+        output_tokens = int(usage.get("completion_tokens", 0))
         created = datetime.now(timezone.utc).isoformat()
         _db().execute_with_retries(
             """
@@ -592,60 +601,59 @@ def _openai_analyze_entry(user_id, entry_id):
             "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
             "created_at": created,
         })
+    except urllib.error.HTTPError as exc:
+        try:
+            provider_data = json.loads(exc.read(2000).decode("utf-8", errors="replace"))
+            provider_error = provider_data.get("error") or {}
+            provider_message = str(provider_error.get("message", "DeepSeek request rejected"))[:500]
+            provider_code = str(provider_error.get("code") or provider_error.get("type") or "provider_error")[:100]
+        except Exception:
+            provider_message = "DeepSeek returned an unreadable error response"
+            provider_code = "provider_error"
+        LOG.error("DeepSeek HTTP error status=%s code=%s message=%s", exc.code, provider_code, provider_message)
+        return _json_response(502, {
+            "error": "deepseek_provider_error",
+            "provider_status": int(exc.code),
+            "provider_code": provider_code,
+            "detail": provider_message,
+        })
+    except urllib.error.URLError as exc:
+        LOG.error("DeepSeek network error reason=%s", str(exc.reason)[:300])
+        return _json_response(502, {"error": "deepseek_network_error", "detail": str(exc.reason)[:300]})
     except Exception as exc:
-        # Return sanitized diagnostics because Cloud Logging may be temporarily unavailable.
-        import urllib.error
-        if isinstance(exc, urllib.error.HTTPError):
-            try:
-                provider_data = json.loads(exc.read(2000).decode("utf-8", errors="replace"))
-                provider_error = provider_data.get("error") or {}
-                provider_message = str(provider_error.get("message", "OpenAI request rejected"))[:500]
-                provider_code = str(provider_error.get("code") or provider_error.get("type") or "provider_error")[:100]
-            except Exception:
-                provider_message = "OpenAI returned an unreadable error response"
-                provider_code = "provider_error"
-            LOG.error("OpenAI HTTP error status=%s code=%s message=%s", exc.code, provider_code, provider_message)
-            return _json_response(502, {
-                "error": "openai_provider_error",
-                "provider_status": int(exc.code),
-                "provider_code": provider_code,
-                "detail": provider_message,
-            })
-        if isinstance(exc, urllib.error.URLError):
-            LOG.error("OpenAI network error reason=%s", str(exc.reason)[:300])
-            return _json_response(502, {"error": "openai_network_error", "detail": str(exc.reason)[:300]})
-        LOG.exception("OpenAI analysis or persistence failed type=%s", type(exc).__name__)
-        return _json_response(502, {"error": "openai_analysis_failed", "detail": type(exc).__name__})
+        LOG.exception("DeepSeek analysis or persistence failed type=%s", type(exc).__name__)
+        return _json_response(502, {"error": "deepseek_analysis_failed", "detail": type(exc).__name__})
 
 
-def _openai_connection_test():
-    import urllib.request
-    payload = {
-        "model": OPENAI_MODEL,
-        "input": "Ты — Персональный аналитик приложения «Путь к себе». Ответь одной короткой фразой на русском: «Связь с моделью установлена».",
-        "reasoning": {"effort": "low"},
-        "max_output_tokens": 120,
-        "store": False,
-    }
-    request = urllib.request.Request(
-        "https://api.openai.com/v1/responses",
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"},
-        method="POST",
-    )
+def _deepseek_connection_test():
+    import urllib.error
     try:
-        with urllib.request.urlopen(request, timeout=25) as response:
-            data = json.loads(response.read().decode("utf-8"))
-        parts = []
-        for item in data.get("output", []):
-            if item.get("type") == "message":
-                for content in item.get("content", []):
-                    if content.get("type") == "output_text":
-                        parts.append(content.get("text", ""))
-        return _json_response(200, {"ok": True, "model": OPENAI_MODEL, "response": "\\n".join(parts), "usage": data.get("usage", {})})
+        data = _deepseek_chat(
+            [{"role": "user", "content": "Ты — Персональный аналитик приложения «Путь к себе». Ответь одной короткой фразой на русском: «Связь с DeepSeek установлена»."}],
+            max_tokens=500,
+            timeout=25,
+        )
+        choices = data.get("choices") or []
+        message = choices[0].get("message") if choices else {}
+        response_text = str((message or {}).get("content") or "").strip()
+        if not response_text:
+            LOG.error("DeepSeek connection test returned no output")
+            return _json_response(502, {"error": "empty_model_response"})
+        return _json_response(200, {
+            "ok": True, "model": DEEPSEEK_MODEL,
+            "response": response_text, "usage": data.get("usage", {}),
+        })
+    except urllib.error.HTTPError as exc:
+        try:
+            provider_data = json.loads(exc.read(2000).decode("utf-8", errors="replace"))
+            detail = str((provider_data.get("error") or {}).get("message", "DeepSeek request rejected"))[:500]
+        except Exception:
+            detail = "DeepSeek returned an unreadable error response"
+        LOG.error("DeepSeek connection test HTTP error status=%s detail=%s", exc.code, detail)
+        return _json_response(502, {"error": "deepseek_request_failed", "provider_status": int(exc.code), "detail": detail})
     except Exception as exc:
-        LOG.error("OpenAI connection test failed: %s", type(exc).__name__)
-        return _json_response(502, {"error": "openai_request_failed"})
+        LOG.error("DeepSeek connection test failed: %s", type(exc).__name__)
+        return _json_response(502, {"error": "deepseek_request_failed", "detail": type(exc).__name__})
 
 
 def handler(event, context):
@@ -678,16 +686,16 @@ def handler(event, context):
             _ensure_schema()
             if not _premium_status(user_id).get("active"):
                 return _json_response(403, {"error": "premium_required"})
-            if not OPENAI_API_KEY:
-                return _json_response(503, {"error": "openai_not_configured"})
-            return _openai_connection_test()
+            if not DEEPSEEK_API_KEY:
+                return _json_response(503, {"error": "deepseek_not_configured"})
+            return _deepseek_connection_test()
         if path == "/v1/ai/analyze-entry" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             _ensure_schema()
             if not _premium_status(user_id).get("active"):
                 return _json_response(403, {"error": "premium_required"})
-            if not OPENAI_API_KEY:
-                return _json_response(503, {"error": "openai_not_configured"})
+            if not DEEPSEEK_API_KEY:
+                return _json_response(503, {"error": "deepseek_not_configured"})
             try:
                 payload = json.loads(body or "{}")
                 entry_id = str(payload.get("entry_id", "")).strip()
@@ -695,7 +703,7 @@ def handler(event, context):
                     raise ValueError("invalid_entry_id")
             except (json.JSONDecodeError, ValueError, TypeError):
                 return _json_response(400, {"error": "invalid_request"})
-            return _openai_analyze_entry(user_id, entry_id)
+            return _deepseek_analyze_entry(user_id, entry_id)
 
         if path == "/v1/events" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
