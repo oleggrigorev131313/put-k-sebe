@@ -72,6 +72,25 @@ async function refreshPremium(){
  }catch(e){premiumStatus={active:false,trial_used:false,error:true};}
  finally{premiumLoading=false;}
 }
+async function analyzeEntry(id,buttonEl){
+ if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
+ if(!premiumStatus||!premiumStatus.active){toast("Персональный аналитик доступен в Premium.");return;}
+ var result=document.getElementById("ai-result");
+ if(buttonEl){buttonEl.disabled=true;buttonEl.textContent="Аналитик изучает запись…";}
+ try{
+  var response=await fetch(API_BASE+"/v1/ai/analyze-entry",{method:"POST",headers:apiHeaders(),body:JSON.stringify({entry_id:String(id)})});
+  var data=await response.json();
+  if(!response.ok){
+   if(response.status===403)throw new Error("Для анализа нужен активный Premium.");
+   throw new Error(data.error||"Не удалось получить анализ.");
+  }
+  if(result){result.style.display="block";result.textContent=data.analysis||"Анализ не получен.";}
+  if(buttonEl){buttonEl.textContent=data.cached?"Показан сохранённый анализ":"Анализ готов";buttonEl.disabled=false;}
+ }catch(e){
+  toast(e.message||"Ошибка анализа.");
+  if(buttonEl){buttonEl.disabled=false;buttonEl.textContent="Повторить анализ";}
+ }
+}
 function trackEvent(name){
 if(!API_BASE||!tg||!tg.initData)return;
 fetch(API_BASE+"/v1/events",{method:"POST",headers:apiHeaders(),body:JSON.stringify({event:name})}).catch(function(){});
@@ -316,7 +335,7 @@ if(a==="add-pattern"){modal('<h2>Новый паттерн</h2><p>Запиши �
 }
 function modal(content){var d=document.createElement("div");d.className="modalbg";d.id="modal";d.innerHTML='<section class="modal"><div class="modalhead"><button class="icon" id="close">×</button></div>'+content+'</section>';document.body.appendChild(d);d.onclick=function(e){if(e.target===d)closeModal();};document.getElementById("close").onclick=closeModal;}
 function closeModal(){var m=document.getElementById("modal");if(m)m.remove();}
-function entryDetail(id){var e=state.entries.find(function(x){return x.id===id;});if(!e)return;modal('<div class="eyebrow">'+date(e.date)+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация:</b> '+esc(e.situation)+'</p><p><b>Эмоция:</b> '+esc(e.emotion)+' · '+e.intensity+'/10</p><p><b>Факты за:</b> '+esc(e.forText)+'</p><p><b>Факты против:</b> '+esc(e.against)+'</p><p><b>Сбалансированный взгляд:</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг:</b> '+esc(e.action)+'</p><button class="btn outline full" id="del">Удалить запись</button>');document.getElementById("del").onclick=function(){if(confirm("Удалить эту запись?")){state.entries=state.entries.filter(function(x){return x.id!==id;});save();closeModal();render();}};}
+function entryDetail(id){var e=state.entries.find(function(x){return x.id===id;});if(!e)return;modal('<div class="eyebrow">'+date(e.date)+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация:</b> '+esc(e.situation)+'</p><p><b>Эмоция:</b> '+esc(e.emotion)+' · '+e.intensity+'/10</p><p><b>Факты за:</b> '+esc(e.forText)+'</p><p><b>Факты против:</b> '+esc(e.against)+'</p><p><b>Сбалансированный взгляд:</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг:</b> '+esc(e.action)+'</p><div id="ai-result" class="note" style="display:none;white-space:pre-wrap"></div>'+(premiumStatus&&premiumStatus.active?'<button class="btn primary full" id="analyze">✦ Анализировать с Персональным аналитиком</button>':'<p class="sub">Персональный аналитик доступен в Premium.</p>')+'<button class="btn outline full" id="del" style="margin-top:9px">Удалить запись</button>');var ab=document.getElementById("analyze");if(ab)ab.onclick=function(){analyzeEntry(id,ab);};document.getElementById("del").onclick=function(){if(confirm("Удалить эту запись?")){state.entries=state.entries.filter(function(x){return x.id!==id;});save();closeModal();render();}};}
 function practiceDetail(i){
 trackEvent("practice_opened");
 var p=practices[i],k=new Date().toDateString()+"-"+i,isDone=(state.practiceHistory||[]).some(function(x){return x.practiceId===i&&new Date(x.completedAt).toDateString()===new Date().toDateString();});
