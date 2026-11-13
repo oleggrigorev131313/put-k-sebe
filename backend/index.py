@@ -810,6 +810,11 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
             continue
     if not todays and not practice_today:
         return _json_response(400, {"error": "no_entries_today", "message": "Сегодня пока нет записей или выполненных практик для сводки."})
+    import hashlib
+    activity_parts = ["e:" + str(item.get("id") or item.get("date") or "") for item in todays]
+    activity_parts += ["p:" + str(item.get("id") or item.get("completedAt") or "") for item in practice_today]
+    activity_signature = hashlib.sha256("|".join(sorted(activity_parts)).encode("utf-8")).hexdigest()[:16]
+    cache_key = "daily-summary:" + day_key + ":" + activity_signature
     # Ignore empty, fragmentary or gibberish entries. A practice-only day is still
     # meaningful input when the user has recorded what they completed.
     meaningful_entries = [item for item in todays if not _diary_entry_quality_error(item)]
