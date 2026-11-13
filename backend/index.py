@@ -591,6 +591,14 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
         ("Следующий небольшой шаг", "action"),
     ]
     entry_text = "\n".join(label + ": " + str(entry.get(key, ""))[:1800] for label, key in fields)
+    onboarding = state.get("onboarding") if isinstance(state.get("onboarding"), dict) else {}
+    user_context = {
+        "что_сейчас_беспокоит": str(onboarding.get("main_issue") or "")[:1200],
+        "важные_сферы": onboarding.get("areas") or [],
+        "знакомые_мысли": onboarding.get("thoughts") or [],
+        "обычные_реакции": onboarding.get("reactions") or [],
+        "чего_хочет_изменить": str(onboarding.get("desired_changes") or "")[:1200],
+    }
     system_prompt = (
         "Ты — Персональный аналитик приложения «Путь к себе». "
         "Помогай человеку в рамках навыков КПТ и бережной саморефлексии. "
@@ -632,7 +640,9 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
     try:
         stage = "request_deepseek"
         data = _deepseek_chat(
-            [{"role": "system", "content": system_prompt}, {"role": "user", "content": entry_text}],
+            [{"role": "system", "content": system_prompt},
+             {"role": "user", "content": "Контекст из анкеты (помогает учитывать цели пользователя, но не является доказательством):\\n"
+              + json.dumps(user_context, ensure_ascii=False) + "\\n\\nДанные текущей записи:\\n" + entry_text}],
             max_tokens=3000,
             timeout=55,
         )
