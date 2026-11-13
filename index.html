@@ -28,7 +28,7 @@ main{padding:8px 0 24px}.eyebrow{font-size:10px;letter-spacing:1.6px;text-transf
 .entry{margin:10px 0}.entry h3{font-size:14px;margin:9px 0 5px}.entry p{font-size:12px;line-height:1.5;color:#73798d;margin:4px 0}.meta{display:flex;justify-content:space-between;font-size:10px;color:#9599a9}
 .pattern{display:flex;gap:12px;margin:10px 0;align-items:flex-start}.picon{width:38px;height:38px;flex:none;border-radius:13px;background:#f0f1ff;color:var(--blue);display:grid;place-items:center}.pattern b{font-size:13px}.pattern p{font-size:11px;color:var(--muted);margin:4px 0;line-height:1.45}
 .chart{width:100%;height:170px}.chart svg{width:100%;height:100%}.empty{text-align:center;padding:27px 18px}.empty .symbol{font-size:32px;margin-bottom:8px}.empty h3{font-size:15px;margin:0 0 7px}.empty p{font-size:12px;line-height:1.5;color:var(--muted);max-width:300px;margin:0 auto 15px}
-.note{background:#f7f7fb;border:1px solid var(--line);border-radius:14px;padding:12px;color:#777d90;font-size:10px;line-height:1.5;margin-top:16px}.nav{position:fixed;z-index:10;bottom:0;left:50%;transform:translateX(-50%);width:min(100%,680px);display:grid;grid-template-columns:repeat(5,1fr);padding:9px 7px calc(9px + env(safe-area-inset-bottom));background:rgba(255,255,255,.91);backdrop-filter:blur(18px);border-top:1px solid #ececf3}.nav button{border:0;background:none;color:#9a9eae;font-size:10px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:3px;padding:3px 0}.nav button.active{color:#5966c8}.nav i{font-style:normal;font-size:21px;line-height:24px}
+.analysis-text{font-size:12px;line-height:1.7;color:#646b80}.analysis-text p{margin:0 0 12px}.analysis-text strong{font-weight:800;color:#292b38}.analysis-text h3{font-size:13px;color:#292b38;margin:15px 0 6px}.analysis-text ul{padding-left:18px;margin:5px 0 12px}.analysis-text li{margin:4px 0}.ai-suggestion{background:#f8f8ff}.ai-suggestion h3{font-size:14px;margin:7px 0}.note{background:#f7f7fb;border:1px solid var(--line);border-radius:14px;padding:12px;color:#777d90;font-size:10px;line-height:1.5;margin-top:16px}.nav{position:fixed;z-index:10;bottom:0;left:50%;transform:translateX(-50%);width:min(100%,680px);display:grid;grid-template-columns:repeat(5,1fr);padding:9px 7px calc(9px + env(safe-area-inset-bottom));background:rgba(255,255,255,.91);backdrop-filter:blur(18px);border-top:1px solid #ececf3}.nav button{border:0;background:none;color:#9a9eae;font-size:10px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:3px;padding:3px 0}.nav button.active{color:#5966c8}.nav i{font-style:normal;font-size:21px;line-height:24px}
 .modalbg{position:fixed;z-index:30;inset:0;background:#22233355;display:grid;align-items:end;padding:12px}.modal{background:white;border-radius:24px;padding:21px;max-height:85vh;overflow:auto;width:min(100%,620px);margin:auto}.modal h2{font-size:19px;margin:0 0 8px}.modal p{font-size:12px;line-height:1.55;color:var(--muted)}.modalhead{display:flex;justify-content:flex-end;margin-bottom:6px}.toast{position:fixed;z-index:50;bottom:95px;left:50%;transform:translate(-50%,12px);opacity:0;pointer-events:none;background:#282a38;color:white;padding:11px 16px;border-radius:30px;font-size:12px;transition:.2s;max-width:90%;text-align:center}.toast.show{opacity:1;transform:translate(-50%,0)}
 .billing-teaser{display:flex;align-items:center;justify-content:space-between;gap:14px;background:linear-gradient(135deg,#fff,#f3f4ff)}.billing-teaser .billtag{font-size:10px;color:#6873cd;background:#eff0ff;border-radius:20px;padding:6px 9px;font-weight:800}.plan-card{position:relative;overflow:hidden}.plan-card.featured{border-color:#cfd3ff;background:linear-gradient(145deg,#fff,#f4f5ff)}.plan-price{font-size:30px;font-weight:800;letter-spacing:-1px}.plan-list{margin:12px 0 0;padding:0;list-style:none}.plan-list li{font-size:12px;color:#60667c;padding:7px 0;border-bottom:1px solid #f0f0f5}.plan-list li:last-child{border:0}.plan-list li:before{content:'✓';color:#7180db;font-weight:800;margin-right:9px}.billing-route{border:1px solid var(--line);border-radius:16px;padding:14px;margin-top:10px;background:#fff}.billing-route b{display:block;font-size:13px;margin-bottom:5px}.billing-route p{font-size:11px;color:var(--muted);line-height:1.5;margin:0}.status-pill{display:inline-flex;align-items:center;border-radius:30px;background:#f2f3f8;padding:6px 10px;font-size:10px;font-weight:800;color:#767d91}.status-pill.green{background:#eaf7f0;color:#398964}.price-note{font-size:11px;line-height:1.55;color:#777e92;background:#f7f8fc;border:1px solid var(--line);padding:12px;border-radius:14px;margin-top:14px}
 @media(min-width:600px){.shell{padding-left:28px;padding-right:28px}.hero{padding:29px}.title{font-size:31px}}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -57,7 +57,7 @@ var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.
 document.getElementById("settings").textContent=(first||"О").charAt(0).toUpperCase();
 var defaults={entries:[],patterns:[],completed:[],practiceHistory:[],onboarding:null,chat:[]};
 var state=load(),page=state.onboarding?"home":"onboarding",step=6,draft=blank(),onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
-var cloudReady=false,cloudSyncTimer=null,cloudErrorShown=false,cloudStatus="paused",cloudErrorText="",premiumStatus={active:false,trial_used:false},premiumLoading=false;
+var cloudReady=false,cloudSyncTimer=null,cloudErrorShown=false,cloudStatus="paused",cloudErrorText="",premiumStatus={active:false,trial_used:false},premiumLoading=false,aiUsage={limit:5,used:0,remaining:5,loading:true};
 function load(){try{var x=JSON.parse(localStorage.getItem(KEY));if(!x||!Array.isArray(x.entries))return JSON.parse(JSON.stringify(defaults));var out=Object.assign({},defaults,x);out.patterns=(out.patterns||[]).filter(function(p){return ["p1","p2","p3","p4"].indexOf(p.id)<0;});out.practiceHistory=Array.isArray(out.practiceHistory)?out.practiceHistory:[];out.chat=Array.isArray(out.chat)?out.chat:[];return out;}catch(e){return JSON.parse(JSON.stringify(defaults));}}
 function saveLocalOnly(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
 function save(){saveLocalOnly();scheduleCloudSave();}
@@ -72,13 +72,39 @@ async function refreshPremium(){
  }catch(e){premiumStatus={active:false,trial_used:false,error:true};}
  finally{premiumLoading=false;}
 }
+async function refreshAiUsage(){
+ if(!tg||!tg.initData||!API_BASE)return;
+ try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
+ var r=await fetch(API_BASE+"/v1/ai/usage",{method:"GET",headers:Object.assign(apiHeaders(),{"X-User-Timezone":tz}),cache:"no-store"});
+ if(r.ok){aiUsage=await r.json();if(page==="home")render();}}catch(e){}
+}
+function formatAnalysis(raw){
+ var safe=esc(String(raw||""));
+ safe=safe.replace(/^#{1,3}\s+(.+)$/gm,"<h3>$1</h3>").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>");
+ safe=safe.replace(/^[-•]\s+(.+)$/gm,"<li>$1</li>");
+ safe=safe.replace(/(?:<li>[\s\S]*?<\/li>\s*)+/g,function(m){return "<ul>"+m+"</ul>";});
+ return safe.split(/\n{2,}/).map(function(p){p=p.trim();return !p?"":(/^<(h3|ul)>/.test(p)?p:"<p>"+p.replace(/\n/g,"<br>")+"</p>");}).join("");
+}
+function renderAnalysis(raw,entryId){
+ var text=String(raw||""),match=text.match(/Гипотеза паттерна:\s*([^|\n]+)\s*\|\s*([^\n]+)/i);
+ var clean=text.replace(/\n?Гипотеза паттерна:[^\n]*/i,"").trim();
+ var candidate=match&&match[1].trim().toLowerCase()!=="нет достаточных данных";
+ var suggestion=candidate?'<div class="card ai-suggestion" style="margin-top:14px"><div class="eyebrow">Возможный паттерн · гипотеза</div><h3>'+esc(match[1].trim())+'</h3><p>'+esc(match[2].trim())+'</p><button class="btn secondary full" id="accept-ai-pattern">＋ Добавить в мои паттерны</button><p class="sub" style="margin:8px 0 0">Добавим как гипотезу для наблюдения, а не как подтверждённый факт.</p></div>':'<p class="sub" style="margin-top:12px">По этой записи пока недостаточно данных, чтобы предложить паттерн.</p>';
+ return '<div class="eyebrow">Разбор персонального аналитика</div><div class="analysis-text">'+formatAnalysis(clean)+'</div>'+suggestion;
+}
+function addSuggestedPattern(name,detail,entryId){
+ if(!name)return;
+ if(state.patterns.some(function(p){return String(p.name||"").toLowerCase()===name.toLowerCase()&&p.status!=="rejected";})){toast("Похожий паттерн уже есть в твоём списке.");return;}
+ state.patterns.push({id:"p"+Date.now(),name:name,detail:detail||"",status:"suggested",source:"ai",createdAt:new Date().toISOString(),entryId:String(entryId)});
+ save();toast("Гипотеза добавлена в «Мои паттерны». Её можно проверить на следующих записях.");closeModal();go("patterns");
+}
 async function analyzeEntry(id,buttonEl){
  if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
  if(!premiumStatus||!premiumStatus.active){toast("Персональный аналитик доступен в Premium.");return;}
  var result=document.getElementById("ai-result");
  if(buttonEl){buttonEl.disabled=true;buttonEl.textContent="Аналитик изучает запись…";}
  try{
-  var response=await fetch(API_BASE+"/v1/ai/analyze-entry",{method:"POST",headers:apiHeaders(),body:JSON.stringify({entry_id:String(id),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
+  var response=await fetch(API_BASE+"/v1/ai/analyze-entry",{method:"POST",headers:Object.assign(apiHeaders(),{"X-User-Timezone":Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"}),body:JSON.stringify({entry_id:String(id),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
   var data=await response.json();
   if(!response.ok){
    if(response.status===403)throw new Error("Для анализа нужен активный Premium.");
@@ -87,8 +113,13 @@ async function analyzeEntry(id,buttonEl){
    if(data.provider_status)diagnostic+=" (HTTP "+data.provider_status+")";
    throw new Error("Ошибка аналитика: "+diagnostic);
   }
-  if(result){result.style.display="block";result.textContent=data.analysis||"Анализ не получен.";}
-  if(buttonEl){buttonEl.textContent=data.cached?"Показан сохранённый анализ":"Анализ готов";buttonEl.disabled=false;}
+  var entry=state.entries.find(function(x){return String(x.id)===String(id);});
+  if(entry){entry.analysis=data.analysis||"";save();}
+  if(result){result.style.display="block";result.innerHTML=renderAnalysis(data.analysis||"Анализ не получен.",id);}
+  var accept=document.getElementById("accept-ai-pattern");
+  if(accept){var mm=String(data.analysis||"").match(/Гипотеза паттерна:\s*([^|\n]+)\s*\|\s*([^\n]+)/i);if(mm)accept.onclick=function(){addSuggestedPattern(mm[1].trim(),mm[2].trim(),id);};}
+  if(buttonEl)buttonEl.style.display="none";
+  refreshAiUsage();
  }catch(e){
   toast(e.message||"Ошибка анализа.");
   if(buttonEl){buttonEl.disabled=false;buttonEl.textContent="Повторить анализ";}
@@ -225,7 +256,7 @@ if(premium.active){
  }
 }
 return '<section class="hero card"><div class="eyebrow">Личное пространство</div><h1>Привет, '+esc(first||"Олег")+' ✦</h1><p>Не нужно менять всю жизнь за один день. Достаточно лучше понять себя и сделать следующий небольшой шаг.</p>'+button("Записать мысль →","new")+'</section>'+
-'<section class="card" style="margin-top:12px"><div class="eyebrow">Ежедневный обзор</div><p style="font-size:12px;color:var(--muted);margin:6px 0 12px">Один обзор в сутки — бесплатно. Анализ отдельных записей: до 5 в сутки в Premium.</p><button class="btn secondary full" id="daily-summary">✦ Подвести итоги дня</button></section>'+ '<section class="card billing-teaser" style="margin-top:14px"><div><div class="eyebrow">Тариф и доступ</div><b style="display:block;font-size:14px;margin:5px 0">'+esc(premiumLabel)+'</b><span class="billtag">'+premiumTag+'</span></div><button class="btn secondary" data-go="subscription">Тарифы →</button></section>'+
+'<section class="card" style="margin-top:12px"><div class="eyebrow">Персональный аналитик · сегодня</div><p style="font-size:12px;color:var(--muted);margin:6px 0 8px">Использовано '+aiUsage.used+' из '+aiUsage.limit+' бесплатных анализов · осталось '+aiUsage.remaining+'</p><div style="height:6px;background:#eceef6;border-radius:9px;overflow:hidden;margin-bottom:13px"><div style="height:100%;width:'+Math.min(100,aiUsage.used/aiUsage.limit*100)+'%;background:#7783df"></div></div><div class="eyebrow">Ежедневный обзор</div><p style="font-size:12px;color:var(--muted);margin:6px 0 12px">Один обзор в сутки — бесплатно.</p><button class="btn secondary full" id="daily-summary">✦ Подвести итоги дня</button></section>'+ '<section class="card billing-teaser" style="margin-top:14px"><div><div class="eyebrow">Тариф и доступ</div><b style="display:block;font-size:14px;margin:5px 0">'+esc(premiumLabel)+'</b><span class="billtag">'+premiumTag+'</span></div><button class="btn secondary" data-go="subscription">Тарифы →</button></section>'+
 '<div class="card" style="margin-top:12px"><div class="meta"><span>ВЫПОЛНЕННЫЕ ПРАКТИКИ</span><span>'+practiceCount+'</span></div><p style="font-size:12px;color:var(--muted);margin:7px 0 0">Все отметки и даты выполнения доступны в разделе «Прогресс».</p></div>'+section("Твой путь","progress")+'<div class="statrow"><div class="card stat"><strong>'+n+'</strong><span>записей в дневнике</span></div><div class="card stat"><strong>'+Object.keys(days).length+'</strong><span>дней с записями</span></div></div>'+
 section("Что можно сделать")+'<div class="grid"><button class="quick" data-act="new"><span class="qi">✎</span><b>Разобрать мысль</b><small>Ситуация, эмоция, факты и новый взгляд</small></button><button class="quick" data-go="patterns"><span class="qi">◎</span><b>Мои паттерны</b><small>Замечать повторяющиеся сценарии</small></button><button class="quick" data-go="progress"><span class="qi">⌁</span><b>Мой прогресс</b><small>История реальных записей</small></button><button class="quick" data-go="library"><span class="qi">▤</span><b>Практики</b><small>Небольшие упражнения</small></button></div>'+
 section("Последняя запись","journal")+(last?'<article class="card entry"><div class="meta"><span>'+date(last.date)+'</span><span>'+esc(last.emotion)+' · '+last.intensity+'/10</span></div><h3>'+esc(last.thought||"Запись")+'</h3><p>'+esc(last.balanced||last.situation)+'</p></article>':'<div class="card empty"><div class="symbol">☁</div><h3>Начни с одной мысли</h3><p>Запиши ситуацию, которая занимает внимание. Здесь постепенно появится твоя личная история изменений.</p>'+button("Создать первую запись","new","secondary")+'</div>')+
@@ -355,7 +386,7 @@ if(a==="add-pattern"){modal('<h2>Новый паттерн</h2><p>Запиши �
 }
 function modal(content){var d=document.createElement("div");d.className="modalbg";d.id="modal";d.innerHTML='<section class="modal"><div class="modalhead"><button class="icon" id="close">×</button></div>'+content+'</section>';document.body.appendChild(d);d.onclick=function(e){if(e.target===d)closeModal();};document.getElementById("close").onclick=closeModal;}
 function closeModal(){var m=document.getElementById("modal");if(m)m.remove();}
-function entryDetail(id){var e=state.entries.find(function(x){return x.id===id;});if(!e)return;modal('<div class="eyebrow">'+date(e.date)+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация:</b> '+esc(e.situation)+'</p><p><b>Эмоция:</b> '+esc(e.emotion)+' · '+e.intensity+'/10</p><p><b>Факты за:</b> '+esc(e.forText)+'</p><p><b>Факты против:</b> '+esc(e.against)+'</p><p><b>Сбалансированный взгляд:</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг:</b> '+esc(e.action)+'</p><div id="ai-result" class="note" style="display:none;white-space:pre-wrap"></div>'+(premiumStatus&&premiumStatus.active?'<button class="btn primary full" id="analyze">✦ Анализировать с Персональным аналитиком</button>':'<p class="sub">Персональный аналитик доступен в Premium.</p>')+'<button class="btn outline full" id="del" style="margin-top:9px">Удалить запись</button>');var ab=document.getElementById("analyze");if(ab)ab.onclick=function(){analyzeEntry(id,ab);};document.getElementById("del").onclick=function(){if(confirm("Удалить эту запись?")){state.entries=state.entries.filter(function(x){return x.id!==id;});save();closeModal();render();}};}
+function entryDetail(id){var e=state.entries.find(function(x){return String(x.id)===String(id);});if(!e)return;modal('<div class="eyebrow">'+date(e.date)+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация:</b> '+esc(e.situation)+'</p><p><b>Эмоция:</b> '+esc(e.emotion)+' · '+e.intensity+'/10</p><p><b>Факты за:</b> '+esc(e.forText)+'</p><p><b>Факты против:</b> '+esc(e.against)+'</p><p><b>Сбалансированный взгляд:</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг:</b> '+esc(e.action)+'</p><div id="ai-result" class="note" style="display:none"></div>'+(e.analysis?'<div class="note">'+renderAnalysis(e.analysis,id)+'</div>':'<button class="btn primary full" id="analyze">✦ Анализировать запись</button>')+'<button class="btn outline full" id="del" style="margin-top:9px">Удалить запись</button>');var ab=document.getElementById("analyze");if(ab)ab.onclick=function(){analyzeEntry(id,ab);};var existingAccept=document.getElementById("accept-ai-pattern");if(existingAccept){var mm=String(e.analysis||"").match(/Гипотеза паттерна:\s*([^|\n]+)\s*\|\s*([^\n]+)/i);if(mm)existingAccept.onclick=function(){addSuggestedPattern(mm[1].trim(),mm[2].trim(),id);};}document.getElementById("del").onclick=function(){if(confirm("Удалить эту запись?")){state.entries=state.entries.filter(function(x){return x.id!==id;});save();closeModal();render();}};}
 function practiceDetail(i){
 trackEvent("practice_opened");
 var p=practices[i],k=new Date().toDateString()+"-"+i,isDone=(state.practiceHistory||[]).some(function(x){return x.practiceId===i&&new Date(x.completedAt).toDateString()===new Date().toDateString();});
