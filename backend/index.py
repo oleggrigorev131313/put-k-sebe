@@ -837,8 +837,6 @@ def handler(event, context):
         if path == "/v1/ai/daily-summary" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             _ensure_schema()
-            if not _premium_status(user_id).get("active"):
-                return _json_response(403, {"error":"premium_required"})
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error":"deepseek_not_configured"})
             try:
