@@ -57,11 +57,21 @@ var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.
 document.getElementById("settings").textContent=(first||"О").charAt(0).toUpperCase();
 var defaults={entries:[],patterns:[],completed:[],practiceHistory:[],onboarding:null,chat:[]};
 var state=load(),page=state.onboarding?"home":"onboarding",step=6,draft=blank(),onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
-var cloudReady=false,cloudSyncTimer=null,cloudErrorShown=false,cloudStatus="paused",cloudErrorText="";
+var cloudReady=false,cloudSyncTimer=null,cloudErrorShown=false,cloudStatus="paused",cloudErrorText="",premiumStatus={active:false,trial_used:false},premiumLoading=false;
 function load(){try{var x=JSON.parse(localStorage.getItem(KEY));if(!x||!Array.isArray(x.entries))return JSON.parse(JSON.stringify(defaults));var out=Object.assign({},defaults,x);out.patterns=(out.patterns||[]).filter(function(p){return ["p1","p2","p3","p4"].indexOf(p.id)<0;});out.practiceHistory=Array.isArray(out.practiceHistory)?out.practiceHistory:[];out.chat=Array.isArray(out.chat)?out.chat:[];return out;}catch(e){return JSON.parse(JSON.stringify(defaults));}}
 function saveLocalOnly(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
 function save(){saveLocalOnly();scheduleCloudSave();}
 function apiHeaders(){return {"Content-Type":"application/json","X-Telegram-Init-Data":tg&&tg.initData?tg.initData:""};}
+async function refreshPremium(){
+ if(!API_BASE||!tg||!tg.initData)return;
+ premiumLoading=true;
+ try{
+ var r=await fetch(API_BASE+"/v1/premium",{method:"GET",headers:apiHeaders(),cache:"no-store"});
+ if(!r.ok)throw new Error("premium status unavailable");
+ premiumStatus=await r.json();
+ }catch(e){premiumStatus={active:false,trial_used:false,error:true};}
+ finally{premiumLoading=false;}
+}
 function trackEvent(name){
 if(!API_BASE||!tg||!tg.initData)return;
 fetch(API_BASE+"/v1/events",{method:"POST",headers:apiHeaders(),body:JSON.stringify({event:name})}).catch(function(){});
@@ -141,7 +151,7 @@ function selectedEmotions(){if(!Array.isArray(draft.emotions))draft.emotions=dra
 function esc(s){return String(s||"").replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
 function date(s){return new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short"}).format(new Date(s));}
 function toast(s){var t=document.getElementById("toast");t.textContent=s;t.classList.add("show");setTimeout(function(){t.classList.remove("show");},2400);}
-function go(p){page=p;nav.forEach(function(n){n.classList.toggle("active",n.dataset.page===p);});render();window.scrollTo(0,0);}
+function go(p){page=p;nav.forEach(function(n){n.classList.toggle("active",n.dataset.page===p);});render();if(p==="subscription"){refreshPremium().then(function(){if(page==="subscription")render();});}window.scrollTo(0,0);}
 nav.forEach(function(n){n.addEventListener("click",function(){go(n.dataset.page);});});
 document.getElementById("settings").addEventListener("click",settings);
 function button(text,action,kind){return '<button class="btn '+(kind||"primary")+'" data-act="'+action+'">'+text+'</button>';}
@@ -268,6 +278,18 @@ app.querySelectorAll("[data-entry]").forEach(function(b){b.onclick=function(){en
 app.querySelectorAll("[data-practice]").forEach(function(b){b.onclick=function(){practiceDetail(Number(b.dataset.practice));};});
 }
 function act(a){
+if(a==="start-trial"){
+if(!tg||!tg.initData){toast("Открой приложение через Telegram, чтобы активировать пробный период.");return;}
+if(premiumLoading){toast("Проверяем доступ. Попробуй ещё раз через секунду.");return;}
+fetch(API_BASE+"/v1/trial",{method:"POST",headers:apiHeaders(),body:"{}"}).then(async function(r){
+var data=await r.json();
+if(r.status===409){premiumStatus=data;toast("Пробный период уже использован на этом Telegram-аккаунте.");}
+else if(!r.ok)throw new Error(data.error||"Не удалось активировать пробный период");
+else{premiumStatus=data;toast("Premium активирован на 7 дней!");}
+render();
+}).catch(function(){toast("Не удалось активировать пробный период. Попробуй позже.");});
+return;
+}
 if(a==="finish-onboarding"){
 if(!onboardingDraft.consent){toast("Подтверди согласие на облачное хранение, чтобы сохранить анкету.");return;}
 state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false,analysisStatus:"pending"});saveLocalOnly();cloudReady=true;cloudStatus="connected";trackEvent("onboarding_completed");go("home");
