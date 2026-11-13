@@ -512,7 +512,7 @@ def _deepseek_chat(messages, max_tokens=3000, timeout=55):
         return json.loads(response.read().decode("utf-8"))
 
 
-def _deepseek_analyze_entry(user_id, entry_id):
+def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
     from datetime import datetime, timezone
     import urllib.error
     stage = "load_user_state"
@@ -545,7 +545,8 @@ def _deepseek_analyze_entry(user_id, entry_id):
             })
 
     from datetime import datetime, timezone
-    used_today, _ = _daily_ai_usage(user_id, datetime.now(timezone.utc).date().isoformat())
+    user_tz = _safe_user_timezone(timezone_name)
+    used_today, _ = _daily_ai_usage(user_id, datetime.now(user_tz).date().isoformat(), user_tz)
     if used_today >= 5:
         return _json_response(429, {"error":"daily_analysis_limit","limit":5,"used":used_today,
                                     "message":"На сегодня использованы все 5 индивидуальных анализов."})
@@ -627,7 +628,27 @@ def _deepseek_analyze_entry(user_id, entry_id):
 
 
 
-def _daily_ai_usage(user_id, day_key):
+def _safe_user_timezone(name):
+    from datetime import timezone
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    try:
+        return ZoneInfo(str(name or "UTC")[:80])
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
+        return timezone.utc
+
+
+def _created_at_is_local_day(value, day_key, user_tz):
+    from datetime import datetime, timezone
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(user_tz).date().isoformat() == day_key
+    except (ValueError, TypeError):
+        return False
+
+
+def _daily_ai_usage(user_id, day_key, user_tz):
     result = _db().execute_with_retries(
         """
         DECLARE $user_id AS Utf8;
@@ -640,7 +661,7 @@ def _daily_ai_usage(user_id, day_key):
     for result_set in result:
         for row in result_set.rows:
             entry_id, created_at = str(row.entry_id), str(row.created_at)
-            if created_at.startswith(day_key):
+            if _created_at_is_local_day(created_at, day_key, user_tz):
                 if entry_id.startswith("daily-summary:"):
                     summary_exists = True
                 else:
@@ -670,11 +691,12 @@ def _save_ai_result(user_id, cache_key, text_value, usage, created):
     )
 
 
-def _deepseek_daily_summary(user_id):
+def _deepseek_daily_summary(user_id, timezone_name="UTC"):
     from datetime import datetime, timezone
     import urllib.error
+    user_tz = _safe_user_timezone(timezone_name)
     now = datetime.now(timezone.utc)
-    day_key = now.date().isoformat()
+    day_key = now.astimezone(user_tz).date().isoformat()
     cache_key = "daily-summary:" + day_key
     state = _read_state(user_id)
     if not isinstance(state, dict):
@@ -687,7 +709,7 @@ def _deepseek_daily_summary(user_id):
             entry_date = datetime.fromisoformat(str(item.get("date", "")).replace("Z", "+00:00"))
             if entry_date.tzinfo is None:
                 entry_date = entry_date.replace(tzinfo=timezone.utc)
-            if entry_date.astimezone(timezone.utc).date() == now.date():
+            if entry_date.astimezone(user_tz).date().isoformat() == day_key:
                 todays.append(item)
         except (ValueError, TypeError):
             continue
@@ -819,7 +841,12 @@ def handler(event, context):
                 return _json_response(403, {"error":"premium_required"})
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error":"deepseek_not_configured"})
-            return _deepseek_daily_summary(user_id)
+            try:
+                payload = json.loads(body or "{}")
+                timezone_name = str(payload.get("timezone") or "UTC")
+            except (json.JSONDecodeError, TypeError):
+                timezone_name = "UTC"
+            return _deepseek_daily_summary(user_id, timezone_name)
 
         if path == "/v1/ai/analyze-entry" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
@@ -835,7 +862,8 @@ def handler(event, context):
                     raise ValueError("invalid_entry_id")
             except (json.JSONDecodeError, ValueError, TypeError):
                 return _json_response(400, {"error": "invalid_request"})
-            return _deepseek_analyze_entry(user_id, entry_id)
+            timezone_name = str(payload.get("timezone") or "UTC")
+            return _deepseek_analyze_entry(user_id, entry_id, timezone_name)
 
         if path == "/v1/events" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
