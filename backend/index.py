@@ -1033,8 +1033,13 @@ def handler(event, context):
             now = datetime.now(timezone.utc)
             def parsed(value):
                 try:
-                    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-                except Exception:
+                    parsed_value = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                    # YDB Timestamp values or legacy ISO strings may arrive without tzinfo.
+                    # Treat naive timestamps as UTC so comparisons with aware UTC "now" are safe.
+                    if parsed_value.tzinfo is None:
+                        return parsed_value.replace(tzinfo=timezone.utc)
+                    return parsed_value.astimezone(timezone.utc)
+                except (TypeError, ValueError, AttributeError):
                     return now
             counts = {}
             daily = {}
