@@ -274,6 +274,21 @@ paths:
         function_id: "$FUNCTION_ID"
         service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
+  /v1/ai/daily-summary:
+    post:
+      operationId: createDailySummary
+      responses:
+        "200":
+          description: Daily reflection summary
+        "403":
+          description: Premium required
+        "429":
+          description: Daily quota reached
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
   /v1/trial:
     post:
       operationId: startPremiumTrial
