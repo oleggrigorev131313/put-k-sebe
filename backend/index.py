@@ -688,17 +688,21 @@ def _daily_ai_usage(user_id, day_key, user_tz):
         """,
         parameters={"$user_id": user_id},
     )
-    count = 0
+    analyzed_entries = set()
     summary_exists = False
     for result_set in result:
         for row in result_set.rows:
             entry_id, created_at = str(row.entry_id), str(row.created_at)
-            if _created_at_is_local_day(created_at, day_key, user_tz):
-                if entry_id.startswith("daily-summary:"):
-                    summary_exists = True
-                else:
-                    count += 1
-    return count, summary_exists
+            if not _created_at_is_local_day(created_at, day_key, user_tz):
+                continue
+            if entry_id.startswith("daily-summary:"):
+                summary_exists = True
+                continue
+            # Cache keys may include model/prompt versions. One diary entry
+            # must consume only one daily analysis, regardless of cache versions.
+            logical_entry_id = entry_id.rsplit(":", 1)[-1]
+            analyzed_entries.add(logical_entry_id)
+    return len(analyzed_entries), summary_exists
 
 
 def _save_ai_result(user_id, cache_key, text_value, usage, created):
