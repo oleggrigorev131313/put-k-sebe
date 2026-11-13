@@ -78,7 +78,7 @@ async function analyzeEntry(id,buttonEl){
  var result=document.getElementById("ai-result");
  if(buttonEl){buttonEl.disabled=true;buttonEl.textContent="Аналитик изучает запись…";}
  try{
-  var response=await fetch(API_BASE+"/v1/ai/analyze-entry",{method:"POST",headers:apiHeaders(),body:JSON.stringify({entry_id:String(id)})});
+  var response=await fetch(API_BASE+"/v1/ai/analyze-entry",{method:"POST",headers:apiHeaders(),body:JSON.stringify({entry_id:String(id),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
   var data=await response.json();
   if(!response.ok){
    if(response.status===403)throw new Error("Для анализа нужен активный Premium.");
