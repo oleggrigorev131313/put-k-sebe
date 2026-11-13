@@ -794,12 +794,24 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
                 todays.append(item)
         except (ValueError, TypeError):
             continue
-    if not todays:
-        return _json_response(400, {"error": "no_entries_today", "message": "Сегодня пока нет записей для сводки."})
-    # Ignore empty, fragmentary or gibberish entries. A summary must not invent
-    # meaning from text that the individual-analysis quality gate would reject.
+    practice_today = []
+    for practice in state.get("practiceHistory") or []:
+        if not isinstance(practice, dict):
+            continue
+        try:
+            completed = datetime.fromisoformat(str(practice.get("completedAt", "")).replace("Z", "+00:00"))
+            if completed.tzinfo is None:
+                completed = completed.replace(tzinfo=timezone.utc)
+            if completed.astimezone(user_tz).date().isoformat() == day_key:
+                practice_today.append(practice)
+        except (ValueError, TypeError):
+            continue
+    if not todays and not practice_today:
+        return _json_response(400, {"error": "no_entries_today", "message": "Сегодня пока нет записей или выполненных практик для сводки."})
+    # Ignore empty, fragmentary or gibberish entries. A practice-only day is still
+    # meaningful input when the user has recorded what they completed.
     meaningful_entries = [item for item in todays if not _diary_entry_quality_error(item)]
-    if not meaningful_entries:
+    if todays and not meaningful_entries and not practice_today:
         return _json_response(422, {"error":"no_meaningful_entries",
             "message":"В сегодняшних записях пока недостаточно понятного контекста для сводки."})
     todays = meaningful_entries
