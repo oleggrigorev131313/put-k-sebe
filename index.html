@@ -77,7 +77,7 @@ async function refreshAiUsage(){
  try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
  var usageHeaders=apiHeaders();usageHeaders["X-User-Timezone"]=tz;
  var r=await fetch(API_BASE+"/v1/ai/usage",{method:"GET",headers:usageHeaders,cache:"no-store"});
- if(r.ok){aiUsage=await r.json();if(page==="home"){render();var today=new Date().toDateString(),hasToday=(state.entries||[]).some(function(e){return new Date(e.date).toDateString()===today;});if(hasToday&&!aiUsage.summary_done&&!sessionStorage.getItem("pks_auto_summary_attempted")){sessionStorage.setItem("pks_auto_summary_attempted","1");runDailySummary(null);}}}}catch(e){}
+ if(r.ok){aiUsage=await r.json();if(page==="home"){render();var today=new Date().toDateString(),hasEntryToday=(state.entries||[]).some(function(e){return new Date(e.date).toDateString()===today;}),hasPracticeToday=(state.practiceHistory||[]).some(function(p){return p.completedAt&&new Date(p.completedAt).toDateString()===today;}),hasToday=hasEntryToday||hasPracticeToday;if(hasToday&&!aiUsage.summary_done&&!sessionStorage.getItem("pks_auto_summary_attempted")){sessionStorage.setItem("pks_auto_summary_attempted","1");runDailySummary(null);}}}}catch(e){}
 }
 function formatAnalysis(raw){
  var safe=esc(String(raw||""));
