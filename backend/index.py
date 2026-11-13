@@ -394,7 +394,15 @@ def _handle_tribute_webhook(raw_body, signature):
         return _json_response(401, {"error": "invalid_signature"})
     try:
         event = json.loads(raw_body.decode("utf-8"))
+        if not isinstance(event, dict):
+            raise ValueError("Invalid webhook event")
         name = event.get("name")
+
+        # Tribute's dashboard test request is not a purchase/refund event.
+        # Acknowledge signed non-entitlement events without requiring purchase fields.
+        if name not in ("new_digital_product", "digital_product_refunded"):
+            return _json_response(200, {"ok": True, "ignored": True})
+
         payload = event.get("payload")
         if not isinstance(payload, dict):
             raise ValueError("Invalid webhook payload")
