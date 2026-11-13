@@ -41,8 +41,20 @@ if [[ "$CURRENT_CLOUD" != "$CLOUD_ID" ]]; then yc config set cloud-id "$CLOUD_ID
 if [[ "$CURRENT_FOLDER" != "$FOLDER_ID" ]]; then yc config set folder-id "$FOLDER_ID"; fi
 
 echo "[1/8] Получаю сервисный аккаунт и базу данных..."
-SA_JSON="$(yc iam service-account get "$SERVICE_ACCOUNT_NAME" --format json)" || fail "Не найден сервисный аккаунт $SERVICE_ACCOUNT_NAME"
-SA_ID="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+# Prefer the service account already attached to the live function.
+# This avoids assuming a service-account name that may differ in the existing cloud.
+EXISTING_FUNCTION_JSON="$(yc serverless function get "$FUNCTION_NAME" --format json 2>/dev/null || true)"
+EXISTING_SA_ID="$(printf '%s' "$EXISTING_FUNCTION_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin) if sys.stdin.readable() else {}; print(d.get("service_account_id",""))' 2>/dev/null || true)"
+if [[ -n "$EXISTING_SA_ID" ]]; then
+  SA_JSON="$(yc iam service-account get "$EXISTING_SA_ID" --format json)" || fail "Не найден сервисный аккаунт текущей Cloud Function: $EXISTING_SA_ID"
+  SA_ID="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+  SA_FOLDER_ID="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("folder_id",""))')"
+  [[ "$SA_FOLDER_ID" == "$FOLDER_ID" ]] || fail "Сервисный аккаунт текущей функции находится в другой папке: $SA_FOLDER_ID"
+else
+  SA_JSON="$(yc iam service-account get "$SERVICE_ACCOUNT_NAME" --format json 2>/dev/null || true)"
+  [[ -n "$SA_JSON" ]] || fail "Не найден сервисный аккаунт $SERVICE_ACCOUNT_NAME и у текущей Cloud Function нет привязанного service_account_id"
+  SA_ID="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+fi
 
 GATEWAY_SA_JSON="$(yc iam service-account get "$GATEWAY_SA_NAME" --format json 2>/dev/null || true)"
 if [[ -z "$GATEWAY_SA_JSON" ]]; then
