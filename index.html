@@ -86,8 +86,8 @@ function formatAnalysis(raw){
  return safe.split(/\n{2,}/).map(function(p){p=p.trim();return !p?"":(/^<(h3|ul)>/.test(p)?p:"<p>"+p.replace(/\n/g,"<br>")+"</p>");}).join("");
 }
 function renderAnalysis(raw,entryId){
- var text=String(raw||""),match=text.match(/Гипотеза паттерна:\s*([^|\n]+)\s*\|\s*([^\n]+)/i);
- var clean=text.replace(/\n?Гипотеза паттерна:[^\n]*/i,"").trim();
+ var text=String(raw||""),match=text.match(/\*{0,2}Гипотеза паттерна:\*{0,2}\s*\*{0,2}([^|\n*]+)\*{0,2}\s*\|\s*\*{0,2}([^\n*]+)\*{0,2}/i);
+ var clean=text.replace(/\n?\*{0,2}Гипотеза паттерна:\*{0,2}[^\n]*/i,"").trim();
  var candidate=match&&match[1].trim().toLowerCase()!=="нет достаточных данных";
  var suggestion=candidate?'<div class="card ai-suggestion" style="margin-top:14px"><div class="eyebrow">Возможный паттерн · гипотеза</div><h3>'+esc(match[1].trim())+'</h3><p>'+esc(match[2].trim())+'</p><button class="btn secondary full" id="accept-ai-pattern">＋ Добавить в мои паттерны</button><p class="sub" style="margin:8px 0 0">Добавим как гипотезу для наблюдения, а не как подтверждённый факт.</p></div>':'<p class="sub" style="margin-top:12px">По этой записи пока недостаточно данных, чтобы предложить паттерн.</p>';
  return '<div class="eyebrow">Разбор персонального аналитика</div><div class="analysis-text">'+formatAnalysis(clean)+'</div>'+suggestion;
@@ -116,7 +116,7 @@ async function analyzeEntry(id,buttonEl){
   if(entry){entry.analysis=data.analysis||"";save();}
   if(result){result.style.display="block";result.innerHTML=renderAnalysis(data.analysis||"Анализ не получен.",id);}
   var accept=document.getElementById("accept-ai-pattern");
-  if(accept){var mm=String(data.analysis||"").match(/Гипотеза паттерна:\s*([^|\n]+)\s*\|\s*([^\n]+)/i);if(mm)accept.onclick=function(){addSuggestedPattern(mm[1].trim(),mm[2].trim(),id);};}
+  if(accept){var mm=String(data.analysis||"").match(/\*{0,2}Гипотеза паттерна:\*{0,2}\s*\*{0,2}([^|\n*]+)\*{0,2}\s*\|\s*\*{0,2}([^\n*]+)\*{0,2}/i);if(mm)accept.onclick=function(){addSuggestedPattern(mm[1].trim(),mm[2].trim(),id);};}
   if(buttonEl)buttonEl.style.display="none";
   refreshAiUsage();
  }catch(e){
@@ -385,7 +385,7 @@ if(a==="add-pattern"){modal('<h2>Новый паттерн</h2><p>Запиши �
 }
 function modal(content){var d=document.createElement("div");d.className="modalbg";d.id="modal";d.innerHTML='<section class="modal"><div class="modalhead"><button class="icon" id="close">×</button></div>'+content+'</section>';document.body.appendChild(d);d.onclick=function(e){if(e.target===d)closeModal();};document.getElementById("close").onclick=closeModal;}
 function closeModal(){var m=document.getElementById("modal");if(m)m.remove();}
-function entryDetail(id){var e=state.entries.find(function(x){return String(x.id)===String(id);});if(!e)return;modal('<div class="eyebrow">'+date(e.date)+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация:</b> '+esc(e.situation)+'</p><p><b>Эмоция:</b> '+esc(e.emotion)+' · '+e.intensity+'/10</p><p><b>Факты за:</b> '+esc(e.forText)+'</p><p><b>Факты против:</b> '+esc(e.against)+'</p><p><b>Сбалансированный взгляд:</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг:</b> '+esc(e.action)+'</p><div id="ai-result" class="note" style="display:none"></div>'+(e.analysis?'<div class="note">'+renderAnalysis(e.analysis,id)+'</div>':'<button class="btn primary full" id="analyze">✦ Анализировать запись</button>')+'<button class="btn outline full" id="del" style="margin-top:9px">Удалить запись</button>');var ab=document.getElementById("analyze");if(ab)ab.onclick=function(){analyzeEntry(id,ab);};var existingAccept=document.getElementById("accept-ai-pattern");if(existingAccept){var mm=String(e.analysis||"").match(/Гипотеза паттерна:\s*([^|\n]+)\s*\|\s*([^\n]+)/i);if(mm)existingAccept.onclick=function(){addSuggestedPattern(mm[1].trim(),mm[2].trim(),id);};}document.getElementById("del").onclick=function(){if(confirm("Удалить эту запись?")){state.entries=state.entries.filter(function(x){return x.id!==id;});save();closeModal();render();}};}
+function entryDetail(id){var e=state.entries.find(function(x){return String(x.id)===String(id);});if(!e)return;modal('<div class="eyebrow">'+date(e.date)+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация:</b> '+esc(e.situation)+'</p><p><b>Эмоция:</b> '+esc(e.emotion)+' · '+e.intensity+'/10</p><p><b>Факты за:</b> '+esc(e.forText)+'</p><p><b>Факты против:</b> '+esc(e.against)+'</p><p><b>Сбалансированный взгляд:</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг:</b> '+esc(e.action)+'</p><div id="ai-result" class="note" style="display:none"></div>'+(e.analysis?'<div class="note">'+renderAnalysis(e.analysis,id)+'</div>':'<button class="btn primary full" id="analyze">✦ Анализировать запись</button>')+'<button class="btn outline full" id="del" style="margin-top:9px">Удалить запись</button>');var ab=document.getElementById("analyze");if(ab)ab.onclick=function(){analyzeEntry(id,ab);};var existingAccept=document.getElementById("accept-ai-pattern");if(existingAccept){var mm=String(e.analysis||"").match(/\*{0,2}Гипотеза паттерна:\*{0,2}\s*\*{0,2}([^|\n*]+)\*{0,2}\s*\|\s*\*{0,2}([^\n*]+)\*{0,2}/i);if(mm)existingAccept.onclick=function(){addSuggestedPattern(mm[1].trim(),mm[2].trim(),id);};}document.getElementById("del").onclick=function(){if(confirm("Удалить эту запись?")){state.entries=state.entries.filter(function(x){return x.id!==id;});save();closeModal();render();}};}
 function practiceDetail(i){
 trackEvent("practice_opened");
 var p=practices[i],k=new Date().toDateString()+"-"+i,isDone=(state.practiceHistory||[]).some(function(x){return x.practiceId===i&&new Date(x.completedAt).toDateString()===new Date().toDateString();});
