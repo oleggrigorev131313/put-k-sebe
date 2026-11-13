@@ -738,6 +738,8 @@ def _daily_ai_usage(user_id, day_key, user_tz):
             if entry_id.startswith("daily-summary:"):
                 summary_exists = True
                 continue
+            if entry_id.startswith("onboarding-profile:"):
+                continue
             # Cache keys may include model/prompt versions. One diary entry
             # must consume only one daily analysis, regardless of cache versions.
             logical_entry_id = entry_id.rsplit(":", 1)[-1]
