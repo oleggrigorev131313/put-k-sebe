@@ -768,10 +768,13 @@ def _save_ai_result(user_id, cache_key, text_value, usage, created):
     )
 
 
-def _deepseek_daily_summary(user_id, timezone_name="UTC"):
+def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
     from datetime import datetime, timezone
     import urllib.error
-    # One cached daily review is available on every tier; cached results prevent repeat model calls.
+    # The first daily review is available on every tier. Re-running it is a Premium feature.
+    premium = _premium_status(user_id) if force else None
+    if force and not premium.get("active"):
+        return _json_response(403, {"error":"premium_required", "message":"Повторный обзор доступен в Premium."})
     user_tz = _safe_user_timezone(timezone_name)
     now = datetime.now(timezone.utc)
     day_key = now.astimezone(user_tz).date().isoformat()
@@ -800,20 +803,21 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC"):
         return _json_response(422, {"error":"no_meaningful_entries",
             "message":"В сегодняшних записях пока недостаточно понятного контекста для сводки."})
     todays = meaningful_entries
-    cached = _db().execute_with_retries(
-        """
-        DECLARE $user_id AS Utf8;
-        DECLARE $entry_id AS Utf8;
-        SELECT analysis_text, input_tokens, output_tokens, created_at
-        FROM ai_analyses WHERE user_id = $user_id AND entry_id = $entry_id;
-        """,
-        parameters={"$user_id": user_id, "$entry_id": cache_key},
-    )
-    for result_set in cached:
-        for row in result_set.rows:
-            return _json_response(200, {"ok": True, "cached": True, "summary": str(row.analysis_text),
-                "usage": {"input_tokens": int(row.input_tokens), "output_tokens": int(row.output_tokens)},
-                "created_at": str(row.created_at)})
+    if not force:
+        cached = _db().execute_with_retries(
+            """
+            DECLARE $user_id AS Utf8;
+            DECLARE $entry_id AS Utf8;
+            SELECT analysis_text, input_tokens, output_tokens, created_at
+            FROM ai_analyses WHERE user_id = $user_id AND entry_id = $entry_id;
+            """,
+            parameters={"$user_id": user_id, "$entry_id": cache_key},
+        )
+        for result_set in cached:
+            for row in result_set.rows:
+                return _json_response(200, {"ok": True, "cached": True, "summary": str(row.analysis_text),
+                    "usage": {"input_tokens": int(row.input_tokens), "output_tokens": int(row.output_tokens)},
+                    "created_at": str(row.created_at)})
     snippets = []
     for i, entry in enumerate(todays[-30:], 1):
         fields = [("Ситуация","situation"),("Эмоция","emotion"),("Интенсивность","intensity"),
@@ -970,9 +974,11 @@ def handler(event, context):
             try:
                 payload = json.loads(body or "{}")
                 timezone_name = str(payload.get("timezone") or "UTC")
+                force = bool(payload.get("force", False))
             except (json.JSONDecodeError, TypeError):
                 timezone_name = "UTC"
-            return _deepseek_daily_summary(user_id, timezone_name)
+                force = False
+            return _deepseek_daily_summary(user_id, timezone_name, force)
 
         if path == "/v1/ai/usage" and method == "GET":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
