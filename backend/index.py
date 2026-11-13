@@ -90,6 +90,16 @@ def _ensure_schema():
             );
             """
         )
+        pool.execute_with_retries(
+            """
+            CREATE TABLE IF NOT EXISTS premium_trials (
+                user_id Utf8 NOT NULL,
+                started_at Utf8 NOT NULL,
+                expires_at Utf8 NOT NULL,
+                PRIMARY KEY (user_id)
+            );
+            """
+        )
         _schema_ready = True
 
 
@@ -289,6 +299,7 @@ def _tribute_signature_valid(raw_body, signature):
 
 
 def _premium_status(user_id):
+    from datetime import datetime, timezone, timedelta
     result = _db().execute_with_retries(
         """
         DECLARE $user_id AS Utf8;
@@ -306,7 +317,6 @@ def _premium_status(user_id):
                 "duration_days": int(row.duration_days),
                 "purchased_at": str(row.purchased_at),
             })
-    from datetime import datetime, timezone, timedelta
     purchases.sort(key=lambda x: x["purchased_at"])
     now = datetime.now(timezone.utc)
     expiry = None
@@ -321,11 +331,62 @@ def _premium_status(user_id):
             continue
         start = max(purchased_at, expiry or purchased_at)
         expiry = start + timedelta(days=purchase["duration_days"])
-    active = expiry is not None and expiry > now
+    paid_active = expiry is not None and expiry > now
+    trial_result = _db().execute_with_retries(
+        """
+        DECLARE $user_id AS Utf8;
+        SELECT started_at, expires_at FROM premium_trials WHERE user_id = $user_id;
+        """,
+        parameters={"$user_id": user_id},
+    )
+    trial = None
+    for result_set in trial_result:
+        for row in result_set.rows:
+            trial = {"started_at": str(row.started_at), "expires_at": str(row.expires_at)}
+    trial_active = False
+    if trial:
+        try:
+            trial_expiry = datetime.fromisoformat(trial["expires_at"].replace("Z", "+00:00"))
+            trial_active = trial_expiry > now
+        except ValueError:
+            trial_active = False
+    active = paid_active or trial_active
+    premium_until = expiry if paid_active else None
+    if trial_active:
+        trial_expiry = datetime.fromisoformat(trial["expires_at"].replace("Z", "+00:00"))
+        if premium_until is None or trial_expiry > premium_until:
+            premium_until = trial_expiry
     return {
         "active": active,
-        "premium_until": expiry.isoformat() if expiry else None,
+        "premium_until": premium_until.isoformat() if premium_until else None,
+        "source": "paid" if paid_active else ("trial" if trial_active else None),
+        "trial_used": trial is not None,
+        "trial_active": trial_active,
     }
+
+
+def _start_trial(user_id):
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    started = now.isoformat()
+    expires = (now + timedelta(days=7)).isoformat()
+    try:
+        _db().execute_with_retries(
+            """
+            DECLARE $user_id AS Utf8;
+            DECLARE $started_at AS Utf8;
+            DECLARE $expires_at AS Utf8;
+            INSERT INTO premium_trials (user_id, started_at, expires_at)
+            VALUES ($user_id, $started_at, $expires_at);
+            """,
+            parameters={"$user_id": user_id, "$started_at": started, "$expires_at": expires},
+        )
+        return _json_response(200, {"ok": True, "started": True, "active": True, "premium_until": expires, "trial_used": True})
+    except Exception:
+        status = _premium_status(user_id)
+        if status.get("trial_used"):
+            return _json_response(409, {"ok": False, "error": "trial_already_used", **status})
+        raise
 
 
 def _handle_tribute_webhook(raw_body, signature):
@@ -428,6 +489,11 @@ def handler(event, context):
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             _ensure_schema()
             return _json_response(200, _premium_status(user_id))
+
+        if path == "/v1/trial" and method == "POST":
+            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            _ensure_schema()
+            return _start_trial(user_id)
 
         if path == "/v1/events" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
