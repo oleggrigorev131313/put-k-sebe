@@ -141,6 +141,18 @@ async function analyzeEntry(id,buttonEl){
   if(buttonEl){buttonEl.disabled=false;buttonEl.textContent="Повторить анализ";}if(result){result.style.display="none";result.innerHTML="";}
  }
 }
+
+async function analyzeOnboarding(){
+ if(!tg||!tg.initData||!API_BASE||!state.onboarding||state.onboarding.skipped)return;
+ if((state.patterns||[]).some(function(p){return p.source==="onboarding_ai";}))return;
+ try{
+  var response=await fetch(API_BASE+"/v1/ai/analyze-onboarding",{method:"POST",headers:apiHeaders(),body:"{}"});
+  var data=await response.json();if(!response.ok)throw new Error(data.message||data.error||"Не удалось подготовить гипотезы.");
+  var lines=String(data.analysis||"").split("\n").filter(function(line){return /^Паттерн анкеты:/i.test(line.trim());});
+  lines.forEach(function(line){var parts=line.replace(/^Паттерн анкеты:\s*/i,"").split("|").map(function(x){return x.trim();});if(parts.length<2)return;var name=parts[0];if(!name||state.patterns.some(function(p){return String(p.name||"").toLowerCase()===name.toLowerCase();}))return;state.patterns.push({id:"p"+Date.now()+Math.random().toString(36).slice(2,7),name:name,detail:parts.slice(1).join(" | "),status:"suggested",source:"onboarding_ai",createdAt:new Date().toISOString()});});
+  if(lines.length){save();if(page==="patterns")render();toast("Подготовлены персональные гипотезы. Ты можешь принять, изменить или отклонить их.");}
+ }catch(e){console.warn("Onboarding analysis unavailable",e);}
+}
 async function runDailySummary(buttonEl){
  if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
  
@@ -431,7 +443,7 @@ app.querySelectorAll("[data-onboard-field]").forEach(function(el){el.oninput=fun
 app.querySelectorAll("[data-onboard-toggle]").forEach(function(b){b.onclick=function(){var k=b.dataset.onboardToggle,v=b.dataset.value,a=onboardingDraft[k]||[],i=a.indexOf(v);if(i>=0)a.splice(i,1);else a.push(v);onboardingDraft[k]=a;render();};});
 var oc=document.getElementById("onboardConsent");if(oc)oc.onchange=function(){onboardingDraft.consent=oc.checked;};
 app.querySelectorAll("[data-entry]").forEach(function(b){b.onclick=function(){entryDetail(b.dataset.entry);};});
-app.querySelectorAll("[data-pattern-records]").forEach(function(b){b.onclick=function(){showPatternEntries(b.dataset.patternRecords,"");};});
+app.querySelectorAll("[data-pattern-records]").forEach(function(b){b.onclick=function(){showPatternEntries(b.dataset.patternRecords,"");};});app.querySelectorAll("[data-pattern-action]").forEach(function(b){b.onclick=function(){patternAction(b.dataset.patternId,b.dataset.patternAction);};});
 app.querySelectorAll("[data-practice]").forEach(function(b){b.onclick=function(){practiceDetail(Number(b.dataset.practice));};});app.querySelectorAll("[data-personal-practice]").forEach(function(b){b.onclick=function(){personalPracticeDetail(b.dataset.personalPractice);};});app.querySelectorAll("[data-add-micro]").forEach(function(b){b.onclick=function(){addMicroPractice(b.dataset.addMicro);};});app.querySelectorAll("[data-progress-period]").forEach(function(b){b.onclick=function(){progressPeriod=b.dataset.progressPeriod;render();};});
 }
 function act(a){
@@ -450,7 +462,7 @@ return;
 if(a==="finish-onboarding"){
 if(!onboardingDraft.consent){toast("Подтверди согласие на облачное хранение, чтобы сохранить анкету.");return;}
 state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false,analysisStatus:"pending"});saveLocalOnly();cloudReady=true;cloudStatus="connected";trackEvent("onboarding_completed");go("home");
-cloudSaveNow(false).then(function(){cloudStatus="synced";render();toast("Ответы сохранены и синхронизированы.");}).catch(function(e){cloudReady=false;cloudStatus="error";cloudErrorText=e&&e.message?e.message:"Ошибка соединения";render();toast("Не удалось сохранить анкету в облаке. Ответы пока остались на устройстве.");});
+cloudSaveNow(false).then(function(){cloudStatus="synced";render();toast("Ответы сохранены и синхронизированы.");analyzeOnboarding();}).catch(function(e){cloudReady=false;cloudStatus="error";cloudErrorText=e&&e.message?e.message:"Ошибка соединения";render();toast("Не удалось сохранить анкету в облаке. Ответы пока остались на устройстве.");});
 }
 if(a==="skip-onboarding"){state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:false};saveLocalOnly();go("home");}
 if(a==="new"){draft=blank();step=0;go("journal");}
