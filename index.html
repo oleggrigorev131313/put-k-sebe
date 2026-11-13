@@ -96,7 +96,6 @@ async function analyzeEntry(id,buttonEl){
 }
 async function runDailySummary(buttonEl){
  if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
- if(!premiumStatus||!premiumStatus.active){toast("Сводка доступна в Premium.");return;}
  if(buttonEl){buttonEl.disabled=true;buttonEl.textContent="Собираю сводку…";}
  try{
   var response=await fetch(API_BASE+"/v1/ai/daily-summary",{method:"POST",headers:apiHeaders(),body:JSON.stringify({timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
