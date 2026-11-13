@@ -55,10 +55,10 @@ var tg=window.Telegram&&window.Telegram.WebApp;
 if(tg){try{tg.ready();tg.expand();tg.setHeaderColor("#fbfbfd");tg.setBackgroundColor("#fbfbfd");}catch(e){}}
 var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.first_name;
 document.getElementById("settings").textContent=(first||"О").charAt(0).toUpperCase();
-var defaults={entries:[],patterns:[],completed:[],practiceHistory:[],onboarding:null,chat:[]};
+var defaults={entries:[],patterns:[],completed:[],practiceHistory:[],personalPractices:[],onboarding:null,chat:[]};
 var state=load(),page=state.onboarding?"home":"onboarding",step=6,draft=blank(),onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
 var pageHistory=[],cloudReady=false,cloudSyncTimer=null,cloudErrorShown=false,cloudStatus="paused",cloudErrorText="",premiumStatus={active:false,trial_used:false},premiumLoading=false,aiUsage={limit:5,used:0,remaining:5,loading:true};
-function load(){try{var x=JSON.parse(localStorage.getItem(KEY));if(!x||!Array.isArray(x.entries))return JSON.parse(JSON.stringify(defaults));var out=Object.assign({},defaults,x);out.patterns=(out.patterns||[]).filter(function(p){return ["p1","p2","p3","p4"].indexOf(p.id)<0;});out.practiceHistory=Array.isArray(out.practiceHistory)?out.practiceHistory:[];out.chat=Array.isArray(out.chat)?out.chat:[];return out;}catch(e){return JSON.parse(JSON.stringify(defaults));}}
+function load(){try{var x=JSON.parse(localStorage.getItem(KEY));if(!x||!Array.isArray(x.entries))return JSON.parse(JSON.stringify(defaults));var out=Object.assign({},defaults,x);out.patterns=(out.patterns||[]).filter(function(p){return ["p1","p2","p3","p4"].indexOf(p.id)<0;});out.practiceHistory=Array.isArray(out.practiceHistory)?out.practiceHistory:[];out.personalPractices=Array.isArray(out.personalPractices)?out.personalPractices:[];out.chat=Array.isArray(out.chat)?out.chat:[];return out;}catch(e){return JSON.parse(JSON.stringify(defaults));}}
 function saveLocalOnly(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
 function save(){saveLocalOnly();scheduleCloudSave();}
 function apiHeaders(){return {"Content-Type":"application/json","X-Telegram-Init-Data":tg&&tg.initData?tg.initData:""};}
@@ -203,7 +203,7 @@ return Object.keys(m).map(function(k){return m[k];});
 }
 out.entries=mergeById(remote&&remote.entries,local&&local.entries).sort(function(a,b){return new Date(b.date||0)-new Date(a.date||0);});
 out.patterns=mergeById(remote&&remote.patterns,local&&local.patterns);
-out.completed=Array.from(new Set([].concat((remote&&remote.completed)||[],(local&&local.completed)||[])));out.practiceHistory=(remote&&remote.practiceHistory||[]).concat(local&&local.practiceHistory||[]).filter(function(x,i,a){return a.findIndex(function(y){return y.id===x.id;})===i;});out.chat=(local&&local.chat)||(remote&&remote.chat)||[];
+out.completed=Array.from(new Set([].concat((remote&&remote.completed)||[],(local&&local.completed)||[])));out.practiceHistory=(remote&&remote.practiceHistory||[]).concat(local&&local.practiceHistory||[]).filter(function(x,i,a){return a.findIndex(function(y){return y.id===x.id;})===i;});out.personalPractices=mergeById(remote&&remote.personalPractices,local&&local.personalPractices);out.chat=(local&&local.chat)||(remote&&remote.chat)||[];
 out.onboarding=(remote&&remote.onboarding)||(local&&local.onboarding)||null;
 return out;
 }
@@ -398,7 +398,7 @@ app.querySelectorAll("[data-onboard-toggle]").forEach(function(b){b.onclick=func
 var oc=document.getElementById("onboardConsent");if(oc)oc.onchange=function(){onboardingDraft.consent=oc.checked;};
 app.querySelectorAll("[data-entry]").forEach(function(b){b.onclick=function(){entryDetail(b.dataset.entry);};});
 app.querySelectorAll("[data-pattern-records]").forEach(function(b){b.onclick=function(){showPatternEntries(b.dataset.patternRecords,"");};});
-app.querySelectorAll("[data-practice]").forEach(function(b){b.onclick=function(){practiceDetail(Number(b.dataset.practice));};});
+app.querySelectorAll("[data-practice]").forEach(function(b){b.onclick=function(){practiceDetail(Number(b.dataset.practice));};});app.querySelectorAll("[data-personal-practice]").forEach(function(b){b.onclick=function(){personalPracticeDetail(b.dataset.personalPractice);};});app.querySelectorAll("[data-add-micro]").forEach(function(b){b.onclick=function(){addMicroPractice(b.dataset.addMicro);};});
 }
 function act(a){
 if(a==="start-trial"){
@@ -420,10 +420,10 @@ cloudSaveNow(false).then(function(){cloudStatus="synced";render();toast("Отв�
 }
 if(a==="skip-onboarding"){state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:false};saveLocalOnly();go("home");}
 if(a==="new"){draft=blank();step=0;go("journal");}
-if(a==="next"){if(step<5)step++;render();}
+if(a==="next"){var checks=[!!draft.situation.trim(),selectedEmotions().length>0,!!draft.thought.trim(),!!(draft.forText.trim()||draft.against.trim()),!!draft.balanced.trim(),!!draft.action.trim()];var prompts=["Опиши ситуацию, чтобы продолжить.","Выбери хотя бы одну эмоцию.","Запиши автоматическую мысль.","Добавь хотя бы один факт за или против этой мысли.","Сформулируй более объективный взгляд.","Укажи один небольшой следующий шаг."];if(!checks[step]){toast(prompts[step]);return;}if(step<5)step++;render();}
 if(a==="prev"){if(step>0)step--;render();}
 if(a==="cancel"){step=6;go("journal");}
-if(a==="save"){if(!draft.situation.trim()&&!draft.thought.trim()){toast("Добавь хотя бы ситуацию или мысль.");return;}draft.date=new Date().toISOString();draft.id=Date.now().toString();state.entries.unshift(Object.assign({},draft));save();trackEvent("diary_entry_created");step=6;toast(cloudReady?"Запись сохранена. Отправляю в облако…":"Запись сохранена на устройстве. Облако пока не подключено.");go("journal");}
+if(a==="save"){var missing=!draft.situation.trim()||!selectedEmotions().length||!draft.thought.trim()||!(draft.forText.trim()||draft.against.trim())||!draft.balanced.trim()||!draft.action.trim();if(missing){toast("Заполни обязательные поля дневника — можно вернуться к нужному шагу.");return;}draft.emotions=selectedEmotions().slice();draft.emotion=draft.emotions.join(", ");draft.date=new Date().toISOString();draft.id=Date.now().toString();state.entries.unshift(Object.assign({},draft));save();trackEvent("diary_entry_created");step=6;toast(cloudReady?"Запись сохранена. Отправляю в облако…":"Запись сохранена на устройстве. Облако пока не подключено.");go("journal");}
 if(a==="add-pattern-in-entry"){modal('<h2>Добавить паттерн к записи</h2><p>Предыдущие ответы останутся на месте. Создай паттерн — он сразу появится в списке шестого шага.</p><div class="field"><label>Название паттерна</label><input class="input" id="pn" placeholder="Например: я должен всё делать идеально"></div><div class="field"><label>В каких ситуациях он проявляется? (необязательно)</label><textarea class="area" id="pd" placeholder="Опиши повторяющуюся мысль или сценарий"></textarea></div><button class="btn primary full" id="psave">Сохранить и выбрать паттерн</button>');document.getElementById("psave").onclick=function(){var name=document.getElementById("pn").value.trim(),detail=document.getElementById("pd").value.trim();if(!name){toast("Добавь название паттерна");return;}var id="p"+Date.now();state.patterns.push({id:id,name:name,detail:detail,status:"confirmed",source:"manual",createdAt:new Date().toISOString()});draft.pattern=id;draft.patternReviewPending=false;save();closeModal();render();toast("Паттерн добавлен. Остальные ответы сохранены.");};}
 if(a==="add-pattern"){modal('<h2>Новый паттерн</h2><p>Запиши повторяющуюся мысль или сценарий нейтральными словами — это рабочее наблюдение, а не ярлык.</p><div class="field"><label>Название</label><input class="input" id="pn" placeholder="Например: я должен всё сделать идеально"></div><div class="field"><label>Когда появляется? (необязательно)</label><textarea class="area" id="pd"></textarea></div><button class="btn primary full" id="psave">Сохранить паттерн</button>');document.getElementById("psave").onclick=function(){var name=document.getElementById("pn").value.trim(),detail=document.getElementById("pd").value.trim();if(!name){toast("Добавь название паттерна");return;}state.patterns.push({id:"p"+Date.now(),name:name,detail:detail,status:"confirmed",source:"manual",createdAt:new Date().toISOString()});save();closeModal();render();};}
 }
