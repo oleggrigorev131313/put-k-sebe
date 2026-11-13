@@ -23,6 +23,8 @@ YDB_DATABASE = os.environ["YDB_DATABASE"]
 MAX_BODY_BYTES = 300_000
 MAX_AUTH_AGE_SECONDS = 86_400
 TRIBUTE_API_KEY = os.environ.get("TRIBUTE_API_KEY", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_MODEL = "gpt-6.1-sol"
 TRIBUTE_PRODUCTS = {"177388": 30, "177544": 90, "177545": 365}
 
 _driver = None
@@ -477,6 +479,36 @@ def _handle_tribute_webhook(raw_body, signature):
         return _json_response(400, {"error": str(exc)})
 
 
+def _openai_connection_test():
+    import urllib.request
+    payload = {
+        "model": OPENAI_MODEL,
+        "input": "Ты — Персональный аналитик приложения «Путь к себе». Ответь одной короткой фразой на русском: «Связь с моделью установлена».",
+        "reasoning": {"effort": "low"},
+        "max_output_tokens": 120,
+        "store": False,
+    }
+    request = urllib.request.Request(
+        "https://api.openai.com/v1/responses",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=25) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        parts = []
+        for item in data.get("output", []):
+            if item.get("type") == "message":
+                for content in item.get("content", []):
+                    if content.get("type") == "output_text":
+                        parts.append(content.get("text", ""))
+        return _json_response(200, {"ok": True, "model": OPENAI_MODEL, "response": "\\n".join(parts), "usage": data.get("usage", {})})
+    except Exception as exc:
+        LOG.error("OpenAI connection test failed: %s", type(exc).__name__)
+        return _json_response(502, {"error": "openai_request_failed"})
+
+
 def handler(event, context):
     try:
         method, path, headers, body = _request_parts(event)
@@ -502,6 +534,14 @@ def handler(event, context):
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             _ensure_schema()
             return _start_trial(user_id)
+        if path == "/v1/ai/test" and method == "POST":
+            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            _ensure_schema()
+            if not _premium_status(user_id).get("active"):
+                return _json_response(403, {"error": "premium_required"})
+            if not OPENAI_API_KEY:
+                return _json_response(503, {"error": "openai_not_configured"})
+            return _openai_connection_test()
 
         if path == "/v1/events" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
