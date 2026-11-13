@@ -594,7 +594,7 @@ def _deepseek_analyze_entry(user_id, entry_id):
             DECLARE $input_tokens AS Uint64;
             DECLARE $output_tokens AS Uint64;
             DECLARE $created_at AS Utf8;
-            INSERT INTO ai_analyses
+            UPSERT INTO ai_analyses
                 (user_id, entry_id, analysis_text, input_tokens, output_tokens, created_at)
             VALUES
                 ($user_id, $entry_id, $analysis_text, $input_tokens, $output_tokens, $created_at);
