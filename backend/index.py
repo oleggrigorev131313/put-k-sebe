@@ -22,6 +22,8 @@ YDB_ENDPOINT = os.environ["YDB_ENDPOINT"]
 YDB_DATABASE = os.environ["YDB_DATABASE"]
 MAX_BODY_BYTES = 300_000
 MAX_AUTH_AGE_SECONDS = 86_400
+TRIBUTE_API_KEY = os.environ.get("TRIBUTE_API_KEY", "")
+TRIBUTE_PRODUCTS = {"177388": 30, "177544": 90, "177545": 365}
 
 _driver = None
 _pool = None
@@ -72,6 +74,19 @@ def _ensure_schema():
                 created_at Timestamp,
                 metadata_json Utf8,
                 PRIMARY KEY (event_id)
+            );
+            """
+        )
+        pool.execute_with_retries(
+            """
+            CREATE TABLE IF NOT EXISTS premium_purchases (
+                purchase_id Utf8 NOT NULL,
+                user_id Utf8 NOT NULL,
+                product_id Utf8 NOT NULL,
+                duration_days Uint32 NOT NULL,
+                purchased_at Utf8 NOT NULL,
+                status Utf8 NOT NULL,
+                PRIMARY KEY (purchase_id)
             );
             """
         )
@@ -261,6 +276,138 @@ def _validate_state(value):
     return clean
 
 
+def _tribute_signature_valid(raw_body, signature):
+    if not TRIBUTE_API_KEY or not signature:
+        return False
+    expected = hmac.new(
+        TRIBUTE_API_KEY.encode("utf-8"), raw_body, hashlib.sha256
+    ).hexdigest()
+    supplied = signature.strip().lower()
+    if supplied.startswith("sha256="):
+        supplied = supplied[7:]
+    return hmac.compare_digest(expected, supplied)
+
+
+def _premium_status(user_id):
+    result = _db().execute_with_retries(
+        """
+        DECLARE $user_id AS Utf8;
+        SELECT purchase_id, duration_days, purchased_at
+        FROM premium_purchases
+        WHERE user_id = $user_id AND status = "active";
+        """,
+        parameters={"$user_id": user_id},
+    )
+    purchases = []
+    for result_set in result:
+        for row in result_set.rows:
+            purchases.append({
+                "purchase_id": str(row.purchase_id),
+                "duration_days": int(row.duration_days),
+                "purchased_at": str(row.purchased_at),
+            })
+    from datetime import datetime, timezone, timedelta
+    purchases.sort(key=lambda x: x["purchased_at"])
+    now = datetime.now(timezone.utc)
+    expiry = None
+    for purchase in purchases:
+        try:
+            purchased_at = datetime.fromisoformat(
+                purchase["purchased_at"].replace("Z", "+00:00")
+            )
+            if purchased_at.tzinfo is None:
+                purchased_at = purchased_at.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        start = max(purchased_at, expiry or purchased_at)
+        expiry = start + timedelta(days=purchase["duration_days"])
+    active = expiry is not None and expiry > now
+    return {
+        "active": active,
+        "premium_until": expiry.isoformat() if expiry else None,
+    }
+
+
+def _handle_tribute_webhook(raw_body, signature):
+    if not _tribute_signature_valid(raw_body, signature):
+        return _json_response(401, {"error": "invalid_signature"})
+    try:
+        event = json.loads(raw_body.decode("utf-8"))
+        name = event.get("name")
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid webhook payload")
+        purchase_id = str(payload.get("purchase_id", "")).strip()
+        if not purchase_id or purchase_id == "None":
+            raise ValueError("Missing purchase_id")
+        _ensure_schema()
+
+        if name == "new_digital_product":
+            product_id = str(payload.get("product_id", ""))
+            duration = TRIBUTE_PRODUCTS.get(product_id)
+            user_id = str(int(payload.get("telegram_user_id", 0)))
+            purchased_at = str(payload.get("purchase_created_at") or event.get("created_at") or "")
+            if not duration or user_id == "0" or not purchased_at:
+                raise ValueError("Unknown product or missing purchase data")
+            existing = _db().execute_with_retries(
+                """
+                DECLARE $purchase_id AS Utf8;
+                SELECT purchase_id FROM premium_purchases WHERE purchase_id = $purchase_id;
+                """,
+                parameters={"$purchase_id": purchase_id},
+            )
+            for result_set in existing:
+                if result_set.rows:
+                    return _json_response(200, {"ok": True, "duplicate": True})
+            _db().execute_with_retries(
+                """
+                DECLARE $purchase_id AS Utf8;
+                DECLARE $user_id AS Utf8;
+                DECLARE $product_id AS Utf8;
+                DECLARE $duration_days AS Uint32;
+                DECLARE $purchased_at AS Utf8;
+                INSERT INTO premium_purchases
+                    (purchase_id, user_id, product_id, duration_days, purchased_at, status)
+                VALUES
+                    ($purchase_id, $user_id, $product_id, $duration_days, $purchased_at, "active");
+                """,
+                parameters={
+                    "$purchase_id": purchase_id,
+                    "$user_id": user_id,
+                    "$product_id": product_id,
+                    "$duration_days": duration,
+                    "$purchased_at": purchased_at,
+                },
+            )
+            return _json_response(200, {"ok": True})
+
+        if name == "digital_product_refunded":
+            existing = _db().execute_with_retries(
+                """
+                DECLARE $purchase_id AS Utf8;
+                SELECT purchase_id FROM premium_purchases WHERE purchase_id = $purchase_id;
+                """,
+                parameters={"$purchase_id": purchase_id},
+            )
+            found = any(result_set.rows for result_set in existing)
+            if not found:
+                return _json_response(503, {"error": "purchase_not_found_yet"})
+            _db().execute_with_retries(
+                """
+                DECLARE $purchase_id AS Utf8;
+                UPDATE premium_purchases
+                SET status = "refunded"
+                WHERE purchase_id = $purchase_id;
+                """,
+                parameters={"$purchase_id": purchase_id},
+            )
+            return _json_response(200, {"ok": True})
+
+        return _json_response(200, {"ok": True, "ignored": True})
+    except (json.JSONDecodeError, ValueError, TypeError) as exc:
+        return _json_response(400, {"error": str(exc)})
+
+
 def handler(event, context):
     try:
         method, path, headers, body = _request_parts(event)
@@ -271,6 +418,16 @@ def handler(event, context):
         if path == "/health" and method == "GET":
             _ensure_schema()
             return _json_response(200, {"ok": True, "service": "put-k-sebe-api"})
+
+        if path == "/v1/webhooks/tribute" and method == "POST":
+            return _handle_tribute_webhook(
+                body.encode("utf-8"), headers.get("trbt-signature", "")
+            )
+
+        if path == "/v1/premium" and method == "GET":
+            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            _ensure_schema()
+            return _json_response(200, _premium_status(user_id))
 
         if path == "/v1/events" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
