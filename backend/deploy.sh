@@ -261,6 +261,19 @@ paths:
         function_id: "$FUNCTION_ID"
         service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
+  /v1/ai/analyze-entry:
+    post:
+      operationId: analyzeDiaryEntry
+      responses:
+        "200":
+          description: Diary entry analysis
+        "403":
+          description: Premium required
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
   /v1/trial:
     post:
       operationId: startPremiumTrial
