@@ -275,6 +275,7 @@ def _validate_state(value):
     patterns = value.get("patterns", [])
     completed = value.get("completed", [])
     practice_history = value.get("practiceHistory", [])
+    personal_practices = value.get("personalPractices", [])
     chat = value.get("chat", [])
     onboarding = value.get("onboarding")
 
@@ -286,6 +287,8 @@ def _validate_state(value):
         raise ValueError("Invalid completed practices")
     if not isinstance(practice_history, list) or len(practice_history) > 5_000:
         raise ValueError("Invalid practice history")
+    if not isinstance(personal_practices, list) or len(personal_practices) > 500:
+        raise ValueError("Invalid personal practices")
     if not isinstance(chat, list) or len(chat) > 300:
         raise ValueError("Invalid assistant chat history")
     if onboarding is not None and not isinstance(onboarding, dict):
@@ -296,6 +299,7 @@ def _validate_state(value):
         "patterns": patterns,
         "completed": completed,
         "practiceHistory": practice_history,
+        "personalPractices": personal_practices,
         "chat": chat,
         "onboarding": onboarding,
     }
