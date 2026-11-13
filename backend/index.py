@@ -593,18 +593,28 @@ def _openai_analyze_entry(user_id, entry_id):
             "created_at": created,
         })
     except Exception as exc:
-        # Log only sanitized provider/database diagnostics; never log API keys or diary text.
-        try:
-            import urllib.error
-            if isinstance(exc, urllib.error.HTTPError):
-                provider_body = exc.read(2000).decode("utf-8", errors="replace")
-                LOG.error("OpenAI HTTP error status=%s body=%s", exc.code, provider_body[:2000])
-            elif isinstance(exc, urllib.error.URLError):
-                LOG.error("OpenAI network error reason=%s", str(exc.reason)[:300])
-            else:
-                LOG.exception("OpenAI analysis or persistence failed type=%s", type(exc).__name__)
-        except Exception:
-            LOG.error("OpenAI analysis failed type=%s", type(exc).__name__)
+        # Return sanitized diagnostics because Cloud Logging may be temporarily unavailable.
+        import urllib.error
+        if isinstance(exc, urllib.error.HTTPError):
+            try:
+                provider_data = json.loads(exc.read(2000).decode("utf-8", errors="replace"))
+                provider_error = provider_data.get("error") or {}
+                provider_message = str(provider_error.get("message", "OpenAI request rejected"))[:500]
+                provider_code = str(provider_error.get("code") or provider_error.get("type") or "provider_error")[:100]
+            except Exception:
+                provider_message = "OpenAI returned an unreadable error response"
+                provider_code = "provider_error"
+            LOG.error("OpenAI HTTP error status=%s code=%s message=%s", exc.code, provider_code, provider_message)
+            return _json_response(502, {
+                "error": "openai_provider_error",
+                "provider_status": int(exc.code),
+                "provider_code": provider_code,
+                "detail": provider_message,
+            })
+        if isinstance(exc, urllib.error.URLError):
+            LOG.error("OpenAI network error reason=%s", str(exc.reason)[:300])
+            return _json_response(502, {"error": "openai_network_error", "detail": str(exc.reason)[:300]})
+        LOG.exception("OpenAI analysis or persistence failed type=%s", type(exc).__name__)
         return _json_response(502, {"error": "openai_analysis_failed", "detail": type(exc).__name__})
 
 
