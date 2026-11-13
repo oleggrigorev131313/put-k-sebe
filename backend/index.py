@@ -861,12 +861,10 @@ def handler(event, context):
         if path == "/v1/ai/usage" and method == "GET":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             from datetime import datetime
-            timezone_name = "UTC"
-            try:
-                user_tz = _safe_user_timezone(headers.get("x-user-timezone", "UTC"))
-            except Exception:
-                user_tz = _safe_user_timezone("UTC")
+            timezone_name = headers.get("x-user-timezone", "UTC")
+            user_tz = _safe_user_timezone(timezone_name)
             day_key = datetime.now(user_tz).date().isoformat()
+            _ensure_schema()
             used, summary_done = _daily_ai_usage(user_id, day_key, user_tz)
             return _json_response(200, {"limit": 5, "used": used, "remaining": max(0, 5-used),
                                         "summary_done": summary_done, "premium_required": False})
@@ -874,8 +872,6 @@ def handler(event, context):
         if path == "/v1/ai/analyze-entry" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             _ensure_schema()
-            if not _premium_status(user_id).get("active"):
-                return _json_response(403, {"error": "premium_required"})
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error": "deepseek_not_configured"})
             try:
