@@ -523,6 +523,8 @@ def _deepseek_analyze_entry(user_id, entry_id):
     entry = next((item for item in entries if str(item.get("id")) == entry_id), None)
     if not isinstance(entry, dict):
         return _json_response(404, {"error": "entry_not_found"})
+    # Namespace cache by model so old OpenAI analyses are not returned as DeepSeek results.
+    cache_entry_id = "deepseek-flash:" + entry_id
     cached = _db().execute_with_retries(
         """
         DECLARE $user_id AS Utf8;
@@ -530,7 +532,7 @@ def _deepseek_analyze_entry(user_id, entry_id):
         SELECT analysis_text, input_tokens, output_tokens, created_at
         FROM ai_analyses WHERE user_id = $user_id AND entry_id = $entry_id;
         """,
-        parameters={"$user_id": user_id, "$entry_id": entry_id},
+        parameters={"$user_id": user_id, "$entry_id": cache_entry_id},
     )
     for result_set in cached:
         for row in result_set.rows:
@@ -592,7 +594,7 @@ def _deepseek_analyze_entry(user_id, entry_id):
                 ($user_id, $entry_id, $analysis_text, $input_tokens, $output_tokens, $created_at);
             """,
             parameters={
-                "$user_id": user_id, "$entry_id": entry_id, "$analysis_text": analysis,
+                "$user_id": user_id, "$entry_id": cache_entry_id, "$analysis_text": analysis,
                 "$input_tokens": input_tokens, "$output_tokens": output_tokens, "$created_at": created,
             },
         )
