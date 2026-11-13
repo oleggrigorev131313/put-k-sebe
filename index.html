@@ -82,7 +82,9 @@ async function analyzeEntry(id,buttonEl){
   var data=await response.json();
   if(!response.ok){
    if(response.status===403)throw new Error("Для анализа нужен активный Premium.");
-   throw new Error(data.error||"Не удалось получить анализ.");
+   var diagnostic=data.detail||data.provider_code||data.error||"Неизвестная ошибка";
+   if(data.provider_status)diagnostic+=" (HTTP "+data.provider_status+")";
+   throw new Error("Ошибка аналитика: "+diagnostic);
   }
   if(result){result.style.display="block";result.textContent=data.analysis||"Анализ не получен.";}
   if(buttonEl){buttonEl.textContent=data.cached?"Показан сохранённый анализ":"Анализ готов";buttonEl.disabled=false;}
