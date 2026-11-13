@@ -163,6 +163,15 @@ def _json_response(status, payload):
 def _request_parts(event):
     headers = event.get("headers") or {}
     headers = {str(k).lower(): str(v) for k, v in headers.items()}
+    # Read the user's timezone from a query parameter to avoid custom CORS headers.
+    query = event.get("queryStringParameters") or {}
+    if not isinstance(query, dict):
+        query = {}
+    raw_query = event.get("rawQueryString") or ""
+    for key, value in parse_qsl(raw_query, keep_blank_values=True):
+        query.setdefault(key, value)
+    if query.get("timezone"):
+        headers["x-user-timezone"] = str(query.get("timezone"))[:80]
     context = event.get("requestContext") or {}
     http_context = context.get("http") or {}
     method = (
