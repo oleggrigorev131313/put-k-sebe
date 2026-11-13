@@ -747,7 +747,13 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC"):
     )
     try:
         data = _deepseek_chat([{"role":"system","content":system_prompt},
-            {"role":"user","content":"Записи за "+day_key+":\n\n"+"\n\n".join(snippets)}],
+            {"role":"user","content":"Записи за "+day_key+":\n\n"+"\n\n".join(snippets)+
+                "\n\nПодтверждённые паттерны: "+json.dumps(
+                    [{"name":p.get("name"),"detail":p.get("detail")} for p in (state.get("patterns") or [])
+                     if isinstance(p,dict) and p.get("status")=="confirmed"][:20], ensure_ascii=False)+
+                "\n\nИстория практик: "+json.dumps(
+                    [p for p in (state.get("practiceHistory") or []) if isinstance(p,dict)][-15:],
+                    ensure_ascii=False)[:5000]}],
             max_tokens=4500, timeout=55)
         choices = data.get("choices") or []
         message = choices[0].get("message") if choices else {}
