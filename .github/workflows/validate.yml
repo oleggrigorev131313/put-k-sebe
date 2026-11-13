@@ -1,0 +1,35 @@
+name: Validate application code
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, "feat/**"]
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check backend Python syntax
+        run: python -m py_compile backend/index.py
+      - name: Check deployment script syntax
+        run: bash -n backend/deploy.sh
+      - name: Check frontend JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html = Path("index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script(?:\s[^>]*)?>([\s\S]*?)</script>", html, re.I)
+          if not scripts:
+              raise SystemExit("No inline application script found")
+          Path("/tmp/put-k-sebe-inline.js").write_text("\n".join(scripts), encoding="utf-8")
+          PY
+          node --check /tmp/put-k-sebe-inline.js

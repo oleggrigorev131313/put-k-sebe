@@ -275,6 +275,7 @@ def _validate_state(value):
     patterns = value.get("patterns", [])
     completed = value.get("completed", [])
     practice_history = value.get("practiceHistory", [])
+    personal_practices = value.get("personalPractices", [])
     chat = value.get("chat", [])
     onboarding = value.get("onboarding")
 
@@ -286,6 +287,8 @@ def _validate_state(value):
         raise ValueError("Invalid completed practices")
     if not isinstance(practice_history, list) or len(practice_history) > 5_000:
         raise ValueError("Invalid practice history")
+    if not isinstance(personal_practices, list) or len(personal_practices) > 500:
+        raise ValueError("Invalid personal practices")
     if not isinstance(chat, list) or len(chat) > 300:
         raise ValueError("Invalid assistant chat history")
     if onboarding is not None and not isinstance(onboarding, dict):
@@ -296,6 +299,7 @@ def _validate_state(value):
         "patterns": patterns,
         "completed": completed,
         "practiceHistory": practice_history,
+        "personalPractices": personal_practices,
         "chat": chat,
         "onboarding": onboarding,
     }
@@ -635,7 +639,7 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
         "Не превращай ситуативную мысль в постоянное убеждение: помечай её как гипотезу для проверки. "
         "Пиши 'Гипотеза паттерна: нет достаточных данных' ТОЛЬКО если в самой записи нет ни одной мысли, реакции "
         "или поведения, из которых можно осторожно вывести такую формулировку. "
-        "Не используй Markdown-звёздочки. Не более 350 слов. Это поддержка для самонаблюдения, не психотерапия и не медицинская помощь."
+        "Если по конкретной записи уместно предложить одно небольшое действие, закончи ответ отдельной строкой строго формата 'Микро-практика: короткое название | конкретная инструкция на 1–10 минут | длительность'. Практика должна вытекать из записи, быть выполнимой самостоятельно и не повторять общий шаблон без оснований. Если подходящего действия нет, эту строку не добавляй. Не используй Markdown-звёздочки. Не более 350 слов. Это поддержка для самонаблюдения, не психотерапия и не медицинская помощь."
     )
     try:
         stage = "request_deepseek"
@@ -734,6 +738,8 @@ def _daily_ai_usage(user_id, day_key, user_tz):
             if entry_id.startswith("daily-summary:"):
                 summary_exists = True
                 continue
+            if entry_id.startswith("onboarding-profile:"):
+                continue
             # Cache keys may include model/prompt versions. One diary entry
             # must consume only one daily analysis, regardless of cache versions.
             logical_entry_id = entry_id.rsplit(":", 1)[-1]
@@ -764,13 +770,13 @@ def _save_ai_result(user_id, cache_key, text_value, usage, created):
     )
 
 
-def _deepseek_daily_summary(user_id, timezone_name="UTC"):
+def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
     from datetime import datetime, timezone
     import urllib.error
-    premium = _premium_status(user_id)
-    if not premium.get("active"):
-        return _json_response(403, {"error":"premium_required",
-            "message":"Ежедневная персональная сводка доступна только в Premium. Активируйте пробный период или выберите тариф."})
+    # The first daily review is available on every tier. Re-running it is a Premium feature.
+    premium = _premium_status(user_id) if force else None
+    if force and not premium.get("active"):
+        return _json_response(403, {"error":"premium_required", "message":"Повторный обзор доступен в Premium."})
     user_tz = _safe_user_timezone(timezone_name)
     now = datetime.now(timezone.utc)
     day_key = now.astimezone(user_tz).date().isoformat()
@@ -790,29 +796,42 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC"):
                 todays.append(item)
         except (ValueError, TypeError):
             continue
-    if not todays:
-        return _json_response(400, {"error": "no_entries_today", "message": "Сегодня пока нет записей для сводки."})
-    # Ignore empty, fragmentary or gibberish entries. A summary must not invent
-    # meaning from text that the individual-analysis quality gate would reject.
+    practice_today = []
+    for practice in state.get("practiceHistory") or []:
+        if not isinstance(practice, dict):
+            continue
+        try:
+            completed = datetime.fromisoformat(str(practice.get("completedAt", "")).replace("Z", "+00:00"))
+            if completed.tzinfo is None:
+                completed = completed.replace(tzinfo=timezone.utc)
+            if completed.astimezone(user_tz).date().isoformat() == day_key:
+                practice_today.append(practice)
+        except (ValueError, TypeError):
+            continue
+    if not todays and not practice_today:
+        return _json_response(400, {"error": "no_entries_today", "message": "Сегодня пока нет записей или выполненных практик для сводки."})
+    # Ignore empty, fragmentary or gibberish entries. A practice-only day is still
+    # meaningful input when the user has recorded what they completed.
     meaningful_entries = [item for item in todays if not _diary_entry_quality_error(item)]
-    if not meaningful_entries:
+    if todays and not meaningful_entries and not practice_today:
         return _json_response(422, {"error":"no_meaningful_entries",
             "message":"В сегодняшних записях пока недостаточно понятного контекста для сводки."})
     todays = meaningful_entries
-    cached = _db().execute_with_retries(
-        """
-        DECLARE $user_id AS Utf8;
-        DECLARE $entry_id AS Utf8;
-        SELECT analysis_text, input_tokens, output_tokens, created_at
-        FROM ai_analyses WHERE user_id = $user_id AND entry_id = $entry_id;
-        """,
-        parameters={"$user_id": user_id, "$entry_id": cache_key},
-    )
-    for result_set in cached:
-        for row in result_set.rows:
-            return _json_response(200, {"ok": True, "cached": True, "summary": str(row.analysis_text),
-                "usage": {"input_tokens": int(row.input_tokens), "output_tokens": int(row.output_tokens)},
-                "created_at": str(row.created_at)})
+    if not force:
+        cached = _db().execute_with_retries(
+            """
+            DECLARE $user_id AS Utf8;
+            DECLARE $entry_id AS Utf8;
+            SELECT analysis_text, input_tokens, output_tokens, created_at
+            FROM ai_analyses WHERE user_id = $user_id AND entry_id = $entry_id;
+            """,
+            parameters={"$user_id": user_id, "$entry_id": cache_key},
+        )
+        for result_set in cached:
+            for row in result_set.rows:
+                return _json_response(200, {"ok": True, "cached": True, "summary": str(row.analysis_text),
+                    "usage": {"input_tokens": int(row.input_tokens), "output_tokens": int(row.output_tokens)},
+                    "created_at": str(row.created_at)})
     snippets = []
     for i, entry in enumerate(todays[-30:], 1):
         fields = [("Ситуация","situation"),("Эмоция","emotion"),("Интенсивность","intensity"),
@@ -849,11 +868,17 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC"):
         "автоматическими мыслями, эмоциями и действиями; 3) повторяющиеся темы — только если они "
         "действительно встречаются в нескольких записях, с указанием номеров записей; "
         "4) что человек уже сделал полезного или что стало яснее — только если это видно из записей; "
-        "5) один точный вопрос для дальнейшего наблюдения; 6) до трёх гипотез паттернов. "
+        "5) один точный вопрос для дальнейшего наблюдения; 6) до трёх гипотез паттернов; "
         "Для каждой гипотезы укажи конкретные номера записей, на которых она основана, и "
         "отдельно отметь, если основание пока только одно. Формулируй гипотезы человеческим языком, "
         "по возможности от первого лица, не профессиональными терминами. Не предлагай паттерн, "
-        "если нет достаточных оснований. Не предлагай автоматически добавить гипотезу в профиль. "
+        "если нет достаточных оснований. Не предлагай автоматически добавить гипотезу в профиль. " 
+        "7) до трёх персональных микро-практик на завтра. Учитывай выполненные, пропущенные и отклонённые задания, " 
+        "а также обратную связь о сложности и пользе, если она есть. Каждая практика должна быть конкретной, " 
+        "посильной и связанной с сегодняшними наблюдениями. Не повторяй задание, которое человек уже выполнил, " 
+        "если нет причины повторить его. Если данных мало, честно предложи не более одной простой практики. " 
+        "Для каждого задания добавь отдельную строку строго формата 'Практика на завтра: название | инструкция | длительность'. " 
+        "Не добавляй такие строки для отклонённых или уже выполненных без причины заданий. "
         "Не более 500 слов. Это инструмент самонаблюдения, не медицинская помощь."
     )
     try:
@@ -863,9 +888,12 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC"):
                 "\n\nПодтверждённые паттерны пользователя (контекст, не готовый вывод): "+json.dumps(
                     [{"name":p.get("name"),"detail":p.get("detail")} for p in (state.get("patterns") or [])
                      if isinstance(p,dict) and p.get("status")=="confirmed"][:20], ensure_ascii=False)+
-                "\n\nИстория практик: "+json.dumps(
-                    [p for p in (state.get("practiceHistory") or []) if isinstance(p,dict)][-15:],
-                    ensure_ascii=False)[:5000]}],
+                "\n\nИстория выполненных и пропущенных практик: "+json.dumps(
+                    [p for p in (state.get("practiceHistory") or []) if isinstance(p,dict)][-20:],
+                    ensure_ascii=False)[:5000]+
+                "\n\nПерсональные практики и их статусы: "+json.dumps(
+                    [p for p in (state.get("personalPractices") or []) if isinstance(p,dict)][-30:],
+                    ensure_ascii=False)[:6000]}],
             max_tokens=4500, timeout=55)
         choices = data.get("choices") or []
         message = choices[0].get("message") if choices else {}
@@ -888,6 +916,66 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC"):
         LOG.exception("Daily summary failed type=%s detail=%s", type(exc).__name__, safe_detail)
         return _json_response(502, {"error":"daily_summary_failed",
             "exception_type":type(exc).__name__, "detail":type(exc).__name__ + ": " + safe_detail})
+
+
+
+def _deepseek_analyze_onboarding(user_id):
+    from datetime import datetime, timezone
+    import urllib.error
+    state = _read_state(user_id)
+    onboarding = state.get("onboarding") if isinstance(state, dict) else None
+    if not isinstance(onboarding, dict):
+        return _json_response(404, {"error":"onboarding_not_found"})
+    cache_key = "onboarding-profile:v1"
+    cached = _db().execute_with_retries(
+        """
+        DECLARE $user_id AS Utf8;
+        DECLARE $entry_id AS Utf8;
+        SELECT analysis_text, input_tokens, output_tokens, created_at
+        FROM ai_analyses WHERE user_id = $user_id AND entry_id = $entry_id;
+        """,
+        parameters={"$user_id": user_id, "$entry_id": cache_key},
+    )
+    for result_set in cached:
+        for row in result_set.rows:
+            return _json_response(200, {"ok":True,"cached":True,"analysis":str(row.analysis_text)})
+    prompt = (
+        "Ты — персональный аналитик приложения «Путь к себе». На основе только ответов анкеты "
+        "предложи не более трёх осторожных гипотез о возможных привычных убеждениях или реакциях. "
+        "Не ставь диагнозов, не называй когнитивные искажения паттернами, не делай выводов о личности. "
+        "Не выдавай гипотезы за факты. Формулируй каждую гипотезу от первого лица простыми словами, "
+        "как мысль, которую человек может узнать или отвергнуть. Если данных мало — прямо скажи это. "
+        "Верни краткое вступление, затем для каждой гипотезы отдельную строку строго формата "
+        "'Паттерн анкеты: формулировка от первого лица | когда или почему эта мысль может возникать'. "
+        "Не более 220 слов."
+    )
+    try:
+        data = _deepseek_chat([
+            {"role":"system","content":prompt},
+            {"role":"user","content":"Ответы анкеты пользователя:\n"+json.dumps({
+                "что_сейчас_беспокоит":str(onboarding.get("main_issue") or "")[:1500],
+                "важные_сферы":onboarding.get("areas") or [],
+                "знакомые_мысли":onboarding.get("thoughts") or [],
+                "обычные_реакции":onboarding.get("reactions") or [],
+                "чего_хочет_изменить":str(onboarding.get("desired_changes") or "")[:1500],
+            },ensure_ascii=False)}
+        ],max_tokens=1800,timeout=45)
+        choices=data.get("choices") or []
+        message=choices[0].get("message") if choices else {}
+        analysis=str((message or {}).get("content") or "").strip()
+        if not analysis:
+            return _json_response(502,{"error":"empty_model_response"})
+        usage=data.get("usage") or {}
+        _save_ai_result(user_id,cache_key,analysis,
+            {"input_tokens":int(usage.get("prompt_tokens",0)),"output_tokens":int(usage.get("completion_tokens",0))},
+            datetime.now(timezone.utc).isoformat())
+        return _json_response(200,{"ok":True,"cached":False,"analysis":analysis})
+    except urllib.error.HTTPError as exc:
+        LOG.error("Onboarding analysis HTTP error status=%s",exc.code)
+        return _json_response(502,{"error":"deepseek_provider_error","provider_status":int(exc.code)})
+    except Exception as exc:
+        LOG.exception("Onboarding analysis failed type=%s",type(exc).__name__)
+        return _json_response(502,{"error":"onboarding_analysis_failed","exception_type":type(exc).__name__})
 
 
 def _deepseek_connection_test():
@@ -952,6 +1040,13 @@ def handler(event, context):
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error": "deepseek_not_configured"})
             return _deepseek_connection_test()
+        if path == "/v1/ai/analyze-onboarding" and method == "POST":
+            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            _ensure_schema()
+            if not DEEPSEEK_API_KEY:
+                return _json_response(503, {"error":"deepseek_not_configured"})
+            return _deepseek_analyze_onboarding(user_id)
+
         if path == "/v1/ai/daily-summary" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             _ensure_schema()
@@ -960,9 +1055,11 @@ def handler(event, context):
             try:
                 payload = json.loads(body or "{}")
                 timezone_name = str(payload.get("timezone") or "UTC")
+                force = bool(payload.get("force", False))
             except (json.JSONDecodeError, TypeError):
                 timezone_name = "UTC"
-            return _deepseek_daily_summary(user_id, timezone_name)
+                force = False
+            return _deepseek_daily_summary(user_id, timezone_name, force)
 
         if path == "/v1/ai/usage" and method == "GET":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))

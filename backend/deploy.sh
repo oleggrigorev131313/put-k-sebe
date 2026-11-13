@@ -261,6 +261,19 @@ paths:
         function_id: "$FUNCTION_ID"
         service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
+  /v1/ai/analyze-onboarding:
+    post:
+      operationId: analyzeOnboarding
+      responses:
+        "200":
+          description: Personal pattern hypotheses from onboarding
+        "502":
+          description: AI provider error
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
   /v1/ai/analyze-entry:
     post:
       operationId: analyzeDiaryEntry
