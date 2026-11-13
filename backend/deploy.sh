@@ -212,7 +212,7 @@ x-yc-apigateway:
   cors:
     origin: '*'
     methods: [GET, PUT, DELETE, POST, OPTIONS]
-    allowedHeaders: [Content-Type, X-Telegram-Init-Data, X-User-Timezone, X-Admin-Password, trbt-signature]
+    allowedHeaders: [Content-Type, X-Telegram-Init-Data, X-Admin-Password, trbt-signature]
     maxAge: 3600
 paths:
   /health:
