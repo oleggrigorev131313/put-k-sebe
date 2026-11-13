@@ -9,6 +9,7 @@ DB_NAME="put-k-sebe-db"
 SECRET_NAME="put-k-sebe-telegram-bot"
 ADMIN_SECRET_NAME="put-k-sebe-admin-password"
 TRIBUTE_SECRET_NAME="put-k-sebe-tribute-api-key"
+OPENAI_SECRET_NAME="put-k-sebe-openai-api-key"
 FUNCTION_NAME="put-k-sebe-api"
 GATEWAY_NAME="put-k-sebe-gateway"
 REPO_URL="https://github.com/oleggrigorev131313/put-k-sebe.git"
@@ -138,6 +139,17 @@ if ! yc lockbox secret list-access-bindings "$TRIBUTE_SECRET_ID" 2>/dev/null | g
 fi
 echo "    API-ключ Tribute подключён через Lockbox."
 
+echo "Подключаю API-ключ OpenAI из Lockbox..."
+OPENAI_SECRETS_JSON="$(yc lockbox secret list --format json)" || fail "Не удалось прочитать список Lockbox secrets"
+OPENAI_SECRET_ID="$(printf '%s' "$OPENAI_SECRETS_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("secrets",[]); print(next((x["id"] for x in a if x.get("name")=="put-k-sebe-openai-api-key"), ""))')"
+[[ -n "$OPENAI_SECRET_ID" ]] || fail "Не найден Lockbox secret $OPENAI_SECRET_NAME. Сначала создай его отдельной командой."
+OPENAI_SECRET_INFO="$(yc lockbox secret get "$OPENAI_SECRET_ID" --format json)"
+OPENAI_VERSION_ID="$(printf '%s' "$OPENAI_SECRET_INFO" | python3 -c 'import json,sys; print(json.load(sys.stdin)["current_version"]["id"])')"
+if ! yc lockbox secret list-access-bindings "$OPENAI_SECRET_ID" 2>/dev/null | grep -q "$SA_ID"; then
+  yc lockbox secret add-access-binding --id "$OPENAI_SECRET_ID" --role lockbox.payloadViewer --service-account-id "$SA_ID"
+fi
+echo "    API-ключ OpenAI подключён через Lockbox."
+
 echo "[5/8] Создаю приватный бакет для ZIP-файла функции..."
 BUCKET_NAME="put-k-sebe-fn-${CLOUD_ID:0:20}"
 OBJECT_KEY="functions/put-k-sebe-api.zip"
@@ -183,6 +195,7 @@ yc serverless function version create \
   --secret "environment-variable=BOT_TOKEN,id=$SECRET_ID,version-id=$VERSION_ID,key=bot_token" \
   --secret "environment-variable=ADMIN_PASSWORD,id=$ADMIN_SECRET_ID,version-id=$ADMIN_VERSION_ID,key=admin_password" \
   --secret "environment-variable=TRIBUTE_API_KEY,id=$TRIBUTE_SECRET_ID,version-id=$TRIBUTE_VERSION_ID,key=api_key" \
+  --secret "environment-variable=OPENAI_API_KEY,id=$OPENAI_SECRET_ID,version-id=$OPENAI_VERSION_ID,key=api_key" \
   --description "Put-k-sebe API deployment" >/dev/null
 
 # Cloud Functions copies the package during version creation; remove the temporary object.
@@ -230,6 +243,19 @@ paths:
       responses:
         "200":
           description: Premium entitlement status
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /v1/ai/test:
+    post:
+      operationId: openaiConnectionTest
+      responses:
+        "200":
+          description: OpenAI connection test
+        "403":
+          description: Premium required
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
