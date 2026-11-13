@@ -187,7 +187,7 @@ return '<div class="eyebrow">Первое знакомство · 2–3 мину
 '<div class="field"><label>3. Какие мысли тебе знакомы?</label><p class="sub" style="margin:0 0 9px">Отметь те, которые иногда возникают.</p>'+onboardingTags("thoughts",onboardingThoughts)+'</div>'+
 '<div class="field"><label>4. Как ты обычно реагируешь?</label>'+onboardingTags("reactions",onboardingReactions)+'</div>'+
 '<div class="field"><label>5. Что хотелось бы изменить?</label><textarea class="area" data-onboard-field="desired_changes" placeholder="Например: меньше откладывать, спокойнее относиться к ошибкам, лучше понимать свои желания...">'+esc(onboardingDraft.desired_changes)+'</textarea></div>'+
-'<div class="note">Ответы анкеты и записи сохраняются локально в браузере или Telegram на этом устройстве. Облачная синхронизация временно отключена. Для переноса данных на другое устройство используй резервную копию JSON в настройках. Не указывай пароли, документы, адреса и данные других людей.</div>'+
+'<div class="note">Ответы анкеты и записи будут храниться в облаке и синхронизироваться между устройствами, где ты откроешь приложение под тем же аккаунтом Telegram. Не указывай пароли, документы, адреса и данные других людей.</div><label style="display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;margin:14px 0"><input type="checkbox" id="onboardConsent" style="margin-top:3px;flex:none">Я согласен на хранение ответов анкеты и записей дневника в облаке для синхронизации между моими устройствами.</label>'+
 button("Сохранить ответы →","finish-onboarding","full")+'<button class="textbtn" style="margin-top:12px" data-act="skip-onboarding">Пока пропустить</button></section>';
 }
 function subscription(){
@@ -264,8 +264,9 @@ app.querySelectorAll("[data-practice]").forEach(function(b){b.onclick=function()
 }
 function act(a){
 if(a==="finish-onboarding"){
-onboardingDraft.consent=false;
-state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false,analysisStatus:"pending"});saveLocalOnly();trackEvent("onboarding_completed");go("home");toast("Ответы сохранены. Персональный анализ появится после подключения AI.");
+if(!onboardingDraft.consent){toast("Подтверди согласие на облачное хранение, чтобы сохранить анкету.");return;}
+state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false,analysisStatus:"pending"});saveLocalOnly();cloudReady=true;cloudStatus="connected";trackEvent("onboarding_completed");go("home");
+cloudSaveNow(false).then(function(){cloudStatus="synced";render();toast("Ответы сохранены и синхронизированы.");}).catch(function(e){cloudReady=false;cloudStatus="error";cloudErrorText=e&&e.message?e.message:"Ошибка соединения";render();toast("Не удалось сохранить анкету в облаке. Ответы пока остались на устройстве.");});
 }
 if(a==="skip-onboarding"){state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:false};saveLocalOnly();go("home");}
 if(a==="new"){draft=blank();step=0;go("journal");}
