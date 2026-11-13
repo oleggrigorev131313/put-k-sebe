@@ -639,7 +639,7 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
         "Не превращай ситуативную мысль в постоянное убеждение: помечай её как гипотезу для проверки. "
         "Пиши 'Гипотеза паттерна: нет достаточных данных' ТОЛЬКО если в самой записи нет ни одной мысли, реакции "
         "или поведения, из которых можно осторожно вывести такую формулировку. "
-        "Не используй Markdown-звёздочки. Не более 350 слов. Это поддержка для самонаблюдения, не психотерапия и не медицинская помощь."
+        "Если по конкретной записи уместно предложить одно небольшое действие, закончи ответ отдельной строкой строго формата 'Микро-практика: короткое название | конкретная инструкция на 1–10 минут | длительность'. Практика должна вытекать из записи, быть выполнимой самостоятельно и не повторять общий шаблон без оснований. Если подходящего действия нет, эту строку не добавляй. Не используй Markdown-звёздочки. Не более 350 слов. Это поддержка для самонаблюдения, не психотерапия и не медицинская помощь."
     )
     try:
         stage = "request_deepseek"
@@ -771,10 +771,7 @@ def _save_ai_result(user_id, cache_key, text_value, usage, created):
 def _deepseek_daily_summary(user_id, timezone_name="UTC"):
     from datetime import datetime, timezone
     import urllib.error
-    premium = _premium_status(user_id)
-    if not premium.get("active"):
-        return _json_response(403, {"error":"premium_required",
-            "message":"Ежедневная персональная сводка доступна только в Premium. Активируйте пробный период или выберите тариф."})
+    # One cached daily review is available on every tier; cached results prevent repeat model calls.
     user_tz = _safe_user_timezone(timezone_name)
     now = datetime.now(timezone.utc)
     day_key = now.astimezone(user_tz).date().isoformat()
