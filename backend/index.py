@@ -515,6 +515,7 @@ def _deepseek_chat(messages, max_tokens=3000, timeout=55):
 def _deepseek_analyze_entry(user_id, entry_id):
     from datetime import datetime, timezone
     import urllib.error
+    stage = "load_user_state"
     _ensure_schema()
     state = _read_state(user_id)
     if not isinstance(state, dict):
@@ -525,6 +526,7 @@ def _deepseek_analyze_entry(user_id, entry_id):
         return _json_response(404, {"error": "entry_not_found"})
     # Namespace cache by model so old OpenAI analyses are not returned as DeepSeek results.
     cache_entry_id = "deepseek-flash:" + entry_id
+    stage = "read_analysis_cache"
     cached = _db().execute_with_retries(
         """
         DECLARE $user_id AS Utf8;
@@ -542,6 +544,7 @@ def _deepseek_analyze_entry(user_id, entry_id):
                 "created_at": str(row.created_at),
             })
 
+    stage = "prepare_prompt"
     fields = [
         ("Ситуация", "situation"), ("Эмоция", "emotion"),
         ("Интенсивность эмоции (0–10)", "intensity"),
@@ -565,11 +568,13 @@ def _deepseek_analyze_entry(user_id, entry_id):
         "Не более 350 слов. Это поддержка для самонаблюдения, не психотерапия и не медицинская помощь."
     )
     try:
+        stage = "request_deepseek"
         data = _deepseek_chat(
             [{"role": "system", "content": system_prompt}, {"role": "user", "content": entry_text}],
             max_tokens=3000,
             timeout=55,
         )
+        stage = "parse_model_response"
         choices = data.get("choices") or []
         message = choices[0].get("message") if choices else {}
         analysis = str((message or {}).get("content") or "").strip()
@@ -580,6 +585,7 @@ def _deepseek_analyze_entry(user_id, entry_id):
         input_tokens = int(usage.get("prompt_tokens", 0))
         output_tokens = int(usage.get("completion_tokens", 0))
         created = datetime.now(timezone.utc).isoformat()
+        stage = "save_analysis_to_ydb"
         _db().execute_with_retries(
             """
             DECLARE $user_id AS Utf8;
@@ -623,8 +629,12 @@ def _deepseek_analyze_entry(user_id, entry_id):
         LOG.error("DeepSeek network error reason=%s", str(exc.reason)[:300])
         return _json_response(502, {"error": "deepseek_network_error", "detail": str(exc.reason)[:300]})
     except Exception as exc:
-        LOG.exception("DeepSeek analysis or persistence failed type=%s", type(exc).__name__)
-        return _json_response(502, {"error": "deepseek_analysis_failed", "detail": type(exc).__name__})
+        LOG.exception("DeepSeek analysis failed stage=%s type=%s", stage, type(exc).__name__)
+        return _json_response(502, {
+            "error": "deepseek_analysis_failed",
+            "stage": stage,
+            "detail": stage + ": " + type(exc).__name__,
+        })
 
 
 def _deepseek_connection_test():
