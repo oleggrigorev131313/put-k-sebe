@@ -102,6 +102,19 @@ def _ensure_schema():
             );
             """
         )
+        pool.execute_with_retries(
+            """
+            CREATE TABLE IF NOT EXISTS ai_analyses (
+                user_id Utf8 NOT NULL,
+                entry_id Utf8 NOT NULL,
+                analysis_text Utf8 NOT NULL,
+                input_tokens Uint64 NOT NULL,
+                output_tokens Uint64 NOT NULL,
+                created_at Utf8 NOT NULL,
+                PRIMARY KEY (user_id, entry_id)
+            );
+            """
+        )
         _schema_ready = True
 
 
@@ -479,6 +492,111 @@ def _handle_tribute_webhook(raw_body, signature):
         return _json_response(400, {"error": str(exc)})
 
 
+def _openai_analyze_entry(user_id, entry_id):
+    from datetime import datetime, timezone
+    import urllib.request
+    _ensure_schema()
+    state = _read_state(user_id)
+    if not isinstance(state, dict):
+        return _json_response(404, {"error": "user_state_not_found"})
+    entries = state.get("entries") or []
+    entry = next((item for item in entries if str(item.get("id")) == entry_id), None)
+    if not isinstance(entry, dict):
+        return _json_response(404, {"error": "entry_not_found"})
+    cached = _db().execute_with_retries(
+        """
+        DECLARE $user_id AS Utf8;
+        DECLARE $entry_id AS Utf8;
+        SELECT analysis_text, input_tokens, output_tokens, created_at
+        FROM ai_analyses WHERE user_id = $user_id AND entry_id = $entry_id;
+        """,
+        parameters={"$user_id": user_id, "$entry_id": entry_id},
+    )
+    for result_set in cached:
+        for row in result_set.rows:
+            return _json_response(200, {
+                "ok": True, "cached": True, "analysis": str(row.analysis_text),
+                "usage": {"input_tokens": int(row.input_tokens), "output_tokens": int(row.output_tokens)},
+                "created_at": str(row.created_at),
+            })
+    fields = [
+        ("Ситуация", "situation"), ("Эмоция", "emotion"),
+        ("Интенсивность эмоции (0–10)", "intensity"),
+        ("Автоматическая мысль", "thought"), ("Факты за мысль", "forText"),
+        ("Факты против мысли", "against"), ("Более сбалансированный взгляд", "balanced"),
+        ("Следующий небольшой шаг", "action"),
+    ]
+    entry_text = "\\n".join(label + ": " + str(entry.get(key, ""))[:1800] for label, key in fields)
+    prompt = (
+        "Проанализируй одну запись дневника в рамках навыков КПТ и бережной саморефлексии. "
+        "Отвечай по-русски, уважительно, конкретно и без шаблонных комплиментов. "
+        "Не ставь диагнозов, не делай выводов о личности по одной записи, не выдавай гипотезы за факты. "
+        "Не навязывай позитивное мышление. Если данных недостаточно, прямо скажи об этом. "
+        "Структура ответа: 1) Что видно в ситуации. 2) Возможная автоматическая мысль и когнитивное искажение "
+        "(только если есть основания; иначе напиши, что явного искажения не видно). "
+        "3) Что запись может упускать или какие вопросы стоит себе задать. "
+        "4) Более точный, сбалансированный взгляд. 5) Один небольшой практический шаг. "
+        "Не более 350 слов. Это поддержка для самонаблюдения, не психотерапия и не медицинская помощь.\\n\\n"
+        + entry_text
+    )
+    payload = {
+        "model": OPENAI_MODEL,
+        "input": prompt,
+        "reasoning": {"effort": "medium"},
+        "max_output_tokens": 900,
+        "store": False,
+    }
+    request = urllib.request.Request(
+        "https://api.openai.com/v1/responses",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=55) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        parts = []
+        for item in data.get("output", []):
+            if item.get("type") == "message":
+                for content in item.get("content", []):
+                    if content.get("type") == "output_text":
+                        parts.append(content.get("text", ""))
+        analysis = "\\n".join(parts).strip()
+        if not analysis:
+            LOG.error("OpenAI analysis returned no output")
+            return _json_response(502, {"error": "empty_model_response"})
+        usage = data.get("usage") or {}
+        input_tokens = int(usage.get("input_tokens", 0))
+        output_tokens = int(usage.get("output_tokens", 0))
+        created = datetime.now(timezone.utc).isoformat()
+        _db().execute_with_retries(
+            """
+            DECLARE $user_id AS Utf8;
+            DECLARE $entry_id AS Utf8;
+            DECLARE $analysis_text AS Utf8;
+            DECLARE $input_tokens AS Uint64;
+            DECLARE $output_tokens AS Uint64;
+            DECLARE $created_at AS Utf8;
+            INSERT INTO ai_analyses
+                (user_id, entry_id, analysis_text, input_tokens, output_tokens, created_at)
+            VALUES
+                ($user_id, $entry_id, $analysis_text, $input_tokens, $output_tokens, $created_at);
+            """,
+            parameters={
+                "$user_id": user_id, "$entry_id": entry_id, "$analysis_text": analysis,
+                "$input_tokens": input_tokens, "$output_tokens": output_tokens, "$created_at": created,
+            },
+        )
+        return _json_response(200, {
+            "ok": True, "cached": False, "analysis": analysis,
+            "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
+            "created_at": created,
+        })
+    except Exception as exc:
+        LOG.error("OpenAI analysis failed: %s", type(exc).__name__)
+        return _json_response(502, {"error": "openai_analysis_failed"})
+
+
 def _openai_connection_test():
     import urllib.request
     payload = {
@@ -542,6 +660,21 @@ def handler(event, context):
             if not OPENAI_API_KEY:
                 return _json_response(503, {"error": "openai_not_configured"})
             return _openai_connection_test()
+        if path == "/v1/ai/analyze-entry" and method == "POST":
+            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            _ensure_schema()
+            if not _premium_status(user_id).get("active"):
+                return _json_response(403, {"error": "premium_required"})
+            if not OPENAI_API_KEY:
+                return _json_response(503, {"error": "openai_not_configured"})
+            try:
+                payload = json.loads(body or "{}")
+                entry_id = str(payload.get("entry_id", "")).strip()
+                if not entry_id or len(entry_id) > 128:
+                    raise ValueError("invalid_entry_id")
+            except (json.JSONDecodeError, ValueError, TypeError):
+                return _json_response(400, {"error": "invalid_request"})
+            return _openai_analyze_entry(user_id, entry_id)
 
         if path == "/v1/events" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
