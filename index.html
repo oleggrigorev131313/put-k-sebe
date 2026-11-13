@@ -91,7 +91,7 @@ function renderAnalysis(raw,entryId){
  var clean=text.replace(/\n?\*{0,2}Гипотеза паттерна:\*{0,2}[^\n]*/i,"").trim();
  var candidate=match&&match[1].trim().toLowerCase()!=="нет достаточных данных";
  var suggestion=candidate?'<div class="card ai-suggestion" style="margin-top:14px"><div class="eyebrow">Возможное убеждение о себе · гипотеза</div><h3>'+esc(match[1].trim())+'</h3><p>'+esc(match[2].trim())+'</p><button class="btn secondary full" id="accept-ai-pattern">＋ Добавить в мои паттерны</button><p class="sub" style="margin:8px 0 0">Это предварительная формулировка мысли, которую можно проверить и при необходимости переписать.</p></div>':'<p class="sub" style="margin-top:12px">По этой записи пока недостаточно данных, чтобы предложить паттерн.</p>';
- var micro=text.match(/Микро-практика:\s*([^|\n]+)\s*\\|\s*([^|\n]+)(?:\s*\\|\s*([^\n]+))?/i);var microCard=micro?'<div class="card ai-suggestion" style="margin-top:12px"><div class="eyebrow">Небольшой шаг · рекомендация</div><h3>'+esc(micro[1].trim())+'</h3><p>'+esc(micro[2].trim())+'</p><small>'+esc((micro[3]||"5–10 минут").trim())+'</small><button class="btn secondary full" style="margin-top:10px" data-add-micro="'+esc(entryId)+'">＋ Добавить в мои практики</button></div>':"";clean=clean.replace(/\n?Микро-практика:[^\n]*/i,"");return '<div class="eyebrow">Разбор персонального аналитика</div><div class="analysis-text">'+formatAnalysis(clean)+'</div>'+suggestion+microCard;
+ var micro=text.match(/Микро-практика:\s*([^|\n]+)\s*\|\s*([^|\n]+)(?:\s*\|\s*([^\n]+))?/i);var microCard=micro?'<div class="card ai-suggestion" style="margin-top:12px"><div class="eyebrow">Небольшой шаг · рекомендация</div><h3>'+esc(micro[1].trim())+'</h3><p>'+esc(micro[2].trim())+'</p><small>'+esc((micro[3]||"5–10 минут").trim())+'</small><button class="btn secondary full" style="margin-top:10px" data-add-micro="'+esc(entryId)+'">＋ Добавить в мои практики</button></div>':"";clean=clean.replace(/\n?Микро-практика:[^\n]*/i,"");return '<div class="eyebrow">Разбор персонального аналитика</div><div class="analysis-text">'+formatAnalysis(clean)+'</div>'+suggestion+microCard;
 }
 function linkEntryToPattern(entryId,patternId){
  var entry=state.entries.find(function(x){return String(x.id)===String(entryId);});
@@ -146,7 +146,7 @@ async function runDailySummary(buttonEl){
  
  if(buttonEl){buttonEl.disabled=true;buttonEl.textContent="Собираю сводку…";}
  try{
-  var response=await fetch(API_BASE+"/v1/ai/daily-summary",{method:"POST",headers:apiHeaders(),body:JSON.stringify({timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
+  var response=await fetch(API_BASE+"/v1/ai/daily-summary",{method:"POST",headers:apiHeaders(),body:JSON.stringify({timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC",force:!!(aiUsage.summary_done&&premiumStatus&&premiumStatus.active)})});
   var raw=await response.text(),data={};try{data=raw?JSON.parse(raw):{};}catch(parseError){data={error:"invalid_server_response",detail:raw.slice(0,180)};}
   if(!response.ok){
    if(response.status===403)throw new Error(data.message||"Повторный обзор доступен в Premium.");
@@ -388,7 +388,7 @@ var practices=[
 
 function addMicroPractice(entryId){
  var entry=state.entries.find(function(x){return String(x.id)===String(entryId);});if(!entry)return;
- var m=String(entry.analysis||"").match(/Микро-практика:\s*([^|\n]+)\s*\\|\s*([^|\n]+)(?:\s*\\|\s*([^\n]+))?/i);
+ var m=String(entry.analysis||"").match(/Микро-практика:\s*([^|\n]+)\s*\|\s*([^|\n]+)(?:\s*\|\s*([^\n]+))?/i);
  if(!m){toast("В анализе нет отдельной рекомендации для практики.");return;}
  state.personalPractices=state.personalPractices||[];
  if(state.personalPractices.some(function(p){return p.sourceEntryId===String(entryId)&&p.status!=="rejected";})){toast("Практика по этой записи уже добавлена.");return;}
