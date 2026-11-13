@@ -305,17 +305,26 @@ GATEWAY_DOMAIN="$(printf '%s' "$GATEWAY_JSON" | python3 -c 'import json,sys; d=j
 
 echo "[9/9] Проверяю API..."
 API_URL="https://$GATEWAY_DOMAIN"
+HEALTH_OK="false"
 for attempt in 1 2 3 4 5 6; do
-  if curl -fsS "$API_URL/health" >/tmp/put-k-sebe-health.json; then break; fi
+  if curl -fsS "$API_URL/health" >/tmp/put-k-sebe-health.json; then
+    if python3 -c 'import json; d=json.load(open("/tmp/put-k-sebe-health.json")); raise SystemExit(0 if d.get("ok") is True else 1)'; then
+      HEALTH_OK="true"
+      break
+    fi
+  fi
   sleep 5
 done
 cat /tmp/put-k-sebe-health.json 2>/dev/null || true
 echo
+[[ "$HEALTH_OK" == "true" ]] || fail "Health check не прошёл. Проверь Cloud Function logs; API не считаем развёрнутым."
 echo "=============================================="
 echo "РАЗВЁРТЫВАНИЕ BACKEND ЗАВЕРШЕНО"
 echo "API_BASE=$API_URL"
+echo "TRIBUTE_WEBHOOK_URL=$API_URL/v1/webhooks/tribute"
+echo "PREMIUM_STATUS_URL=$API_URL/v1/premium"
 echo "GATEWAY_ID=$GATEWAY_ID"
 echo "FUNCTION_ID=$FUNCTION_ID"
 echo "=============================================="
-echo "Скопируй сюда только строку API_BASE. Токен бота и содержимое Lockbox не присылай."
-echo "Следующим шагом я подключу URL к frontend, добавлю облачную синхронизацию и onboarding."
+echo "Скопируй сюда только строки API_BASE и TRIBUTE_WEBHOOK_URL. Секреты не присылай."
+echo "После проверки подключим статус Premium в frontend."
