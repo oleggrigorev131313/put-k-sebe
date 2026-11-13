@@ -8,6 +8,7 @@ GATEWAY_SA_NAME="put-k-sebe-gateway"
 DB_NAME="put-k-sebe-db"
 SECRET_NAME="put-k-sebe-telegram-bot"
 ADMIN_SECRET_NAME="put-k-sebe-admin-password"
+TRIBUTE_SECRET_NAME="put-k-sebe-tribute-api-key"
 FUNCTION_NAME="put-k-sebe-api"
 GATEWAY_NAME="put-k-sebe-gateway"
 REPO_URL="https://github.com/oleggrigorev131313/put-k-sebe.git"
@@ -127,6 +128,16 @@ if ! yc lockbox secret list-access-bindings "$ADMIN_SECRET_ID" 2>/dev/null | gre
 fi
 echo "    Пароль админ-панели хранится в Lockbox."
 
+echo "Подключаю API-ключ Tribute из Lockbox..."
+TRIBUTE_SECRET_ID="$(printf '%s' "$ADMIN_SECRETS_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("secrets",[]); print(next((x["id"] for x in a if x.get("name")=="put-k-sebe-tribute-api-key"), ""))')"
+[[ -n "$TRIBUTE_SECRET_ID" ]] || fail "Не найден Lockbox secret $TRIBUTE_SECRET_NAME"
+TRIBUTE_SECRET_INFO="$(yc lockbox secret get "$TRIBUTE_SECRET_ID" --format json)"
+TRIBUTE_VERSION_ID="$(printf '%s' "$TRIBUTE_SECRET_INFO" | python3 -c 'import json,sys; print(json.load(sys.stdin)["current_version"]["id"])')"
+if ! yc lockbox secret list-access-bindings "$TRIBUTE_SECRET_ID" 2>/dev/null | grep -q "$SA_ID"; then
+  yc lockbox secret add-access-binding --id "$TRIBUTE_SECRET_ID" --role lockbox.payloadViewer --service-account-id "$SA_ID"
+fi
+echo "    API-ключ Tribute подключён через Lockbox."
+
 echo "[5/8] Создаю приватный бакет для ZIP-файла функции..."
 BUCKET_NAME="put-k-sebe-fn-${CLOUD_ID:0:20}"
 OBJECT_KEY="functions/put-k-sebe-api.zip"
@@ -171,6 +182,7 @@ yc serverless function version create \
   --environment "YDB_ENDPOINT=$YDB_ENDPOINT,YDB_DATABASE=$YDB_DATABASE" \
   --secret "environment-variable=BOT_TOKEN,id=$SECRET_ID,version-id=$VERSION_ID,key=bot_token" \
   --secret "environment-variable=ADMIN_PASSWORD,id=$ADMIN_SECRET_ID,version-id=$ADMIN_VERSION_ID,key=admin_password" \
+  --secret "environment-variable=TRIBUTE_API_KEY,id=$TRIBUTE_SECRET_ID,version-id=$TRIBUTE_VERSION_ID,key=api_key" \
   --description "Put-k-sebe API deployment" >/dev/null
 
 # Cloud Functions copies the package during version creation; remove the temporary object.
@@ -187,7 +199,7 @@ x-yc-apigateway:
   cors:
     origin: '*'
     methods: [GET, PUT, DELETE, POST, OPTIONS]
-    allowedHeaders: [Content-Type, X-Telegram-Init-Data, X-Admin-Password]
+    allowedHeaders: [Content-Type, X-Telegram-Init-Data, X-Admin-Password, trbt-signature]
     maxAge: 3600
 paths:
   /health:
@@ -196,6 +208,28 @@ paths:
       responses:
         "200":
           description: Health status
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /v1/webhooks/tribute:
+    post:
+      operationId: tributeWebhook
+      responses:
+        "200":
+          description: Tribute event processed
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /v1/premium:
+    get:
+      operationId: getPremiumStatus
+      responses:
+        "200":
+          description: Premium entitlement status
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
