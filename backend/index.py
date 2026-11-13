@@ -904,6 +904,65 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
             "exception_type":type(exc).__name__, "detail":type(exc).__name__ + ": " + safe_detail})
 
 
+
+def _deepseek_analyze_onboarding(user_id):
+    import urllib.error
+    state = _read_state(user_id)
+    onboarding = state.get("onboarding") if isinstance(state, dict) else None
+    if not isinstance(onboarding, dict):
+        return _json_response(404, {"error":"onboarding_not_found"})
+    cache_key = "onboarding-profile:v1"
+    cached = _db().execute_with_retries(
+        """
+        DECLARE $user_id AS Utf8;
+        DECLARE $entry_id AS Utf8;
+        SELECT analysis_text, input_tokens, output_tokens, created_at
+        FROM ai_analyses WHERE user_id = $user_id AND entry_id = $entry_id;
+        """,
+        parameters={"$user_id": user_id, "$entry_id": cache_key},
+    )
+    for result_set in cached:
+        for row in result_set.rows:
+            return _json_response(200, {"ok":True,"cached":True,"analysis":str(row.analysis_text)})
+    prompt = (
+        "Ты — персональный аналитик приложения «Путь к себе». На основе только ответов анкеты "
+        "предложи не более трёх осторожных гипотез о возможных привычных убеждениях или реакциях. "
+        "Не ставь диагнозов, не называй когнитивные искажения паттернами, не делай выводов о личности. "
+        "Не выдавай гипотезы за факты. Формулируй каждую гипотезу от первого лица простыми словами, "
+        "как мысль, которую человек может узнать или отвергнуть. Если данных мало — прямо скажи это. "
+        "Верни краткое вступление, затем для каждой гипотезы отдельную строку строго формата "
+        "'Паттерн анкеты: формулировка от первого лица | когда или почему эта мысль может возникать'. "
+        "Не более 220 слов."
+    )
+    try:
+        data = _deepseek_chat([
+            {"role":"system","content":prompt},
+            {"role":"user","content":"Ответы анкеты пользователя:\n"+json.dumps({
+                "что_сейчас_беспокоит":str(onboarding.get("main_issue") or "")[:1500],
+                "важные_сферы":onboarding.get("areas") or [],
+                "знакомые_мысли":onboarding.get("thoughts") or [],
+                "обычные_реакции":onboarding.get("reactions") or [],
+                "чего_хочет_изменить":str(onboarding.get("desired_changes") or "")[:1500],
+            },ensure_ascii=False)}
+        ],max_tokens=1800,timeout=45)
+        choices=data.get("choices") or []
+        message=choices[0].get("message") if choices else {}
+        analysis=str((message or {}).get("content") or "").strip()
+        if not analysis:
+            return _json_response(502,{"error":"empty_model_response"})
+        usage=data.get("usage") or {}
+        _save_ai_result(user_id,cache_key,analysis,
+            {"input_tokens":int(usage.get("prompt_tokens",0)),"output_tokens":int(usage.get("completion_tokens",0))},
+            datetime.now(timezone.utc).isoformat())
+        return _json_response(200,{"ok":True,"cached":False,"analysis":analysis})
+    except urllib.error.HTTPError as exc:
+        LOG.error("Onboarding analysis HTTP error status=%s",exc.code)
+        return _json_response(502,{"error":"deepseek_provider_error","provider_status":int(exc.code)})
+    except Exception as exc:
+        LOG.exception("Onboarding analysis failed type=%s",type(exc).__name__)
+        return _json_response(502,{"error":"onboarding_analysis_failed","exception_type":type(exc).__name__})
+
+
 def _deepseek_connection_test():
     import urllib.error
     try:
@@ -966,6 +1025,13 @@ def handler(event, context):
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error": "deepseek_not_configured"})
             return _deepseek_connection_test()
+        if path == "/v1/ai/analyze-onboarding" and method == "POST":
+            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            _ensure_schema()
+            if not DEEPSEEK_API_KEY:
+                return _json_response(503, {"error":"deepseek_not_configured"})
+            return _deepseek_analyze_onboarding(user_id)
+
         if path == "/v1/ai/daily-summary" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             _ensure_schema()
