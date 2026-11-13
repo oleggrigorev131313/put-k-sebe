@@ -187,7 +187,7 @@ yc serverless function version create \
   --runtime python312 \
   --entrypoint index.handler \
   --memory 512MB \
-  --execution-timeout 30s \
+  --execution-timeout 60s \
   --package-bucket-name "$BUCKET_NAME" \
   --package-object-name "$OBJECT_KEY" \
   --service-account-id "$SA_ID" \
