@@ -906,6 +906,7 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
 
 
 def _deepseek_analyze_onboarding(user_id):
+    from datetime import datetime, timezone
     import urllib.error
     state = _read_state(user_id)
     onboarding = state.get("onboarding") if isinstance(state, dict) else None
