@@ -100,8 +100,7 @@ function addSuggestedPattern(name,detail,entryId){
 }
 async function analyzeEntry(id,buttonEl){
  if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
- if(!premiumStatus||!premiumStatus.active){toast("Персональный аналитик доступен в Premium.");return;}
- var result=document.getElementById("ai-result");
+  var result=document.getElementById("ai-result");
  if(buttonEl){buttonEl.disabled=true;buttonEl.textContent="Аналитик изучает запись…";}
  try{
   var response=await fetch(API_BASE+"/v1/ai/analyze-entry",{method:"POST",headers:Object.assign(apiHeaders(),{"X-User-Timezone":Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"}),body:JSON.stringify({entry_id:String(id),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
@@ -413,6 +412,7 @@ document.getElementById("clear").onclick=async function(){if(confirm("Удали
 render();
 trackInitialSession();
 initCloud();
+refreshAiUsage();
 })();
 </script>
 </body>
