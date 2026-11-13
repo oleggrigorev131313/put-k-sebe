@@ -521,11 +521,31 @@ def _deepseek_chat(messages, max_tokens=3000, timeout=55):
         return json.loads(response.read().decode("utf-8"))
 
 
+def _diary_entry_quality_error(entry):
+    """Reject empty or fragmentary input before spending tokens on a personal analysis."""
+    import re
+    situation = str(entry.get("situation") or "").strip()
+    thought = str(entry.get("thought") or "").strip()
+    core = (situation + " " + thought).strip()
+    words = re.findall(r"[A-Za-zА-Яа-яЁё0-9]+", core)
+    meaningful = [word for word in words if len(word) >= 3]
+    unique = {word.casefold() for word in meaningful}
+    letters = re.findall(r"[A-Za-zА-Яа-яЁё]", core)
+    if len(core) < 28 or len(meaningful) < 4 or len(unique) < 3 or len(letters) < 20:
+        return ("Пока не получается разобрать запись: в ситуации и автоматической мысли "
+                "слишком мало понятного контекста. Добавь несколько предложений: что именно "
+                "произошло и какая мысль возникла у тебя. После этого можно повторить анализ.")
+    return None
+
+
 def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
     from datetime import datetime, timezone
     import urllib.error
     stage = "load_user_state"
     _ensure_schema()
+    premium = _premium_status(user_id)
+    if not premium.get("active"):
+        return _json_response(403, {"error": "premium_required", "message": "Персональный анализ доступен только в Premium. Активируйте пробный период или выберите тариф."})
     state = _read_state(user_id)
     if not isinstance(state, dict):
         return _json_response(404, {"error": "user_state_not_found"})
@@ -533,8 +553,11 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
     entry = next((item for item in entries if str(item.get("id")) == entry_id), None)
     if not isinstance(entry, dict):
         return _json_response(404, {"error": "entry_not_found"})
-    # Namespace cache by model so old OpenAI analyses are not returned as DeepSeek results.
-    cache_entry_id = "deepseek-flash:v3-belief-pattern:" + entry_id
+    quality_error = _diary_entry_quality_error(entry)
+    if quality_error:
+        return _json_response(422, {"error": "entry_not_clear", "message": quality_error})
+    # New cache namespace also invalidates analyses produced from malformed test entries.
+    cache_entry_id = "deepseek-flash:v4-quality-gate:" + entry_id
     stage = "read_analysis_cache"
     cached = _db().execute_with_retries(
         """
@@ -573,7 +596,10 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
         "Помогай человеку в рамках навыков КПТ и бережной саморефлексии. "
         "Отвечай по-русски, уважительно, конкретно и без шаблонных комплиментов. "
         "Не ставь диагнозов, не делай выводов о личности по одной записи, не выдавай гипотезы за факты. "
-        "Не навязывай позитивное мышление. Если данных недостаточно, прямо скажи об этом. "
+        "Не навязывай позитивное мышление. Если данные выглядят как бессвязный набор слов, случайные символы, "
+        "обрывки или не позволяют понять событие и мысль, НЕ пытайся угадывать смысл: скажи, что запись "
+        "не удалось расшифровать, попроси переписать её и НЕ предлагай когнитивные искажения или паттерны. "
+        "Если данных недостаточно, прямо скажи об этом. "
         "Не ищи когнитивное искажение там, где его нет. "
         "Структура ответа: 1) Что видно в ситуации. "
         "2) Возможная автоматическая мысль и когнитивное искажение (только если есть основания; "
