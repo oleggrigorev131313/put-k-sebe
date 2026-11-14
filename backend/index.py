@@ -1171,6 +1171,155 @@ def _run_due_daily_summaries():
                     LOG.exception("Scheduled summary failed")
     
 
+MINI_APP_URL = "https://oleggrigorev131313.github.io/put-k-sebe/"
+WELCOME_PHOTO_URL = MINI_APP_URL + "assets/bot/welcome.jpg"
+DIARY_BUTTON_TEXT = "Открыть дневник"
+TELEGRAM_CAPTION_LIMIT = 1024
+# Domain separation for the webhook secret derived from BOT_TOKEN. Not a credential.
+# If TELEGRAM_WEBHOOK_SECRET is set, that value is used instead of the derivation.
+TELEGRAM_WEBHOOK_SECRET_LABEL = b"put-k-sebe-telegram-webhook-v1"
+WELCOME_CAPTION = """\
+Привет! 👋 На связи команда ПЕРЕСМОТР.
+
+У каждого из нас есть мысли, которые повторяются снова и снова: «я недостаточно хорош», «у меня всегда всё идёт не так», «я должен быть лучше всех». Часто мы их даже не замечаем, а они годами влияют на настроение, решения и отношения.
+
+ПЕРЕСМОТР помогает:
+🔍 увидеть свои повторяющиеся паттерны мышления
+✍️ разобрать, где мысль искажает реальность
+🔄 переписать её на более честный и добрый взгляд на себя
+📊 следить, как со временем меняется твоё состояние
+
+Шаг за шагом ты отпускаешь убеждения, которые причиняют боль, и становишься той версией себя, которой хочешь быть.
+
+👇 Нажми кнопку «Открыть дневник» под этим сообщением, и он откроется прямо в Telegram. Ничего скачивать не нужно.\
+"""
+
+
+def _telegram_text_units(text):
+    # Bot API length limits are UTF-16 code units, which is what Telegram stores.
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _is_start_command(text):
+    if not isinstance(text, str):
+        return False
+    head = text.strip().split(None, 1)[0] if text.strip() else ""
+    command = head.split("@", 1)[0]
+    return command.casefold() == "/start"
+
+
+def _expected_webhook_secret():
+    configured = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
+    if configured:
+        return configured
+    if not BOT_TOKEN:
+        return ""
+    return hmac.new(
+        BOT_TOKEN.encode("utf-8"),
+        TELEGRAM_WEBHOOK_SECRET_LABEL,
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _telegram_webhook_authorized(headers):
+    expected = _expected_webhook_secret()
+    provided = str(headers.get("x-telegram-bot-api-secret-token", "")).strip()
+    if not expected or not provided:
+        return False
+    return hmac.compare_digest(expected.encode("utf-8"), provided.encode("utf-8"))
+
+
+def _diary_reply_markup():
+    return {
+        "inline_keyboard": [[{
+            "text": DIARY_BUTTON_TEXT,
+            "web_app": {"url": MINI_APP_URL},
+        }]]
+    }
+
+
+def build_start_reply(chat_id, caption=None):
+    """Telegram methods for /start. No parse_mode: the caption is plain text."""
+    text = WELCOME_CAPTION if caption is None else caption
+    button = _diary_reply_markup()
+    photo = {"chat_id": chat_id, "photo": WELCOME_PHOTO_URL}
+    if _telegram_text_units(text) <= TELEGRAM_CAPTION_LIMIT:
+        photo["caption"] = text
+        photo["reply_markup"] = button
+        return [("sendPhoto", photo)]
+    return [
+        ("sendPhoto", photo),
+        ("sendMessage", {"chat_id": chat_id, "text": text, "reply_markup": button}),
+    ]
+
+
+def _telegram_bot_call(method, payload):
+    import urllib.error
+    import urllib.request
+    if not BOT_TOKEN:
+        LOG.error("Telegram %s skipped: BOT_TOKEN is not configured", method)
+        return
+    # The token stays in the request URL only. Do not log the URL or the payload.
+    url = "https://api.telegram.org/bot" + BOT_TOKEN + "/" + method
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=25) as response:
+            raw = response.read(16_000)
+        try:
+            parsed = json.loads(raw.decode("utf-8"))
+        except json.JSONDecodeError:
+            LOG.error("Telegram %s returned unreadable JSON", method)
+            return
+        if not parsed.get("ok"):
+            LOG.error("Telegram %s rejected error_code=%s", method, parsed.get("error_code"))
+    except urllib.error.HTTPError as exc:
+        LOG.error("Telegram %s failed status=%s", method, getattr(exc, "code", "unknown"))
+    except Exception as exc:
+        LOG.error("Telegram %s failed type=%s", method, type(exc).__name__)
+
+
+def _handle_telegram_webhook(headers, body):
+    # Bot updates only. No YDB reads or writes: /start does not create a profile.
+    if not _telegram_webhook_authorized(headers):
+        LOG.error("Telegram webhook rejected")
+        return _json_response(401, {"error": "unauthorized"})
+    try:
+        if not isinstance(body, str):
+            body = ""
+        if len(body.encode("utf-8")) > 100_000:
+            LOG.error("Telegram webhook body too large")
+            return _json_response(200, {"ok": True})
+        try:
+            update = json.loads(body or "{}")
+        except json.JSONDecodeError:
+            LOG.error("Telegram webhook ignored: invalid JSON")
+            return _json_response(200, {"ok": True})
+        message = update.get("message") if isinstance(update, dict) else None
+        if not isinstance(message, dict) or not _is_start_command(message.get("text")):
+            return _json_response(200, {"ok": True})
+        chat = message.get("chat") if isinstance(message.get("chat"), dict) else {}
+        # web_app buttons are delivered in a private chat with the bot.
+        if chat.get("type") not in (None, "private"):
+            return _json_response(200, {"ok": True})
+        chat_id = chat.get("id")
+        if isinstance(chat_id, bool) or not isinstance(chat_id, int):
+            LOG.error("Telegram /start ignored: chat id missing")
+            return _json_response(200, {"ok": True})
+        for method, payload in build_start_reply(chat_id):
+            _telegram_bot_call(method, payload)
+        LOG.info("Telegram /start reply attempted")
+        return _json_response(200, {"ok": True})
+    except Exception as exc:
+        LOG.error("Telegram webhook failed type=%s", type(exc).__name__)
+        return _json_response(200, {"ok": True})
+
+
 def handler(event, context):
     try:
         messages=event.get("messages") if isinstance(event,dict) else None
@@ -1257,6 +1406,9 @@ def handler(event, context):
                     "detail": str(exc)[:700],
                     "checks": {"tables": tables},
                 })
+
+        if path == "/v1/webhooks/telegram" and method == "POST":
+            return _handle_telegram_webhook(headers, body)
 
         if path == "/v1/webhooks/tribute" and method == "POST":
             return _handle_tribute_webhook(

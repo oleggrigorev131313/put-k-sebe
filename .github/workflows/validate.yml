@@ -21,6 +21,9 @@ jobs:
         run: |
           python -m py_compile backend/index.py
           python -m py_compile backend/migrate.py
+          python -m py_compile backend/test_telegram_start.py
+      - name: Simulate Telegram /start welcome
+        run: python backend/test_telegram_start.py
       - name: Check deployment script syntax
         run: bash -n backend/deploy.sh
       - name: Check frontend JavaScript syntax
