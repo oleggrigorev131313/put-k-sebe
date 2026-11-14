@@ -528,7 +528,24 @@ var p=practices[i],k=new Date().toDateString()+"-"+i,isDone=(state.practiceHisto
 modal('<div class="eyebrow">Практика · '+p.time+'</div><h2>'+p.icon+' '+p.title+'</h2><p>'+p.text+'</p><button class="btn primary full" id="done">'+(isDone?"Снять отметку":"Отметить выполненной")+'</button>');
 document.getElementById("done").onclick=function(){state.practiceHistory=state.practiceHistory||[];var at=state.practiceHistory.findIndex(function(x){return x.practiceId===i&&new Date(x.completedAt).toDateString()===new Date().toDateString();});if(at>=0){state.practiceHistory.splice(at,1);toast("Отметка снята");}else{state.practiceHistory.push({id:"ph"+Date.now(),practiceId:i,title:p.title,completedAt:new Date().toISOString()});trackEvent("practice_completed");toast("Практика добавлена в историю");}save();closeModal();render();};
 }
-function settings(){modal('<h2>Настройки и данные</h2><p>'+(({
+function manageConsents(){
+modal('<h2>Настройки конфиденциальности</h2><p>AI-обработка использует необходимые записи и ответы анкеты. Если отключить хранение истории, сохранённые AI-результаты будут удалены.</p>'+
+'<label style="display:flex;gap:9px;margin:14px 0;font-size:13px"><input type="checkbox" id="consent-processing" '+(consentSettings.ai_processing?"checked":"")+'>Разрешить AI-обработку</label>'+
+'<label style="display:flex;gap:9px;margin:14px 0;font-size:13px"><input type="checkbox" id="consent-history" '+(consentSettings.ai_history_storage?"checked":"")+'>Сохранять историю AI</label>'+
+'<button class="btn primary full" id="save-consents">Сохранить настройки</button>');
+document.getElementById("save-consents").onclick=async function(){
+var processing=document.getElementById("consent-processing").checked;
+var history=document.getElementById("consent-history").checked;
+if(history&&!processing){toast("Для хранения истории нужно разрешить AI-обработку.");return;}
+try{var response=await fetch(API_BASE+"/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:processing,ai_history_storage:history})});
+var data=await response.json();if(!response.ok)throw new Error(data.error||"Не удалось сохранить настройки");
+consentSettings=data.consents;
+if(!processing){state.entries.forEach(function(entry){delete entry.analysis;});save();}
+closeModal();settings();toast("Настройки сохранены.");
+}catch(e){toast(e.message||"Ошибка сохранения.");}
+};
+}
+function settings(){modal('<h2>Настройки и данные</h2><button class="btn outline full" id="manage-consents">Настройки конфиденциальности</button><div style="height:9px"></div><p>'+(({
 synced:"Облачная синхронизация подтверждена: последние изменения отправлены в Yandex Cloud.",
 connected:"Соединение с облаком установлено.",
 pending:"Есть изменения, ожидающие синхронизации.",
@@ -541,7 +558,7 @@ error:"Ошибка облачного соединения: "+(cloudErrorText||
 starting:"Облачное соединение не используется.",
  paused:"Облачная синхронизация временно отключена. Данные сохраняются только на этом устройстве."
 })[cloudStatus]||"Статус облачного соединения пока не определён.")+'</p><button class="btn secondary full" id="export">Скачать резервную копию JSON</button><div style="height:9px"></div><button class="btn outline full" id="import">Восстановить из JSON</button><input type="file" id="file" accept="application/json" hidden><div style="height:9px"></div><button class="btn outline full" id="clear">Удалить все мои данные</button><div class="note">Не записывай сведения, по которым тебя можно идентифицировать, если не хочешь хранить их в браузере устройства. Очистка данных браузера может удалить записи.</div>');
-document.getElementById("export").onclick=function(){var blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="put-k-sebe-backup.json";a.click();URL.revokeObjectURL(url);};
+document.getElementById("manage-consents").onclick=manageConsents;document.getElementById("export").onclick=function(){var blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="put-k-sebe-backup.json";a.click();URL.revokeObjectURL(url);};
 var f=document.getElementById("file");document.getElementById("import").onclick=function(){f.click();};f.onchange=async function(){try{var x=JSON.parse(await f.files[0].text());if(!Array.isArray(x.entries)||!Array.isArray(x.patterns))throw Error();state=Object.assign({},defaults,x);save();closeModal();render();toast("Данные восстановлены");}catch(e){toast("Не удалось прочитать файл");}};
 document.getElementById("clear").onclick=async function(){if(confirm("Удалить все записи, паттерны и ответы анкеты? Сначала скачай резервную копию, если она нужна.")){if(cloudReady&&API_BASE&&tg&&tg.initData){try{var r=await fetch(API_BASE+"/v1/state",{method:"DELETE",headers:apiHeaders()});if(!r.ok)throw new Error("delete failed");}catch(e){toast("Не удалось удалить облачные данные. Проверь соединение.");return;}}state=JSON.parse(JSON.stringify(defaults));onboardingDraft=emptyOnboarding();saveLocalOnly();closeModal();go("onboarding");}};
 }
