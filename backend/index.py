@@ -896,7 +896,8 @@ def _get_previous_daily_summary(user_id, timezone_name="UTC"):
     for result_set in rows:
         for row in result_set.rows:
             return _json_response(200, {"ok":True, "day":day_key,
-                "summary":str(row.analysis_text), "created_at":str(row.created_at)})    return _json_response(404, {"error":"previous_summary_not_found",
+                "summary":str(row.analysis_text), "created_at":str(row.created_at)})
+    return _json_response(404, {"error":"previous_summary_not_found",
         "message":"Сохранённая сводка за предыдущий день не найдена."})
 
 
@@ -1163,6 +1164,7 @@ def _run_due_daily_summaries():
     
 
 def handler(event, context):
+    print("PUT_K_SEBE_INVOCATION handler_entered", flush=True)
     try:
         messages=event.get("messages") if isinstance(event,dict) else None
         if messages:
@@ -1191,6 +1193,8 @@ def handler(event, context):
                     "ok": True, "checks": {"handler": "ok", "ydb": "ok"}
                 })
             except Exception as exc:
+                print("PUT_K_SEBE_503 stage=ydb_connect_or_query exception_type=%s error=%r" %
+                      (type(exc).__name__, exc), flush=True)
                 LOG.exception("Health check failed stage=ydb_connect_or_query")
                 return _json_response(503, {
                     "ok": False, "stage": "ydb_connect_or_query",
@@ -1206,6 +1210,8 @@ def handler(event, context):
                     "ok": True, "checks": {"handler": "ok", "ydb": "ok", "schema": "ok"}
                 })
             except Exception as exc:
+                print("PUT_K_SEBE_503 stage=schema_initialization exception_type=%s error=%r" %
+                      (type(exc).__name__, exc), flush=True)
                 LOG.exception("Health check failed stage=schema_initialization")
                 return _json_response(503, {
                     "ok": False, "stage": "schema_initialization",
@@ -1227,7 +1233,8 @@ def handler(event, context):
                 processing = payload.get("ai_processing")
                 history = payload.get("ai_history_storage")
                 if not isinstance(processing, bool) or not isinstance(history, bool) or (history and not processing):
-                    raise ValueError("invalid_consent_values")            except (json.JSONDecodeError, ValueError, TypeError) as exc:
+                    raise ValueError("invalid_consent_values")
+            except (json.JSONDecodeError, ValueError, TypeError) as exc:
                 return _json_response(400, {"error": str(exc)})
             previous = _get_user_consents(user_id)
             saved = _save_user_consents(user_id, processing, history)
@@ -1502,10 +1509,11 @@ def handler(event, context):
 
     except ValueError as exc:
         return _json_response(401, {"error": str(exc)})
-    except Exception:
-        # Log the traceback and request route only; never log bodies, initData,
-        # credentials, or diary content. This preserves the real backend failure
-        # in Cloud Functions logs while keeping user data private.
+    except Exception as exc:
+        # Never log request bodies, initData, credentials, or diary content.
+        print("PUT_K_SEBE_503 stage=handler method=%s path=%s exception_type=%s error=%r" %
+              (locals().get("method", "UNKNOWN"),
+               locals().get("path", "UNKNOWN"), type(exc).__name__, exc), flush=True)
         LOG.exception("API request failed method=%s path=%s",
                       locals().get("method", "UNKNOWN"),
                       locals().get("path", "UNKNOWN"))
