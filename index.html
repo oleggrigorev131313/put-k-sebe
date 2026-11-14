@@ -109,7 +109,7 @@ function addSuggestedPattern(name,detail,entryId){
   toast("Запись привязана к существующему паттерну.");closeModal();go("patterns");return;
  }
  var id="p"+Date.now();
- state.patterns.push({id:id,name:name,detail:detail||"",status:"suggested",source:"ai",createdAt:new Date().toISOString(),entryId:String(entryId)});
+ state.patterns.push({id:id,name:name,detail:detail||"",status:"suggested",source:"ai",createdAt:new Date().toISOString(),entryId:String(entryId)});trackEvent("pattern_created",{source:"ai"});
  linkEntryToPattern(entryId,id);
  save();toast("Гипотеза добавлена, а запись привязана к ней.");closeModal();go("patterns");
 }
@@ -132,6 +132,7 @@ async function analyzeEntry(id,buttonEl){
   }
   var entry=state.entries.find(function(x){return String(x.id)===String(id);});
   if(entry&&consentSettings.ai_history_storage){entry.analysis=data.analysis||"";save();}
+   trackEvent("ai_analysis_created",{entry_id:String(id),cached:!!data.cached});
   if(result){result.style.display="block";result.innerHTML=renderAnalysis(data.analysis||"Анализ не получен.",id);}
   var accept=document.getElementById("accept-ai-pattern");
   if(accept){var mm=String(data.analysis||"").match(/\*{0,2}Гипотеза паттерна:\*{0,2}\s*\*{0,2}([^|\n*]+)\*{0,2}\s*\|\s*\*{0,2}([^\n*]+)\*{0,2}/i);if(mm)accept.onclick=function(){addSuggestedPattern(mm[1].trim(),mm[2].trim(),id);};}
@@ -171,7 +172,7 @@ async function runDailySummary(buttonEl){
   }
   var dailyPracticeLines=String(data.summary||"").split("\n").filter(function(line){return /^Практика на завтра:/i.test(line.trim());});
   var dailyPracticeCards=dailyPracticeLines.map(function(line,index){var parts=line.replace(/^Практика на завтра:\s*/i,"").split("|").map(function(x){return x.trim();});if(parts.length<2)return "";return '<div class="card ai-suggestion" style="margin-top:9px"><b>'+esc(parts[0])+'</b><p>'+esc(parts[1])+'</p><small>'+esc(parts[2]||"5–10 минут")+'</small><button class="btn secondary full" style="margin-top:9px" data-daily-practice="'+index+'">＋ Добавить в план на завтра</button></div>';}).join("");
-  state.dailySummaryMeta={day:localDayKey()};save();trackEvent("daily_summary_created");
+  state.dailySummaryMeta={day:localDayKey()};save();if(!data.cached)trackEvent("daily_summary_created");
   modal('<div class="eyebrow">Итоги дня</div><h2>Твоя дневная сводка</h2><div class="note analysis-text" style="color:var(--ink);font-size:12px;line-height:1.65">'+formatAnalysis(String(data.summary||"Сводка не получена.").replace(/^Практика на завтра:.*$/gmi,"").trim())+'</div>'+(dailyPracticeCards?'<h3 style="margin-top:14px">Небольшие шаги на завтра</h3>'+dailyPracticeCards:'')+(state.patterns.some(function(p){return p.status==="suggested";})?'<p>Есть гипотезы паттернов, которые можно проверить в соответствующем разделе.</p><button class="btn secondary full" id="summary-patterns">Посмотреть предложенные паттерны</button>':''));
   var summaryPatterns=document.getElementById("summary-patterns");if(summaryPatterns)summaryPatterns.onclick=function(){closeModal();go("patterns");};
   document.querySelectorAll("[data-daily-practice]").forEach(function(btn){btn.onclick=function(){var line=dailyPracticeLines[Number(btn.dataset.dailyPractice)]||"",parts=line.replace(/^Практика на завтра:\s*/i,"").split("|").map(function(x){return x.trim();});if(parts.length<2)return;state.personalPractices=state.personalPractices||[];state.personalPractices.unshift({id:"pp"+Date.now(),title:parts[0],instruction:parts[1],duration:parts[2]||"5–10 минут",status:"active",source:"daily_review",createdAt:new Date().toISOString(),feedback:null});save();btn.disabled=true;btn.textContent="✓ Добавлено в план";toast("Практика добавлена в твой план.");};});
@@ -385,9 +386,9 @@ return '<div class="eyebrow">Повторяющиеся сценарии</div><h
 
 function patternAction(id,action){
  var p=(state.patterns||[]).find(function(x){return String(x.id)===String(id);});if(!p)return;
- if(action==="confirm"){p.status="confirmed";p.confirmedAt=new Date().toISOString();save();render();toast("Паттерн подтверждён.");return;}
- if(action==="reject"){p.status="rejected";p.rejectedAt=new Date().toISOString();save();render();toast("Гипотеза отклонена. Она останется в истории решений.");return;}
- if(action==="edit"){modal('<h2>Уточнить паттерн</h2><p class="sub">Переформулируй гипотезу так, чтобы она точно отражала твой опыт.</p><div class="field"><label>Формулировка</label><input class="input" id="edit-pattern-name" value="'+esc(p.name)+'"></div><div class="field"><label>Описание</label><textarea class="area" id="edit-pattern-detail">'+esc(p.detail||"")+'</textarea></div><button class="btn primary full" id="edit-pattern-save">Сохранить и подтвердить</button>');document.getElementById("edit-pattern-save").onclick=function(){var name=document.getElementById("edit-pattern-name").value.trim();if(!name){toast("Добавь формулировку.");return;}p.name=name;p.detail=document.getElementById("edit-pattern-detail").value.trim();p.status="confirmed";p.confirmedAt=new Date().toISOString();save();closeModal();render();toast("Паттерн обновлён и подтверждён.");};}
+ if(action==="confirm"){p.status="confirmed";p.confirmedAt=new Date().toISOString();trackEvent("pattern_updated",{pattern_id:id,status:"confirmed"});save();render();toast("Паттерн подтверждён.");return;}
+ if(action==="reject"){p.status="rejected";p.rejectedAt=new Date().toISOString();trackEvent("pattern_updated",{pattern_id:id,status:"rejected"});save();render();toast("Гипотеза отклонена. Она останется в истории решений.");return;}
+ if(action==="edit"){modal('<h2>Уточнить паттерн</h2><p class="sub">Переформулируй гипотезу так, чтобы она точно отражала твой опыт.</p><div class="field"><label>Формулировка</label><input class="input" id="edit-pattern-name" value="'+esc(p.name)+'"></div><div class="field"><label>Описание</label><textarea class="area" id="edit-pattern-detail">'+esc(p.detail||"")+'</textarea></div><button class="btn primary full" id="edit-pattern-save">Сохранить и подтвердить</button>');document.getElementById("edit-pattern-save").onclick=function(){var name=document.getElementById("edit-pattern-name").value.trim();if(!name){toast("Добавь формулировку.");return;}p.name=name;p.detail=document.getElementById("edit-pattern-detail").value.trim();p.status="confirmed";p.confirmedAt=new Date().toISOString();trackEvent("pattern_updated",{pattern_id:id,status:"confirmed"});save();closeModal();render();toast("Паттерн обновлён и подтверждён.");};}
 }
 function patternDateKey(value){var d=new Date(value);if(isNaN(d.getTime()))return "";return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function showPatternEntries(patternId,filterDate){
@@ -436,14 +437,14 @@ function addMicroPractice(entryId){
  if(!m){toast("В анализе нет отдельной рекомендации для практики.");return;}
  state.personalPractices=state.personalPractices||[];
  if(state.personalPractices.some(function(p){return p.sourceEntryId===String(entryId)&&p.status!=="rejected";})){toast("Практика по этой записи уже добавлена.");return;}
- state.personalPractices.unshift({id:"pp"+Date.now(),title:m[1].trim(),instruction:m[2].trim(),duration:(m[3]||"5–10 минут").trim(),sourceEntryId:String(entryId),status:"active",createdAt:new Date().toISOString(),feedback:null});
+ state.personalPractices.unshift({id:"pp"+Date.now(),title:m[1].trim(),instruction:m[2].trim(),duration:(m[3]||"5–10 минут").trim(),sourceEntryId:String(entryId),status:"active",createdAt:new Date().toISOString(),feedback:null});trackEvent("personal_practice_added");
  save();toast("Практика добавлена в твой план.");go("library");
 }
 function personalPracticeDetail(id){
  var p=(state.personalPractices||[]).find(function(x){return String(x.id)===String(id);});if(!p)return;
  var done=p.status==="completed";
  modal('<div class="eyebrow">Твоя персональная практика · '+esc(p.duration||"5–10 минут")+'</div><h2>'+esc(p.title)+'</h2><p>'+esc(p.instruction)+'</p><p class="sub">Статус: '+(done?"Выполнена":p.status==="skipped"?"Пропущена":"В плане на сегодня")+'</p>'+(done?'<div class="note">Эта практика уже отмечена выполненной.</div>':'<button class="btn primary full" id="personal-done">Отметить выполненной</button><button class="btn outline full" id="personal-skip" style="margin-top:8px">Пропустить сегодня</button>')+'<button class="textbtn" id="personal-remove" style="margin-top:12px">Убрать из плана</button>');
- var d=document.getElementById("personal-done");if(d)d.onclick=function(){p.status="completed";p.completedAt=new Date().toISOString();state.practiceHistory=state.practiceHistory||[];state.practiceHistory.push({id:"ph"+Date.now(),personalPracticeId:p.id,title:p.title,completedAt:p.completedAt});trackEvent("practice_completed");save();closeModal();practiceFeedback(p.id);};
+ var d=document.getElementById("personal-done");if(d)d.onclick=function(){p.status="completed";p.completedAt=new Date().toISOString();state.practiceHistory=state.practiceHistory||[];state.practiceHistory.push({id:"ph"+Date.now(),personalPracticeId:p.id,title:p.title,completedAt:p.completedAt});trackEvent("practice_completed");trackEvent("personal_practice_completed",{practice_id:p.id});save();closeModal();practiceFeedback(p.id);};
  var sk=document.getElementById("personal-skip");if(sk)sk.onclick=function(){p.status="skipped";p.skippedAt=new Date().toISOString();save();closeModal();render();};
  document.getElementById("personal-remove").onclick=function(){p.status="rejected";p.rejectedAt=new Date().toISOString();save();closeModal();render();};
 }
