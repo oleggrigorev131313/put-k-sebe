@@ -65,9 +65,19 @@ GATEWAY_SA_ID="$(printf '%s' "$GATEWAY_SA_JSON" | python3 -c 'import json,sys; p
 DB_JSON="$(yc ydb database get "$DB_NAME" --format json)" || fail "Не найдена база $DB_NAME"
 DB_STATUS="$(printf '%s' "$DB_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')"
 [[ "$DB_STATUS" == "RUNNING" ]] || fail "YDB находится в статусе $DB_STATUS, а не RUNNING"
+DB_ID="$(printf '%s' "$DB_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 readarray -t DB_CFG < <(printf '%s' "$DB_JSON" | python3 -c 'import json,sys; u=json.load(sys.stdin)["endpoint"]; a,b=u.split("/?database=",1); print(a.rstrip("/")); print("/"+b.lstrip("/"))')
 YDB_ENDPOINT="${DB_CFG[0]}"
 YDB_DATABASE="${DB_CFG[1]}"
+
+# The function creates tables and performs read/write queries. Grant only the
+# database-scoped YDB editor role required for those operations.
+DB_BINDINGS="$(yc ydb database list-access-bindings --id "$DB_ID" --format json)" || fail "Не удалось прочитать права доступа YDB"
+HAS_YDB_EDITOR="$(printf '%s' "$DB_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",d.get("accessBindings",[])); print("yes" if any(x.get("role_id",x.get("roleId"))=="ydb.editor" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$SA_ID")"
+if [[ "$HAS_YDB_EDITOR" != "yes" ]]; then
+  yc ydb database add-access-binding --id "$DB_ID" \
+    --role ydb.editor --service-account-id "$SA_ID" >/dev/null || fail "Не удалось выдать backend-сервисному аккаунту ydb.editor на базу"
+fi
 
 echo "    Backend SA: $SA_ID"
 echo "    Gateway SA: $GATEWAY_SA_ID"
