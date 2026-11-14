@@ -22,23 +22,51 @@ Backend для Telegram Mini App на Yandex Cloud: API Gateway → Cloud Functi
 
 ## Развёртывание
 
-Одна команда в Cloud Shell:
+Скрипт не создаёт новую базу и не удаляет данные. Он обновляет существующие Cloud Function и API Gateway, при необходимости выдаёт уже используемые роли и создаёт **только отсутствующие** таблицы YDB.
 
-    curl -fsSL https://raw.githubusercontent.com/oleggrigorev131313/put-k-sebe/main/backend/deploy.sh -o /tmp/put-k-sebe-deploy.sh && bash /tmp/put-k-sebe-deploy.sh
+Из каталога репозитория или из Cloud Shell после скачивания скрипта:
 
-Скрипт сам скачивает TAR-архив актуальной версии репозитория и распаковывает его во временную папку (без Git, чтобы не зависеть от ограничений файловой системы Cloud Shell). Он сначала покажет список создаваемых ресурсов и спросит подтверждение. При первом запуске токен Telegram-бота вводится скрыто и сохраняется в Lockbox.
+    bash backend/deploy.sh --yes --ref main
 
-Скрипт использует существующие облако, папку, базу, два сервисных аккаунта и сеть `default`; проверяет их идентификаторы и не создаёт дубликаты при несовпадении. Backend service account запускает код функции и таймер, получает `ydb.editor` на конкретную базу, `storage.viewer` и `functions.functionInvoker` на каталог, а также `lockbox.payloadViewer` на используемые секреты. Отдельный gateway service account используется API Gateway только для вызова Cloud Function и не получает доступ к YDB или Lockbox. Новая версия Cloud Function явно привязывается к VPC network ID `enpcs1k734ovqk3vhce0` — это важно, чтобы при обновлении версии не потерять сетевую конфигурацию. Скрипт создаёт приватный Object Storage bucket для ZIP-файла функции (архивы свыше 3,5 МБ Cloud Functions нужно загружать этим способом), загружает пакет и удаляет временный объект после создания версии. Бакет не публичный. Токен бота вводится через скрытый prompt в терминале.
+До слияния ветки укажите её имя в `--ref`, иначе скрипт скачает `main`. Неинтерактивный режим: `--yes` или `PUT_K_SEBE_YES=1`. Пропустить миграцию: `--skip-migrate`.
 
-Для загрузки большого ZIP скрипт использует поддерживаемые Yandex Cloud параметры `--package-bucket-name` и `--package-object-name`. Бакет остаётся приватным и используется только временно для ZIP-пакета функции; после успешного создания версии объект удаляется.
+`deploy.sh` сверяет сервисный аккаунт `put-k-sebe-gateway` по имени через `yc`. Если id в облаке не совпадает с литералом в скрипте, деплой останавливается до изменений.
 
-После развёртывания скрипт напечатает API Gateway URL. Этот URL нужно добавить в frontend-конфигурацию и опубликовать новый commit в GitHub Pages.
+Успех деплоя — это `GET /health/schema` с data-plane чтением всех 9 таблиц, включая `user_consents` и `user_state`. `SELECT 1` на `/health` для этого не используется. Если проверка не прошла, скрипт печатает команду отката и завершается с ошибкой. Новая версия к этому моменту уже может быть `$latest`.
+
+## Миграция схемы
+
+`backend/migrate.py` сначала описывает существующие таблицы и создаёт только отсутствующие, по одной, с паузой и повтором при `400080`. Существующие таблицы и строки не изменяются.
+
+Токен берётся из `YC_IAM_TOKEN` или `IAM_TOKEN`, иначе из `yc iam create-token`. Endpoint и путь базы — из `yc ydb database get put-k-sebe-db` (поле `endpoint`, часть до `/?database=` и путь после него).
+
+```bash
+python3 -m pip install 'ydb>=3.20,<4'
+export YDB_ENDPOINT='grpcs://...'
+export YDB_DATABASE='/ru-central1/.../...'
+python3 backend/migrate.py --dry-run
+python3 backend/migrate.py --apply
+```
+
+## Проверка и откат
+
+```bash
+curl -sS "https://d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net/health/schema"
+```
+
+В ответе `ok` должен быть `true`, а `checks.user_consents` и `checks.user_state` — `ok`. Если нет, верните предыдущую версию функции (id печатает `deploy.sh`):
+
+```bash
+yc serverless function version set-tag --id <PREVIOUS_VERSION_ID> --tag '$latest'
+```
 
 ## Переменные функции
 
 - YDB_ENDPOINT — endpoint без database path.
 - YDB_DATABASE — полный путь базы из endpoint.
-- BOT_TOKEN — значение из Lockbox, передаваемое Cloud Functions как secret.
+- BOT_TOKEN, ADMIN_PASSWORD, TRIBUTE_API_KEY, DEEPSEEK_API_KEY — значения из Lockbox, передаваемые Cloud Functions как secret. Обработчик запросов сам секреты Lockbox не читает и DDL не выполняет.
+
+Запросы считают, что таблицы уже есть. Если таблицы нет, ответ `503` со `stage` вида `table_missing:<имя>`. Таймер ежедневной сводки тоже не создаёт таблицы: раз в минуту читает только список часовых поясов и выходит, если ни у кого сейчас не 23:59.
 
 ## Модель хранения
 

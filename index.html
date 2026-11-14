@@ -57,7 +57,7 @@ var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.
 document.getElementById("settings").textContent=(first||"О").charAt(0).toUpperCase();
 var defaults={entries:[],patterns:[],completed:[],practiceHistory:[],personalPractices:[],onboarding:null,chat:[]};
 var state=load(),page=state.onboarding?"home":"privacy",step=6,draft=blank(),onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding(),consentSettings={ai_processing:false,ai_history_storage:false},consentLoaded=false;
-var pageHistory=[],progressPeriod="day",cloudReady=false,cloudSyncTimer=null,cloudErrorShown=false,cloudStatus="paused",cloudErrorText="",premiumStatus={active:false,trial_used:false},premiumLoading=false,aiUsage={limit:5,used:0,remaining:5,loading:true};
+var pageHistory=[],progressPeriod="day",cloudReady=false,cloudSyncTimer=null,cloudRetryTimer=null,cloudRetryAttempt=0,cloudInitInFlight=false,cloudLastToast="",cloudErrorShown=false,cloudStatus="paused",cloudErrorText="",premiumStatus={active:false,trial_used:false},premiumLoading=false,aiUsage={limit:5,used:0,remaining:5,loading:true};
 function load(){try{var x=JSON.parse(localStorage.getItem(KEY));if(!x||!Array.isArray(x.entries))return JSON.parse(JSON.stringify(defaults));var out=Object.assign({},defaults,x);out.patterns=(out.patterns||[]).filter(function(p){return ["p1","p2","p3","p4"].indexOf(p.id)<0;});out.practiceHistory=Array.isArray(out.practiceHistory)?out.practiceHistory:[];out.personalPractices=Array.isArray(out.personalPractices)?out.personalPractices:[];out.chat=Array.isArray(out.chat)?out.chat:[];return out;}catch(e){return JSON.parse(JSON.stringify(defaults));}}
 function saveLocalOnly(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
 function save(){saveLocalOnly();scheduleCloudSave();}
@@ -255,28 +255,56 @@ out.completed=Array.from(new Set([].concat((remote&&remote.completed)||[],(local
 out.onboarding=(remote&&remote.onboarding)||(local&&local.onboarding)||null;
 return out;
 }
+function cloudHttpError(response,fallback){
+return response.text().then(function(raw){
+var stage="";
+try{var data=raw?JSON.parse(raw):null;if(data)stage=data.stage||data.error||"";}catch(ignore){}
+var msg="HTTP "+response.status+(stage?": "+stage:"");
+var err=new Error(fallback?fallback+" ("+msg+")":msg);
+err.status=response.status;
+return err;
+});
+}
+function cloudRetryable(err){
+var status=err&&err.status;
+if(status===400||status===401||status===403||status===404||status===413)return false;
+return true;
+}
+function clearCloudRetry(){
+if(cloudRetryTimer){clearTimeout(cloudRetryTimer);cloudRetryTimer=null;}
+cloudRetryAttempt=0;
+}
+function scheduleCloudRetry(){
+if(cloudRetryTimer)clearTimeout(cloudRetryTimer);
+if(cloudStatus!=="error")return;
+var delay=Math.min(60000,30000+cloudRetryAttempt*15000);
+cloudRetryTimer=setTimeout(function(){cloudRetryTimer=null;cloudRetryAttempt++;initCloud();},delay);
+}
 async function initCloud(){
+if(cloudInitInFlight)return;
 if(!CLOUD_SYNC_ENABLED||!API_BASE){cloudStatus="paused";render();return;}
 if(!tg){cloudStatus="not_telegram";render();return;}
 if(!tg.initData){cloudStatus="telegram_data_missing";render();return;}
+cloudInitInFlight=true;
 cloudStatus="connecting";
 try{
 var consentResponse=await fetch(API_BASE+"/v1/consents",{method:"GET",headers:apiHeaders(),cache:"no-store"});
-if(!consentResponse.ok)throw new Error("Не удалось получить настройки согласий");
+if(!consentResponse.ok)throw await cloudHttpError(consentResponse,"Не удалось получить настройки согласий");
 var consentData=await consentResponse.json();
 consentSettings=consentData.consents||{ai_processing:false,ai_history_storage:false};consentLoaded=true;
-if(!consentSettings.updated_at){cloudReady=false;cloudStatus="consent_required";page="privacy";render();return;}
+if(!consentSettings.updated_at){clearCloudRetry();cloudReady=false;cloudStatus="consent_required";page="privacy";render();return;}
 registerAdminProfile();
 var r=await fetch(API_BASE+"/v1/state",{method:"GET",headers:apiHeaders(),cache:"no-store"});
-if(!r.ok){var errBody="";try{var errJson=await r.json();errBody=errJson&&errJson.error?": "+errJson.error:"";}catch(ignore){}throw new Error("HTTP "+r.status+errBody);}
+if(!r.ok)throw await cloudHttpError(r,"Не удалось загрузить состояние");
 var result=await r.json();
 var remoteConsent=!!(result.found&&result.state&&result.state.onboarding&&result.state.onboarding.consent);
 var localConsent=!!(state.onboarding&&state.onboarding.consent);
 if(remoteConsent)state=mergeStates(result.state,state);
-if(!remoteConsent&&!localConsent){cloudReady=false;cloudStatus="consent_required";onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();page="onboarding";render();return;}
+if(!remoteConsent&&!localConsent){clearCloudRetry();cloudReady=false;cloudStatus="consent_required";onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();page="onboarding";render();return;}
 if(page==="privacy")page=state.onboarding?"home":"onboarding";
 onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
-saveLocalOnly();cloudReady=true;cloudStatus="connected";
+saveLocalOnly();cloudReady=true;cloudStatus="connected";cloudErrorText="";
+clearCloudRetry();
 await cloudSaveNow(false);
 await refreshPremium();
 if(page==="onboarding")page="home";
@@ -284,8 +312,10 @@ render();
 }catch(e){
 cloudReady=false;cloudStatus="error";cloudErrorText=e&&e.message?e.message:"Ошибка соединения";
 render();
-if(!cloudErrorShown){cloudErrorShown=true;toast("Облако недоступно ("+cloudErrorText+"). Записи пока только на устройстве.");}
-}
+var toastText="Облако недоступно ("+cloudErrorText+"). Записи пока только на устройстве.";
+if(!cloudErrorShown||cloudLastToast!==toastText){cloudErrorShown=true;cloudLastToast=toastText;toast(toastText);}
+if(cloudRetryable(e))scheduleCloudRetry();
+}finally{cloudInitInFlight=false;}
 }
 function emptyOnboarding(){return{main_issue:"",areas:[],thoughts:[],reactions:[],desired_changes:"",consent:false};}
 function blank(){return{date:new Date().toISOString(),situation:"",emotion:"Тревога",emotions:["Тревога"],intensity:6,thought:"",before:80,forText:"",against:"",balanced:"",action:"",after:50,emotionAfter:5,pattern:"",patterns:[]};}
@@ -523,7 +553,7 @@ if(a==="new"){draft=blank();step=0;go("journal");}
 if(a==="next"){var checks=[!!draft.situation.trim(),selectedEmotions().length>0,!!draft.thought.trim(),!!(draft.forText.trim()||draft.against.trim()),!!draft.balanced.trim(),!!draft.action.trim()];var prompts=["Опиши ситуацию, чтобы продолжить.","Выбери хотя бы одну эмоцию.","Запиши автоматическую мысль.","Добавь хотя бы один факт за или против этой мысли.","Сформулируй более объективный взгляд.","Укажи один небольшой следующий шаг."];if(!checks[step]){toast(prompts[step]);return;}if(step<5)step++;render();}
 if(a==="prev"){if(step>0)step--;render();}
 if(a==="cancel"){step=6;go("journal");}
-if(a==="save"){var missing=!draft.situation.trim()||!selectedEmotions().length||!draft.thought.trim()||!(draft.forText.trim()||draft.against.trim())||!draft.balanced.trim()||!draft.action.trim();if(missing){toast("Заполни обязательные поля дневника — можно вернуться к нужному шагу.");return;}draft.emotions=selectedEmotions().slice();draft.emotion=draft.emotions.join(", ");draft.date=new Date().toISOString();draft.id=Date.now().toString();state.entries.unshift(Object.assign({},draft));save();trackEvent("diary_entry_created");step=6;toast(cloudReady?"Запись сохранена. Отправляю в облако…":"Запись сохранена на устройстве. Облако пока не подключено.");go("journal");}
+if(a==="save"){var missing=!draft.situation.trim()||!selectedEmotions().length||!draft.thought.trim()||!(draft.forText.trim()||draft.against.trim())||!draft.balanced.trim()||!draft.action.trim();if(missing){toast("Заполни обязательные поля дневника — можно вернуться к нужному шагу.");return;}draft.emotions=selectedEmotions().slice();draft.emotion=draft.emotions.join(", ");draft.date=new Date().toISOString();draft.id=Date.now().toString();state.entries.unshift(Object.assign({},draft));save();trackEvent("diary_entry_created");step=6;toast(cloudReady?"Запись сохранена. Отправляю в облако…":("Запись сохранена на устройстве. Облако пока не подключено."+(cloudErrorText?" "+cloudErrorText:"")));go("journal");}
 if(a==="add-pattern-in-entry"){modal('<h2>Добавить паттерн к записи</h2><p>Предыдущие ответы останутся на месте. Создай паттерн — он сразу появится в списке шестого шага.</p><div class="field"><label>Название паттерна</label><input class="input" id="pn" placeholder="Например: я должен всё делать идеально"></div><div class="field"><label>В каких ситуациях он проявляется? (необязательно)</label><textarea class="area" id="pd" placeholder="Опиши повторяющуюся мысль или сценарий"></textarea></div><button class="btn primary full" id="psave">Сохранить и выбрать паттерн</button>');document.getElementById("psave").onclick=function(){var name=document.getElementById("pn").value.trim(),detail=document.getElementById("pd").value.trim();if(!name){toast("Добавь название паттерна");return;}var id="p"+Date.now();state.patterns.push({id:id,name:name,detail:detail,status:"confirmed",source:"manual",createdAt:new Date().toISOString()});trackEvent("pattern_created",{source:"manual"});draft.pattern=id;draft.patternReviewPending=false;save();closeModal();render();toast("Паттерн добавлен. Остальные ответы сохранены.");};}
 if(a==="add-pattern"){modal('<h2>Новый паттерн</h2><p>Запиши повторяющуюся мысль или сценарий нейтральными словами — это рабочее наблюдение, а не ярлык.</p><div class="field"><label>Название</label><input class="input" id="pn" placeholder="Например: я должен всё сделать идеально"></div><div class="field"><label>Когда появляется? (необязательно)</label><textarea class="area" id="pd"></textarea></div><button class="btn primary full" id="psave">Сохранить паттерн</button>');document.getElementById("psave").onclick=function(){var name=document.getElementById("pn").value.trim(),detail=document.getElementById("pd").value.trim();if(!name){toast("Добавь название паттерна");return;}state.patterns.push({id:"p"+Date.now(),name:name,detail:detail,status:"confirmed",source:"manual",createdAt:new Date().toISOString()});trackEvent("pattern_created",{source:"manual"});save();closeModal();render();};}
 }
@@ -586,6 +616,11 @@ document.getElementById("clear").onclick=async function(){if(confirm("Удали
 render();
 trackInitialSession();
 initCloud();
+document.addEventListener("visibilitychange",function(){
+if(document.visibilityState!=="visible"||cloudStatus!=="error")return;
+if(cloudRetryTimer){clearTimeout(cloudRetryTimer);cloudRetryTimer=null;}
+initCloud();
+});
 refreshPremium();
 refreshAiUsage();
 })();

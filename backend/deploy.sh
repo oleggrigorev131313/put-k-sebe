@@ -31,14 +31,38 @@ need tar
 need python3
 need curl
 
+ASSUME_YES="${PUT_K_SEBE_YES:-}"
+SKIP_MIGRATE="${PUT_K_SEBE_SKIP_MIGRATE:-}"
+SOURCE_REF="${PUT_K_SEBE_REF:-main}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --yes|-y) ASSUME_YES=1 ;;
+    --skip-migrate) SKIP_MIGRATE=1 ;;
+    --ref)
+      shift
+      SOURCE_REF="${1:-}"
+      [[ -n "$SOURCE_REF" ]] || fail "После --ref нужно имя ветки, тега или SHA"
+      ;;
+    --ref=*) SOURCE_REF="${1#--ref=}" ;;
+    *) fail "Неизвестный аргумент: $1. Допустимо: --yes, --skip-migrate, --ref <git-ref>" ;;
+  esac
+  shift
+done
+[[ "$SOURCE_REF" != *..* && "$SOURCE_REF" =~ ^[A-Za-z0-9._/-]+$ ]] || fail "Недопустимый ref: $SOURCE_REF"
+
 echo "== Путь к себе: автоматическое развёртывание =="
-echo "Будут использованы существующие облако, папка и YDB."
-echo "Новая база данных создаваться не будет."
-echo "Будут созданы Lockbox secret, Cloud Function и API Gateway."
+echo "Будут использованы существующие облако, папка, сеть, база, функция и шлюз."
+echo "Новая база и новые облачные ресурсы не создаются."
+echo "Миграция создаёт только отсутствующие таблицы и не изменяет существующие данные."
+echo "Исходники: $SOURCE_REF"
 echo "Серверные вызовы тарифицируются по действующим тарифам Yandex Cloud."
 echo
-read -r -p "Продолжить развёртывание? [y/N] " CONFIRM
-[[ "$CONFIRM" == "y" || "$CONFIRM" == "Y" ]] || { echo "Отменено, ресурсы не изменены."; exit 0; }
+if [[ "$ASSUME_YES" == "1" ]]; then
+  echo "Подтверждение пропущено (--yes или PUT_K_SEBE_YES=1)."
+else
+  read -r -p "Продолжить развёртывание? [y/N] " CONFIRM
+  [[ "$CONFIRM" == "y" || "$CONFIRM" == "Y" ]] || { echo "Отменено, ресурсы не изменены."; exit 0; }
+fi
 echo
 
 CURRENT_CLOUD="$(yc config get cloud-id 2>/dev/null || true)"
@@ -55,11 +79,16 @@ SA_FOLDER_ID="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json
 [[ "$SA_ID" == "$EXPECTED_BACKEND_SA_ID" && "$SA_NAME" == "$SERVICE_ACCOUNT_NAME" ]] || fail "Backend service account не совпадает с ожидаемым: $SA_ID ($SA_NAME)"
 [[ "$SA_FOLDER_ID" == "$FOLDER_ID" ]] || fail "Backend service account находится в другой папке: $SA_FOLDER_ID"
 
-GATEWAY_SA_JSON="$(yc iam service-account get "$EXPECTED_GATEWAY_SA_ID" --format json)" || fail "Не найден gateway service account $EXPECTED_GATEWAY_SA_ID"
+# Resolve the gateway service account by name. The literal id is only a check:
+# a 1/l typo must stop the script before any update.
+GATEWAY_SA_JSON="$(yc iam service-account get "$GATEWAY_SA_NAME" --format json)" || fail "Не найден gateway service account по имени $GATEWAY_SA_NAME"
 GATEWAY_SA_ID="$(printf '%s' "$GATEWAY_SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 GATEWAY_SA_NAME_ACTUAL="$(printf '%s' "$GATEWAY_SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("name",""))')"
 GATEWAY_SA_FOLDER_ID="$(printf '%s' "$GATEWAY_SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("folder_id",""))')"
-[[ "$GATEWAY_SA_ID" == "$EXPECTED_GATEWAY_SA_ID" && "$GATEWAY_SA_NAME_ACTUAL" == "$GATEWAY_SA_NAME" ]] || fail "Gateway service account не совпадает с ожидаемым: $GATEWAY_SA_ID ($GATEWAY_SA_NAME_ACTUAL)"
+[[ "$GATEWAY_SA_NAME_ACTUAL" == "$GATEWAY_SA_NAME" ]] || fail "yc вернул сервисный аккаунт $GATEWAY_SA_NAME_ACTUAL вместо $GATEWAY_SA_NAME"
+if [[ "$GATEWAY_SA_ID" != "$EXPECTED_GATEWAY_SA_ID" ]]; then
+  fail "ID сервисного аккаунта $GATEWAY_SA_NAME в облаке ($GATEWAY_SA_ID) не совпадает с литералом в deploy.sh ($EXPECTED_GATEWAY_SA_ID). Деплой остановлен до изменений. Сверьте символ 1/l и обновите EXPECTED_GATEWAY_SA_ID."
+fi
 [[ "$GATEWAY_SA_FOLDER_ID" == "$FOLDER_ID" ]] || fail "Gateway service account находится в другой папке: $GATEWAY_SA_FOLDER_ID"
 
 NETWORK_JSON="$(yc vpc network get "$NETWORK_ID" --format json)" || fail "Не найдена облачная сеть $NETWORK_ID"
@@ -76,13 +105,13 @@ readarray -t DB_CFG < <(printf '%s' "$DB_JSON" | python3 -c 'import json,sys; u=
 YDB_ENDPOINT="${DB_CFG[0]}"
 YDB_DATABASE="${DB_CFG[1]}"
 
-# The function creates tables and performs read/write queries. Grant only the
-# database-scoped YDB editor role required for those operations.
+# Queries and the one-shot migration need database-scoped editor.
+# Request handling does not create or alter tables.
 DB_BINDINGS="$(yc ydb database list-access-bindings --id "$DB_ID" --format json)" || fail "Не удалось прочитать права доступа YDB"
 HAS_YDB_EDITOR="$(printf '%s' "$DB_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",d.get("accessBindings",[])); print("yes" if any(x.get("role_id",x.get("roleId"))=="ydb.editor" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$SA_ID")"
 if [[ "$HAS_YDB_EDITOR" != "yes" ]]; then
   yc ydb database add-access-binding --id "$DB_ID" \
-    --role ydb.editor --service-account-id "$SA_ID" >/dev/null || fail "Не удалось выдать backend-сервисному аккаунту ydb.editor на базу"
+    --role ydb.editor --service-account-id "$SA_ID" || fail "Не удалось выдать backend-сервисному аккаунту ydb.editor на базу"
 fi
 
 # Re-read bindings after the grant. Do not continue with a deployment that
@@ -98,11 +127,16 @@ echo "    База: $DB_NAME ($DB_STATUS)"
 
 echo "[2/8] Скачиваю исходники из GitHub (без git clone)..."
 ARCHIVE_FILE="$WORKDIR/repository.tar.gz"
-ARCHIVE_URL="https://codeload.github.com/oleggrigorev131313/put-k-sebe/tar.gz/refs/heads/main"
+if [[ "$SOURCE_REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  ARCHIVE_URL="https://codeload.github.com/oleggrigorev131313/put-k-sebe/tar.gz/${SOURCE_REF}"
+else
+  ARCHIVE_URL="https://codeload.github.com/oleggrigorev131313/put-k-sebe/tar.gz/refs/heads/${SOURCE_REF}"
+fi
 curl -fLsS --retry 3 --connect-timeout 15 "$ARCHIVE_URL" -o "$ARCHIVE_FILE" || fail "Не удалось скачать архив репозитория"
 tar -xzf "$ARCHIVE_FILE" --strip-components=1 -C "$WORKDIR" || fail "Не удалось распаковать архив репозитория"
 rm -f "$ARCHIVE_FILE"
 [[ -f "$WORKDIR/backend/index.py" ]] || fail "В репозитории нет backend/index.py"
+[[ -f "$WORKDIR/backend/migrate.py" ]] || fail "В репозитории нет backend/migrate.py"
 [[ -f "$WORKDIR/backend/requirements.txt" ]] || fail "Нет backend/requirements.txt"
 
 echo "[3/8] Собираю пакет Cloud Function (Python 3.12)..."
@@ -128,10 +162,24 @@ with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
 print("Пакет собран:", os.path.getsize(target), "байт")
 PY
 
+if [[ "$SKIP_MIGRATE" == "1" ]]; then
+  echo "[migrate] Пропуск (--skip-migrate). Версия функции ещё не создавалась."
+else
+  echo "[migrate] Проверяю таблицы и создаю только отсутствующие..."
+  MIGRATE_DEPS="$WORKDIR/.migrate-deps"
+  python3 -m pip install --disable-pip-version-check --quiet --target "$MIGRATE_DEPS" -r "$WORKDIR/backend/requirements.txt" || fail "Не удалось установить ydb для миграции. Версия функции не изменялась."
+  PYTHONPATH="$MIGRATE_DEPS" python3 "$WORKDIR/backend/migrate.py" --apply \
+    --endpoint "$YDB_ENDPOINT" --database "$YDB_DATABASE" \
+    || fail "Миграция не выполнена. Версия функции не изменялась, данные существующих таблиц не должны были меняться."
+fi
+
 echo "[4/8] Подготавливаю токен бота в Lockbox..."
 SECRETS_JSON="$(yc lockbox secret list --format json)" || fail "Не удалось прочитать список Lockbox secrets"
 SECRET_ID="$(printf '%s' "$SECRETS_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("secrets",[]); print(next((x["id"] for x in a if x.get("name")=="put-k-sebe-telegram-bot"), ""))')"
 if [[ -z "$SECRET_ID" ]]; then
+  if [[ "$ASSUME_YES" == "1" ]]; then
+    fail "Нет Lockbox secret $SECRET_NAME. В режиме --yes секрет не запрашивается. Создайте его заранее."
+  fi
   read -rsp "Вставь токен Telegram-бота (ввод скрыт): " BOT_TOKEN
   echo
   [[ -n "$BOT_TOKEN" ]] || fail "Токен не может быть пустым"
@@ -150,6 +198,9 @@ echo "Подготавливаю пароль админ-панели в Lockbox
 ADMIN_SECRETS_JSON="$(yc lockbox secret list --format json)" || fail "Не удалось прочитать список Lockbox secrets"
 ADMIN_SECRET_ID="$(printf '%s' "$ADMIN_SECRETS_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("secrets",[]); print(next((x["id"] for x in a if x.get("name")=="put-k-sebe-admin-password"), ""))')"
 if [[ -z "$ADMIN_SECRET_ID" ]]; then
+  if [[ "$ASSUME_YES" == "1" ]]; then
+    fail "Нет Lockbox secret $ADMIN_SECRET_NAME. В режиме --yes пароль не запрашивается. Создайте секрет заранее."
+  fi
   read -rsp "Придумай пароль админ-панели (не используй пароль от других сервисов): " ADMIN_PASSWORD
   echo
   [[ ${#ADMIN_PASSWORD} -ge 16 ]] || fail "Пароль должен содержать не менее 16 символов"
@@ -190,16 +241,16 @@ BUCKET_NAME="put-k-sebe-fn-${CLOUD_ID:0:20}"
 OBJECT_KEY="functions/put-k-sebe-api.zip"
 BUCKET_JSON="$(yc storage bucket get "$BUCKET_NAME" --format json 2>/dev/null || true)"
 if [[ -z "$BUCKET_JSON" ]]; then
-  yc storage bucket create --name "$BUCKET_NAME" --max-size 104857600 >/dev/null || fail "Не удалось создать приватный бакет $BUCKET_NAME"
+  yc storage bucket create --name "$BUCKET_NAME" --max-size 104857600 || fail "Не удалось создать приватный бакет $BUCKET_NAME"
 fi
 FOLDER_BINDINGS="$(yc resource-manager folder list-access-bindings "$FOLDER_ID" --format json)" || fail "Не удалось прочитать права папки"
 HAS_STORAGE_VIEWER="$(printf '%s' "$FOLDER_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",[]); print("yes" if any(x.get("role_id",x.get("roleId"))=="storage.viewer" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$SA_ID")"
 if [[ "$HAS_STORAGE_VIEWER" != "yes" ]]; then
   yc resource-manager folder add-access-binding "$FOLDER_ID" \
     --role storage.viewer \
-    --subject "serviceAccount:$SA_ID" >/dev/null || fail "Не удалось выдать сервисному аккаунту storage.viewer"
+    --subject "serviceAccount:$SA_ID" || fail "Не удалось выдать сервисному аккаунту storage.viewer"
 fi
-yc storage s3api put-object --body "$ZIP_FILE" --bucket "$BUCKET_NAME" --key "$OBJECT_KEY" >/dev/null || fail "Не удалось загрузить ZIP-файл в Object Storage"
+yc storage s3api put-object --body "$ZIP_FILE" --bucket "$BUCKET_NAME" --key "$OBJECT_KEY" || fail "Не удалось загрузить ZIP-файл в Object Storage"
 echo "    Архив загружен в закрытый бакет: $BUCKET_NAME"
 
 echo "[6/8] Создаю или обновляю Cloud Function..."
@@ -213,7 +264,7 @@ FUNCTION_ID="$(printf '%s' "$FUNCTION_JSON" | python3 -c 'import json,sys; print
 FUNCTION_BINDINGS="$(yc serverless function list-access-bindings "$FUNCTION_ID" --format json)" || fail "Не удалось прочитать права Cloud Function"
 HAS_GATEWAY_INVOKER="$(printf '%s' "$FUNCTION_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",d.get("accessBindings",[])); print("yes" if any(x.get("role_id",x.get("roleId"))=="functions.functionInvoker" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$GATEWAY_SA_ID")"
 if [[ "$HAS_GATEWAY_INVOKER" != "yes" ]]; then
-  yc serverless function add-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --subject "serviceAccount:$GATEWAY_SA_ID" >/dev/null || fail "Не удалось разрешить API Gateway вызывать Cloud Function"
+  yc serverless function add-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --subject "serviceAccount:$GATEWAY_SA_ID" || fail "Не удалось разрешить API Gateway вызывать Cloud Function"
   FUNCTION_BINDINGS="$(yc serverless function list-access-bindings "$FUNCTION_ID" --format json)" || fail "Не удалось повторно прочитать права Cloud Function"
   HAS_GATEWAY_INVOKER="$(printf '%s' "$FUNCTION_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",d.get("accessBindings",[])); print("yes" if any(x.get("role_id",x.get("roleId"))=="functions.functionInvoker" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$GATEWAY_SA_ID")"
 fi
@@ -225,10 +276,37 @@ HAS_TIMER_INVOKER="$(printf '%s' "$TIMER_BINDINGS" | python3 -c 'import json,sys
 if [[ "$HAS_TIMER_INVOKER" != "yes" ]]; then
   yc resource-manager folder add-access-binding "$FOLDER_ID" \
     --role functions.functionInvoker \
-    --subject "serviceAccount:$SA_ID" >/dev/null || fail "Не удалось выдать backend-сервисному аккаунту functions.functionInvoker на каталог"
+    --subject "serviceAccount:$SA_ID" || fail "Не удалось выдать backend-сервисному аккаунту functions.functionInvoker на каталог"
 fi
 
-yc serverless function version create \
+VERSION_LIST="$(yc serverless function version list --function-id "$FUNCTION_ID" --format json)" || fail "Не удалось прочитать версии функции. Новая версия не создавалась."
+PREV_VERSION_ID="$(printf '%s' "$VERSION_LIST" | python3 -c '
+import json, sys
+raw = json.load(sys.stdin)
+items = raw if isinstance(raw, list) else raw.get("versions") or raw.get("function_versions") or []
+found = ""
+for item in items:
+    tags = item.get("tags") or []
+    if "$latest" in tags:
+        found = item.get("id") or ""
+        break
+if not found and items:
+    found = items[0].get("id") or ""
+print(found)
+')"
+[[ -n "$PREV_VERSION_ID" ]] || fail "Не найдена текущая версия \$latest. Остановка без создания новой версии."
+echo "    Версия \$latest до обновления: $PREV_VERSION_ID"
+NEW_VERSION_ID=""
+rollback_hint() {
+  echo "Проверка не пройдена. Новая версия уже может быть \$latest." >&2
+  echo "Верните предыдущую версию командой:" >&2
+  echo "yc serverless function version set-tag --id ${PREV_VERSION_ID} --tag '\$latest'" >&2
+  if [[ -n "${NEW_VERSION_ID}" ]]; then
+    echo "Версия, которую нужно снять с \$latest: ${NEW_VERSION_ID}" >&2
+  fi
+}
+
+VERSION_JSON="$(yc serverless function version create \
   --function-id "$FUNCTION_ID" \
   --runtime python312 \
   --entrypoint index.handler \
@@ -243,7 +321,14 @@ yc serverless function version create \
   --secret "environment-variable=ADMIN_PASSWORD,id=$ADMIN_SECRET_ID,version-id=$ADMIN_VERSION_ID,key=admin_password" \
   --secret "environment-variable=TRIBUTE_API_KEY,id=$TRIBUTE_SECRET_ID,version-id=$TRIBUTE_VERSION_ID,key=api_key" \
   --secret "environment-variable=DEEPSEEK_API_KEY,id=$DEEPSEEK_SECRET_ID,version-id=$DEEPSEEK_VERSION_ID,key=api_key" \
-  --description "Put-k-sebe API deployment" >/dev/null
+  --description "Put-k-sebe API deployment" \
+  --format json)" || {
+  echo "yc serverless function version create завершился с ошибкой. Сообщение yc выведено выше." >&2
+  rollback_hint
+  fail "Не удалось создать версию Cloud Function"
+}
+NEW_VERSION_ID="$(printf '%s' "$VERSION_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')"
+echo "    Создана версия: ${NEW_VERSION_ID:-неизвестный id}"
 
 # Timer runs each minute; backend generates summaries only for users at local 23:59.
 # Use Trigger API v2 (the v1 CLI is deprecated).
@@ -259,7 +344,7 @@ JSON
     --description "One daily summary at 23:59 in each user's local timezone" \
     --cron-expression '* * * * ? *' \
     --payload '{"job":"daily_summary"}' \
-    --action "@$TIMER_ACTION_FILE" >/dev/null || fail "Не удалось создать таймер ежедневной сводки"
+    --action "@$TIMER_ACTION_FILE" || fail "Не удалось создать таймер ежедневной сводки"
 else
   echo "    Таймер ежедневной сводки уже существует."
 fi
@@ -542,7 +627,10 @@ fi
 if [[ -z "$GATEWAY_JSON" ]]; then
   GATEWAY_JSON="$(yc serverless api-gateway create "$GATEWAY_NAME" --description "API for Put-k-sebe Telegram Mini App" --spec "$SPEC_FILE" --format json)"
 else
-  yc serverless api-gateway update "$GATEWAY_NAME" --spec "$SPEC_FILE" >/dev/null
+  yc serverless api-gateway update "$GATEWAY_NAME" --spec "$SPEC_FILE" || {
+  rollback_hint
+  fail "Не удалось обновить API Gateway. Сообщение yc выведено выше."
+}
   GATEWAY_JSON="$(yc serverless api-gateway get "$GATEWAY_NAME" --format json)"
 fi
 GATEWAY_ID="$(printf '%s' "$GATEWAY_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
@@ -552,51 +640,65 @@ GATEWAY_DOMAIN="$(printf '%s' "$GATEWAY_JSON" | python3 -c 'import json,sys; d=j
 [[ -n "$GATEWAY_DOMAIN" ]] || fail "API Gateway создан, но поле domain не найдено. ID: $GATEWAY_ID"
 [[ "$GATEWAY_DOMAIN" == "$EXPECTED_GATEWAY_DOMAIN" ]] || fail "Домен API Gateway ($GATEWAY_DOMAIN) не совпадает с адресом, зашитым во frontend ($EXPECTED_GATEWAY_DOMAIN)"
 
-echo "[9/9] Проверяю API, YDB и схему базы..."
+echo "[9/9] Проверяю data-plane: user_consents, user_state и остальные таблицы..."
 API_URL="https://$GATEWAY_DOMAIN"
-check_endpoint() {
-  local endpoint="$1"
-  local label="$2"
-  local ok="false"
-  local output="/tmp/put-k-sebe-health.json"
+check_schema() {
+  local output="/tmp/put-k-sebe-schema.json"
   local http_code="000"
-  local attempts=6
-  local max_time=30
-  # The schema endpoint performs its own bounded backoff. Repeating it here
-  # would generate another burst of DDL and worsen YDB's schema-operation quota.
-  if [[ "$endpoint" == "/health/schema" ]]; then
-    attempts=1
-    max_time=55
-  fi
-  for ((attempt=1; attempt<=attempts; attempt++)); do
+  local attempt
+  for attempt in 1 2 3; do
     rm -f "$output"
-    http_code="$(curl -sS --connect-timeout 10 --max-time "$max_time" -o "$output" -w '%{http_code}' "$API_URL$endpoint" || true)"
-    if [[ "$http_code" == "200" ]] && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); raise SystemExit(0 if d.get("ok") is True else 1)' "$output" 2>/dev/null; then
-      ok="true"
+    http_code="$(curl -sS --connect-timeout 10 --max-time 30 -o "$output" -w '%{http_code}' "$API_URL/health/schema" || true)"
+    if [[ "$http_code" == "200" ]] && python3 - "$output" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+checks = d.get("checks") or {}
+tables = checks.get("tables") or {}
+required = (
+    "user_consents", "user_state", "user_profiles", "analytics_events",
+    "premium_purchases", "premium_trials", "ai_analyses",
+    "daily_summary_claims", "ai_usage_events",
+)
+ok = d.get("ok") is True
+ok = ok and checks.get("user_consents") == "ok" and checks.get("user_state") == "ok"
+ok = ok and all(tables.get(name) == "ok" for name in required)
+raise SystemExit(0 if ok else 1)
+PY
+    then
+      echo "    Data-plane user_consents, user_state и остальные 7 таблиц: OK"
+      return 0
+    fi
+    if [[ -f "$output" ]] && python3 - "$output" <<'PY'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    raise SystemExit(1)
+raise SystemExit(0 if str(d.get("stage") or "").startswith("table_missing:") else 1)
+PY
+    then
       break
     fi
     sleep 5
   done
-  if [[ "$ok" != "true" ]]; then
-    echo "Проверка $label не пройдена ($endpoint), HTTP $http_code:"
-    cat "$output" 2>/dev/null || echo "Ответ сервера отсутствует."
-    echo
-    fail "API не считается развёрнутым: $label недоступен. HTTP $http_code. Причина выведена выше; Cloud Logging для диагностики не требуется."
-  fi
-  echo "    $label: OK"
+  echo "Проверка /health/schema не пройдена, HTTP $http_code:" >&2
+  cat "$output" >&2 || echo "Ответ сервера отсутствует." >&2
+  echo >&2
+  rollback_hint
+  fail "API не считается развёрнутым: data-plane проверка user_consents, user_state и /health/schema не пройдена. HTTP $http_code."
 }
-# Check the narrowest dependency first so a failed deployment identifies
-# whether the problem is connectivity or schema initialization.
-check_endpoint "/health/db" "YDB connection"
-check_endpoint "/health/schema" "Consent schema"
-check_endpoint "/health" "Backend + YDB + schema"
+check_schema
 echo "=============================================="
 echo "РАЗВЁРТЫВАНИЕ BACKEND ЗАВЕРШЕНО"
+echo "Проверка успеха: GET /health/schema, data-plane по всем 9 таблицам, включая user_consents и user_state."
 echo "API_BASE=$API_URL"
 echo "TRIBUTE_WEBHOOK_URL=$API_URL/v1/webhooks/tribute"
 echo "PREMIUM_STATUS_URL=$API_URL/v1/premium"
 echo "GATEWAY_ID=$GATEWAY_ID"
 echo "FUNCTION_ID=$FUNCTION_ID"
+echo "PREVIOUS_VERSION_ID=$PREV_VERSION_ID"
+echo "NEW_VERSION_ID=$NEW_VERSION_ID"
 echo "=============================================="
 echo "Скопируй сюда только строки API_BASE и TRIBUTE_WEBHOOK_URL. Секреты не присылай."
-echo "После проверки подключим статус Premium в frontend."
+echo "Откат на предыдущую версию:"
+echo "yc serverless function version set-tag --id ${PREV_VERSION_ID} --tag '\$latest'"

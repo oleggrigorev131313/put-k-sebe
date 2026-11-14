@@ -18,7 +18,9 @@ jobs:
         with:
           node-version: "22"
       - name: Check backend Python syntax
-        run: python -m py_compile backend/index.py
+        run: |
+          python -m py_compile backend/index.py
+          python -m py_compile backend/migrate.py
       - name: Check deployment script syntax
         run: bash -n backend/deploy.sh
       - name: Check frontend JavaScript syntax
@@ -26,10 +28,14 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import re
-          html = Path("index.html").read_text(encoding="utf-8")
-          scripts = re.findall(r"<script(?:\s[^>]*)?>([\s\S]*?)</script>", html, re.I)
-          if not scripts:
-              raise SystemExit("No inline application script found")
+          html_files = [Path("index.html"), Path("admin.html")]
+          scripts = []
+          for html_path in html_files:
+              html = html_path.read_text(encoding="utf-8")
+              found = re.findall(r"<script(?:\s[^>]*)?>([\s\S]*?)</script>", html, re.I)
+              if not found:
+                  raise SystemExit(f"No inline script found in {html_path}")
+              scripts.extend(found)
           Path("/tmp/put-k-sebe-inline.js").write_text("\n".join(scripts), encoding="utf-8")
           PY
           node --check /tmp/put-k-sebe-inline.js

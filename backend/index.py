@@ -30,9 +30,54 @@ TRIBUTE_PRODUCTS = {"177388": 30, "177544": 90, "177545": 365}
 _driver = None
 _pool = None
 _db_lock = RLock()
-_schema_ready = False
-_consent_schema_ready = False
-_tables_ready = set()
+TABLES = (
+    "user_consents",
+    "user_state",
+    "user_profiles",
+    "analytics_events",
+    "premium_purchases",
+    "premium_trials",
+    "ai_analyses",
+    "daily_summary_claims",
+    "ai_usage_events",
+)
+
+_MISSING_TABLE_MARKERS = (
+    "does not exist",
+    "doesn't exist",
+    "doesnt exist",
+    "path not found",
+    "no such table",
+    "cannot find table",
+    "unknown table",
+    "table not found",
+    "epathstatedoesnotexist",
+)
+
+
+class TableMissing(RuntimeError):
+    def __init__(self, table_name):
+        self.table_name = table_name
+        super().__init__("table_missing:" + table_name)
+
+
+def _error_text(exc):
+    return " ".join(str(exc).split())
+
+
+def _is_missing_table_error(exc):
+    raw = _error_text(exc).lower()
+    if "400080" in raw or "schema operations" in raw or "eschemeopcreatetable" in raw:
+        return False
+    return any(marker in raw for marker in _MISSING_TABLE_MARKERS)
+
+
+def _table_from_text(*parts):
+    blob = " ".join(part for part in parts if part).lower()
+    found = [name for name in TABLES if name in blob]
+    if len(found) == 1:
+        return found[0]
+    return None
 
 
 def _db():
@@ -51,257 +96,33 @@ def _db():
     return _pool
 
 
-def _run_schema_query(pool, table_name, query):
-    delays = (1, 2, 4, 8)
-    for attempt in range(len(delays) + 1):
-        try:
-            pool.execute_with_retries(query)
-            # YDB limits the rate of schema changes. Spread DDL operations
-            # instead of issuing nine CREATE TABLE requests back-to-back.
-            time.sleep(0.6)
-            return
-        except Exception as exc:
-            raw = " ".join(str(exc).split())
-            quota_limited = (
-                "exceeded a limit on the number of schema operations" in raw.lower()
-                or "400080" in raw
-            )
-            if not quota_limited or attempt >= len(delays):
-                LOG.exception("YDB schema initialization failed table=%s", table_name)
-                message = raw[:500]
-                raise RuntimeError(
-                    f"table={table_name}; cause={type(exc).__name__}; detail={message}"
-                ) from exc
-            delay = delays[attempt]
-            LOG.warning(
-                "YDB schema rate limit table=%s retry=%s wait=%ss",
-                table_name, attempt + 1, delay,
-            )
-            time.sleep(delay)
+def _execute(query, parameters=None, table=None):
+    try:
+        if parameters is None:
+            return _db().execute_with_retries(query)
+        return _db().execute_with_retries(query, parameters=parameters)
+    except TableMissing:
+        raise
+    except Exception as exc:
+        if not _is_missing_table_error(exc):
+            raise
+        name = table or _table_from_text(_error_text(exc), query)
+        if not name:
+            name = "unknown"
+        LOG.error("YDB table missing table=%s detail=%s", name, _error_text(exc)[:400])
+        raise TableMissing(name) from exc
 
 
-def _ensure_table(table_name, ddl):
-    if table_name in _tables_ready:
-        return
-    with _db_lock:
-        if table_name in _tables_ready:
-            return
-        _run_schema_query(_db(), table_name, ddl)
-        _tables_ready.add(table_name)
-
-
-def _ensure_consent_schema():
-    global _consent_schema_ready
-    if _consent_schema_ready:
-        return
-    _ensure_table("user_consents", """
-        CREATE TABLE IF NOT EXISTS user_consents (
-            user_id Utf8 NOT NULL,
-            ai_processing Bool NOT NULL,
-            ai_history_storage Bool NOT NULL,
-            consent_version Utf8 NOT NULL,
-            updated_at Utf8 NOT NULL,
-            PRIMARY KEY (user_id)
-        );
-        """)
-    _consent_schema_ready = True
-
-
-def _ensure_user_state_schema():
-    _ensure_table("user_state", """
-        CREATE TABLE IF NOT EXISTS user_state (
-            user_id Utf8 NOT NULL,
-            state_json Utf8 NOT NULL,
-            updated_at Timestamp,
-            PRIMARY KEY (user_id)
-        );
-        """)
-
-
-def _ensure_profile_schema():
-    _ensure_table("user_profiles", """
-        CREATE TABLE IF NOT EXISTS user_profiles (
-            user_id Utf8 NOT NULL, username Utf8, first_name Utf8, last_name Utf8,
-            timezone Utf8, created_at Utf8 NOT NULL, last_seen Utf8 NOT NULL,
-            PRIMARY KEY (user_id)
-        );
-        """)
-
-
-def _ensure_analytics_schema():
-    _ensure_table("analytics_events", """
-        CREATE TABLE IF NOT EXISTS analytics_events (
-            event_id Utf8 NOT NULL,
-            user_id Utf8 NOT NULL,
-            event_name Utf8 NOT NULL,
-            created_at Timestamp,
-            metadata_json Utf8,
-            PRIMARY KEY (event_id)
-        );
-        """)
-
-
-def _ensure_ai_usage_schema():
-    _ensure_table("ai_usage_events", """
-        CREATE TABLE IF NOT EXISTS ai_usage_events (
-            event_id Utf8 NOT NULL,
-            user_id Utf8 NOT NULL,
-            feature Utf8 NOT NULL,
-            request_key Utf8 NOT NULL,
-            created_at Utf8 NOT NULL,
-            PRIMARY KEY (event_id)
-        );
-        """)
-    _ensure_table("ai_analyses", """
-        CREATE TABLE IF NOT EXISTS ai_analyses (
-            user_id Utf8 NOT NULL,
-            entry_id Utf8 NOT NULL,
-            analysis_text Utf8 NOT NULL,
-            input_tokens Uint64 NOT NULL,
-            output_tokens Uint64 NOT NULL,
-            created_at Utf8 NOT NULL,
-            PRIMARY KEY (user_id, entry_id)
-        );
-        """)
-
-
-def _ensure_premium_schema():
-    _ensure_table("premium_purchases", """
-        CREATE TABLE IF NOT EXISTS premium_purchases (
-            purchase_id Utf8 NOT NULL,
-            user_id Utf8 NOT NULL,
-            product_id Utf8 NOT NULL,
-            duration_days Uint32 NOT NULL,
-            purchased_at Utf8 NOT NULL,
-            status Utf8 NOT NULL,
-            PRIMARY KEY (purchase_id)
-        );
-        """)
-    _ensure_table("premium_trials", """
-        CREATE TABLE IF NOT EXISTS premium_trials (
-            user_id Utf8 NOT NULL,
-            started_at Utf8 NOT NULL,
-            expires_at Utf8 NOT NULL,
-            PRIMARY KEY (user_id)
-        );
-        """)
-
-
-def _ensure_schema():
-    global _schema_ready
-    if _schema_ready:
-        return
-    with _db_lock:
-        if _schema_ready:
-            return
-        pool = _db()
-        _run_schema_query(pool, "user_state", 
-            """
-            CREATE TABLE IF NOT EXISTS user_state (
-                user_id Utf8 NOT NULL,
-                state_json Utf8 NOT NULL,
-                updated_at Timestamp,
-                PRIMARY KEY (user_id)
-            );
-            """
-        )
-        _run_schema_query(pool, "analytics_events", 
-            """
-            CREATE TABLE IF NOT EXISTS analytics_events (
-                event_id Utf8 NOT NULL,
-                user_id Utf8 NOT NULL,
-                event_name Utf8 NOT NULL,
-                created_at Timestamp,
-                metadata_json Utf8,
-                PRIMARY KEY (event_id)
-            );
-            """
-        )
-        _run_schema_query(pool, "user_profiles", """
-            CREATE TABLE IF NOT EXISTS user_profiles (
-                user_id Utf8 NOT NULL, username Utf8, first_name Utf8, last_name Utf8,
-                timezone Utf8, created_at Utf8 NOT NULL, last_seen Utf8 NOT NULL,
-                PRIMARY KEY (user_id)
-            );
-            """)
-        _run_schema_query(pool, "premium_purchases", 
-            """
-            CREATE TABLE IF NOT EXISTS premium_purchases (
-                purchase_id Utf8 NOT NULL,
-                user_id Utf8 NOT NULL,
-                product_id Utf8 NOT NULL,
-                duration_days Uint32 NOT NULL,
-                purchased_at Utf8 NOT NULL,
-                status Utf8 NOT NULL,
-                PRIMARY KEY (purchase_id)
-            );
-            """
-        )
-        _run_schema_query(pool, "premium_trials", 
-            """
-            CREATE TABLE IF NOT EXISTS premium_trials (
-                user_id Utf8 NOT NULL,
-                started_at Utf8 NOT NULL,
-                expires_at Utf8 NOT NULL,
-                PRIMARY KEY (user_id)
-            );
-            """
-        )
-        _run_schema_query(pool, "ai_analyses", 
-            """
-            CREATE TABLE IF NOT EXISTS ai_analyses (
-                user_id Utf8 NOT NULL,
-                entry_id Utf8 NOT NULL,
-                analysis_text Utf8 NOT NULL,
-                input_tokens Uint64 NOT NULL,
-                output_tokens Uint64 NOT NULL,
-                created_at Utf8 NOT NULL,
-                PRIMARY KEY (user_id, entry_id)
-            );
-            """
-        )
-        _run_schema_query(pool, "user_consents", """
-            CREATE TABLE IF NOT EXISTS user_consents (
-                user_id Utf8 NOT NULL,
-                ai_processing Bool NOT NULL,
-                ai_history_storage Bool NOT NULL,
-                consent_version Utf8 NOT NULL,
-                updated_at Utf8 NOT NULL,
-                PRIMARY KEY (user_id)
-            );
-            """)
-        _run_schema_query(pool, "daily_summary_claims", """
-            CREATE TABLE IF NOT EXISTS daily_summary_claims (
-                user_id Utf8 NOT NULL,
-                day_key Utf8 NOT NULL,
-                created_at Utf8 NOT NULL,
-                PRIMARY KEY (user_id, day_key)
-            );
-            """)
-        _run_schema_query(pool, "ai_usage_events", """
-            CREATE TABLE IF NOT EXISTS ai_usage_events (
-                event_id Utf8 NOT NULL,
-                user_id Utf8 NOT NULL,
-                feature Utf8 NOT NULL,
-                request_key Utf8 NOT NULL,
-                created_at Utf8 NOT NULL,
-                PRIMARY KEY (event_id)
-            );
-            """)
-        _tables_ready.update({
-            "user_state", "analytics_events", "user_profiles",
-            "premium_purchases", "premium_trials", "ai_analyses",
-            "user_consents", "daily_summary_claims", "ai_usage_events",
-        })
-        global _consent_schema_ready
-        _consent_schema_ready = True
-        _schema_ready = True
+def _probe_table(name):
+    if name not in TABLES:
+        raise ValueError("unexpected table " + name)
+    _execute("SELECT * FROM %s LIMIT 1;" % name, table=name)
 
 
 CONSENT_VERSION = "2026-11-14-v1"
 
 def _get_user_consents(user_id):
-    result = _db().execute_with_retries("""
+    result = _execute("""
         DECLARE $user_id AS Utf8;
         SELECT ai_processing, ai_history_storage, consent_version, updated_at
         FROM user_consents WHERE user_id = $user_id;
@@ -316,7 +137,7 @@ def _get_user_consents(user_id):
 def _save_user_consents(user_id, processing, history):
     from datetime import datetime, timezone
     updated = datetime.now(timezone.utc).isoformat()
-    _db().execute_with_retries("""
+    _execute("""
         DECLARE $user_id AS Utf8;
         DECLARE $processing AS Bool;
         DECLARE $history AS Bool;
@@ -333,7 +154,7 @@ def _require_ai_processing(user_id):
     return None
 
 def _delete_ai_history(user_id):
-    _db().execute_with_retries("""
+    _execute("""
         DECLARE $user_id AS Utf8;
         DELETE FROM ai_analyses WHERE user_id = $user_id;
         """, parameters={"$user_id": user_id})
@@ -349,11 +170,11 @@ def _upsert_profile(user_id, profile, timezone_name="UTC"):
     from datetime import datetime, timezone
     profile = profile if isinstance(profile, dict) else {}
     now = datetime.now(timezone.utc).isoformat()
-    old = _db().execute_with_retries("DECLARE $user_id AS Utf8; SELECT created_at FROM user_profiles WHERE user_id=$user_id;", parameters={"$user_id":user_id})
+    old = _execute("DECLARE $user_id AS Utf8; SELECT created_at FROM user_profiles WHERE user_id=$user_id;", parameters={"$user_id":user_id})
     created = now
     for rs in old:
         for row in rs.rows: created = str(row.created_at)
-    _db().execute_with_retries("""
+    _execute("""
         DECLARE $user_id AS Utf8; DECLARE $username AS Utf8; DECLARE $first_name AS Utf8;
         DECLARE $last_name AS Utf8; DECLARE $timezone AS Utf8; DECLARE $created AS Utf8; DECLARE $seen AS Utf8;
         UPSERT INTO user_profiles (user_id,username,first_name,last_name,timezone,created_at,last_seen)
@@ -364,13 +185,12 @@ def _upsert_profile(user_id, profile, timezone_name="UTC"):
 
 
 def _record_event(user_id, event_name, metadata=None):
-    pool = _db()
     analytics_user_id = hmac.new(
         ANALYTICS_SECRET.encode("utf-8"),
         ("put-k-sebe-analytics:" + str(user_id)).encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
-    pool.execute_with_retries(
+    _execute(
         """
         DECLARE $event_id AS Utf8;
         DECLARE $user_id AS Utf8;
@@ -486,7 +306,7 @@ def _telegram_user(init_data):
 
 
 def _read_state(user_id):
-    result = _db().execute_with_retries(
+    result = _execute(
         """
         DECLARE $user_id AS Utf8;
         SELECT state_json FROM user_state WHERE user_id = $user_id;
@@ -501,7 +321,7 @@ def _read_state(user_id):
 
 def _write_state(user_id, state):
     state_json = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
-    _db().execute_with_retries(
+    _execute(
         """
         DECLARE $user_id AS Utf8;
         DECLARE $state_json AS Utf8;
@@ -573,7 +393,7 @@ def _tribute_signature_valid(raw_body, signature):
 
 def _premium_status(user_id):
     from datetime import datetime, timezone, timedelta
-    result = _db().execute_with_retries(
+    result = _execute(
         """
         DECLARE $user_id AS Utf8;
         SELECT purchase_id, duration_days, purchased_at
@@ -605,7 +425,7 @@ def _premium_status(user_id):
         start = max(purchased_at, expiry or purchased_at)
         expiry = start + timedelta(days=purchase["duration_days"])
     paid_active = expiry is not None and expiry > now
-    trial_result = _db().execute_with_retries(
+    trial_result = _execute(
         """
         DECLARE $user_id AS Utf8;
         SELECT started_at, expires_at FROM premium_trials WHERE user_id = $user_id;
@@ -644,7 +464,7 @@ def _start_trial(user_id):
     started = now.isoformat()
     expires = (now + timedelta(days=7)).isoformat()
     try:
-        _db().execute_with_retries(
+        _execute(
             """
             DECLARE $user_id AS Utf8;
             DECLARE $started_at AS Utf8;
@@ -682,7 +502,6 @@ def _handle_tribute_webhook(raw_body, signature):
         purchase_id = str(payload.get("purchase_id", "")).strip()
         if not purchase_id or purchase_id == "None":
             raise ValueError("Missing purchase_id")
-        _ensure_schema()
 
         if name == "new_digital_product":
             product_id = str(payload.get("product_id", ""))
@@ -691,7 +510,7 @@ def _handle_tribute_webhook(raw_body, signature):
             purchased_at = str(payload.get("purchase_created_at") or event.get("created_at") or "")
             if not duration or user_id == "0" or not purchased_at:
                 raise ValueError("Unknown product or missing purchase data")
-            existing = _db().execute_with_retries(
+            existing = _execute(
                 """
                 DECLARE $purchase_id AS Utf8;
                 SELECT purchase_id FROM premium_purchases WHERE purchase_id = $purchase_id;
@@ -701,7 +520,7 @@ def _handle_tribute_webhook(raw_body, signature):
             for result_set in existing:
                 if result_set.rows:
                     return _json_response(200, {"ok": True, "duplicate": True})
-            _db().execute_with_retries(
+            _execute(
                 """
                 DECLARE $purchase_id AS Utf8;
                 DECLARE $user_id AS Utf8;
@@ -724,7 +543,7 @@ def _handle_tribute_webhook(raw_body, signature):
             return _json_response(200, {"ok": True})
 
         if name == "digital_product_refunded":
-            existing = _db().execute_with_retries(
+            existing = _execute(
                 """
                 DECLARE $purchase_id AS Utf8;
                 SELECT purchase_id FROM premium_purchases WHERE purchase_id = $purchase_id;
@@ -734,7 +553,7 @@ def _handle_tribute_webhook(raw_body, signature):
             found = any(result_set.rows for result_set in existing)
             if not found:
                 return _json_response(503, {"error": "purchase_not_found_yet"})
-            _db().execute_with_retries(
+            _execute(
                 """
                 DECLARE $purchase_id AS Utf8;
                 UPDATE premium_purchases
@@ -791,7 +610,6 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
     from datetime import datetime, timezone
     import urllib.error
     stage = "load_user_state"
-    _ensure_schema()
     premium = _premium_status(user_id)
     if not premium.get("active"):
         return _json_response(403, {"error": "premium_required", "message": "Персональный анализ доступен только в Premium. Активируйте пробный период или выберите тариф."})
@@ -808,7 +626,7 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
     # New cache namespace also invalidates analyses produced from malformed test entries.
     cache_entry_id = "deepseek-flash:v4-quality-gate:" + entry_id
     stage = "read_analysis_cache"
-    cached = _db().execute_with_retries(
+    cached = _execute(
         """
         DECLARE $user_id AS Utf8;
         DECLARE $entry_id AS Utf8;
@@ -933,6 +751,8 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
     except urllib.error.URLError as exc:
         LOG.error("DeepSeek network error reason=%s", str(exc.reason)[:300])
         return _json_response(502, {"error": "deepseek_network_error", "detail": str(exc.reason)[:300]})
+    except TableMissing:
+        raise
     except Exception as exc:
         safe_detail = str(exc).replace("\\n", " ")[:500]
         LOG.exception("AI analysis failed stage=%s type=%s detail=%s", stage, type(exc).__name__, safe_detail)
@@ -968,7 +788,7 @@ def _created_at_is_local_day(value, day_key, user_tz):
 def _daily_ai_usage(user_id, day_key, user_tz):
     analyzed_entries = set()
     summary_exists = False
-    result = _db().execute_with_retries("""
+    result = _execute("""
         DECLARE $user_id AS Utf8;
         SELECT feature, request_key, created_at FROM ai_usage_events WHERE user_id = $user_id;
         """, parameters={"$user_id": user_id})
@@ -981,7 +801,7 @@ def _daily_ai_usage(user_id, day_key, user_tz):
                 summary_exists = True
             elif feature == "analyze_entry":
                 analyzed_entries.add(request_key)
-    legacy = _db().execute_with_retries("""
+    legacy = _execute("""
         DECLARE $user_id AS Utf8;
         SELECT entry_id, created_at FROM ai_analyses WHERE user_id = $user_id;
         """, parameters={"$user_id": user_id})
@@ -1000,7 +820,7 @@ def _save_ai_result(user_id, cache_key, text_value, usage, created):
     consent = _get_user_consents(user_id)
     feature = "daily_summary" if cache_key.startswith("daily-summary:") else ("onboarding" if cache_key.startswith("onboarding-profile:") else "analyze_entry")
     request_key = cache_key.rsplit(":", 1)[-1]
-    _db().execute_with_retries("""
+    _execute("""
         DECLARE $event_id AS Utf8;
         DECLARE $user_id AS Utf8;
         DECLARE $feature AS Utf8;
@@ -1011,7 +831,7 @@ def _save_ai_result(user_id, cache_key, text_value, usage, created):
         """, parameters={"$event_id": str(uuid.uuid4()), "$user_id": user_id, "$feature": feature, "$request_key": request_key, "$created_at": created})
     if not consent["ai_history_storage"]:
         return
-    _db().execute_with_retries("""
+    _execute("""
         DECLARE $user_id AS Utf8;
         DECLARE $entry_id AS Utf8;
         DECLARE $analysis_text AS Utf8;
@@ -1033,7 +853,7 @@ def _get_previous_daily_summary(user_id, timezone_name="UTC"):
         return _json_response(403, {"error":"summary_history_not_enabled",
             "message":"Для просмотра прошлых сводок нужно включить хранение истории AI."})
     cache_key = "daily-summary:" + day_key
-    rows = _db().execute_with_retries("""
+    rows = _execute("""
         DECLARE $user_id AS Utf8;
         DECLARE $entry_id AS Utf8;
         SELECT analysis_text, created_at FROM ai_analyses
@@ -1058,7 +878,7 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
     cache_key = "daily-summary:" + day_key
     _, summary_exists = _daily_ai_usage(user_id, day_key, user_tz)
     if summary_exists:
-        cached_once = _db().execute_with_retries("""
+        cached_once = _execute("""
             DECLARE $user_id AS Utf8; DECLARE $entry_id AS Utf8;
             SELECT analysis_text, created_at FROM ai_analyses WHERE user_id=$user_id AND entry_id=$entry_id;
         """,parameters={"$user_id":user_id,"$entry_id":cache_key})
@@ -1105,11 +925,13 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
     todays = meaningful_entries
     # A unique YDB primary key serializes manual and scheduled requests for this user/day.
     try:
-        _db().execute_with_retries("""
+        _execute("""
             DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DECLARE $created_at AS Utf8;
             INSERT INTO daily_summary_claims (user_id, day_key, created_at)
             VALUES ($user_id, $day_key, $created_at);
         """, parameters={"$user_id": user_id, "$day_key": day_key, "$created_at": now.isoformat()})
+    except TableMissing:
+        raise
     except Exception:
         return _json_response(409, {"error":"daily_summary_already_used",
             "message":"Итоги за сегодня уже формируются или уже подведены."})
@@ -1188,15 +1010,17 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
         _record_event(user_id, "daily_summary_created")
         return _json_response(200, {"ok":True,"cached":False,"summary":summary,"usage":usage,"created_at":created})
     except urllib.error.HTTPError as exc:
-        _db().execute_with_retries("DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;", parameters={"$user_id":user_id,"$day_key":day_key})
+        _execute("DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;", parameters={"$user_id":user_id,"$day_key":day_key})
         LOG.error("DeepSeek daily summary HTTP error status=%s", exc.code)
         return _json_response(502, {"error":"deepseek_provider_error","provider_status":int(exc.code)})
     except urllib.error.URLError as exc:
-        _db().execute_with_retries("DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;", parameters={"$user_id":user_id,"$day_key":day_key})
+        _execute("DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;", parameters={"$user_id":user_id,"$day_key":day_key})
         LOG.error("DeepSeek daily summary network error: %s", type(exc.reason).__name__)
         return _json_response(502, {"error":"deepseek_network_error"})
+    except TableMissing:
+        raise
     except Exception as exc:
-        _db().execute_with_retries("DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;", parameters={"$user_id":user_id,"$day_key":day_key})
+        _execute("DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;", parameters={"$user_id":user_id,"$day_key":day_key})
         safe_detail = str(exc).replace("\\n", " ")[:500]
         LOG.exception("Daily summary failed type=%s detail=%s", type(exc).__name__, safe_detail)
         return _json_response(502, {"error":"daily_summary_failed",
@@ -1212,7 +1036,7 @@ def _deepseek_analyze_onboarding(user_id):
     if not isinstance(onboarding, dict):
         return _json_response(404, {"error":"onboarding_not_found"})
     cache_key = "onboarding-profile:v1"
-    cached = _db().execute_with_retries(
+    cached = _execute(
         """
         DECLARE $user_id AS Utf8;
         DECLARE $entry_id AS Utf8;
@@ -1258,6 +1082,8 @@ def _deepseek_analyze_onboarding(user_id):
     except urllib.error.HTTPError as exc:
         LOG.error("Onboarding analysis HTTP error status=%s",exc.code)
         return _json_response(502,{"error":"deepseek_provider_error","provider_status":int(exc.code)})
+    except TableMissing:
+        raise
     except Exception as exc:
         LOG.exception("Onboarding analysis failed type=%s",type(exc).__name__)
         return _json_response(502,{"error":"onboarding_analysis_failed","exception_type":type(exc).__name__})
@@ -1296,17 +1122,53 @@ def _deepseek_connection_test():
 
 def _run_due_daily_summaries():
     from datetime import datetime, timezone
-    _ensure_schema()
-    now=datetime.now(timezone.utc)
-    result=_db().execute_with_retries("SELECT user_id, timezone FROM user_profiles;")
-    for rs in result:
-        for row in rs.rows:
-            tz_name=str(row.timezone or "UTC")
-            if now.astimezone(_safe_user_timezone(tz_name)).strftime("%H:%M")=="23:59":
+    now = datetime.now(timezone.utc)
+    try:
+        listed = _execute(
+            "SELECT timezone FROM user_profiles GROUP BY timezone;",
+            table="user_profiles",
+        )
+    except TableMissing:
+        LOG.error("Scheduled summary skipped stage=table_missing:user_profiles")
+        print("PUT_K_SEBE_503 stage=table_missing:user_profiles", flush=True)
+        return
+    due = []
+    seen = set()
+    for result_set in listed:
+        for row in result_set.rows:
+            tz_name = str(row.timezone or "UTC")
+            if tz_name in seen:
+                continue
+            seen.add(tz_name)
+            if now.astimezone(_safe_user_timezone(tz_name)).strftime("%H:%M") == "23:59":
+                due.append(tz_name)
+    if not due:
+        return
+    for tz_name in due:
+        if tz_name == "UTC":
+            query = """
+                DECLARE $timezone AS Utf8;
+                SELECT user_id FROM user_profiles
+                WHERE timezone = $timezone OR timezone IS NULL;
+            """
+        else:
+            query = """
+                DECLARE $timezone AS Utf8;
+                SELECT user_id FROM user_profiles WHERE timezone = $timezone;
+            """
+        rows = _execute(query, parameters={"$timezone": tz_name}, table="user_profiles")
+        for result_set in rows:
+            for row in result_set.rows:
+                user_id = str(row.user_id)
                 try:
-                    if _get_user_consents(str(row.user_id)).get("ai_processing"):
-                        _deepseek_daily_summary(str(row.user_id),tz_name,False)
-                except Exception: LOG.exception("Scheduled summary failed")
+                    if _get_user_consents(user_id).get("ai_processing"):
+                        _deepseek_daily_summary(user_id, tz_name, False)
+                except TableMissing as exc:
+                    LOG.error("Scheduled summary skipped stage=table_missing:%s", exc.table_name)
+                    print("PUT_K_SEBE_503 stage=table_missing:%s" % exc.table_name, flush=True)
+                    return
+                except Exception:
+                    LOG.exception("Scheduled summary failed")
     
 
 def handler(event, context):
@@ -1324,10 +1186,9 @@ def handler(event, context):
             return _json_response(204, {"ok": True})
 
         if path == "/health" and method == "GET":
-            # Liveness/readiness only. Schema migrations are checked separately
-            # to avoid repeating DDL on health probes and cold starts.
+            # Liveness only. Table readiness is /health/schema and does not create tables.
             try:
-                _db().execute_with_retries("SELECT 1 AS health_check;")
+                _execute("SELECT 1 AS health_check;")
                 return _json_response(200, {
                     "ok": True, "service": "put-k-sebe-api",
                     "checks": {"handler": "ok", "ydb": "ok"}
@@ -1342,7 +1203,7 @@ def handler(event, context):
 
         if path == "/health/db" and method == "GET":
             try:
-                _db().execute_with_retries("SELECT 1 AS health_check;")
+                _execute("SELECT 1 AS health_check;")
                 return _json_response(200, {
                     "ok": True, "checks": {"handler": "ok", "ydb": "ok"}
                 })
@@ -1355,17 +1216,46 @@ def handler(event, context):
                 })
 
         if path == "/health/schema" and method == "GET":
+            tables = {}
             try:
-                _ensure_consent_schema()
+                for name in TABLES:
+                    try:
+                        _probe_table(name)
+                        tables[name] = "ok"
+                    except TableMissing:
+                        tables[name] = "missing"
+                missing = [name for name, status in tables.items() if status != "ok"]
+                if missing:
+                    stage = "table_missing:" + missing[0]
+                    LOG.error("Schema readiness missing tables=%s", ",".join(missing))
+                    print("PUT_K_SEBE_503 stage=%s" % stage, flush=True)
+                    return _json_response(503, {
+                        "ok": False,
+                        "stage": stage,
+                        "missing": missing,
+                        "checks": {
+                            "tables": tables,
+                            "user_consents": tables.get("user_consents", "missing"),
+                            "user_state": tables.get("user_state", "missing"),
+                        },
+                    })
                 return _json_response(200, {
-                    "ok": True, "checks": {"handler": "ok", "ydb": "ok", "consent_schema": "ok"}
+                    "ok": True,
+                    "checks": {
+                        "handler": "ok",
+                        "tables": tables,
+                        "user_consents": "ok",
+                        "user_state": "ok",
+                    },
                 })
             except Exception as exc:
-                LOG.exception("Health check failed stage=consent_schema_initialization")
+                LOG.exception("Health check failed stage=schema_probe")
                 return _json_response(503, {
-                    "ok": False, "stage": "consent_schema_initialization",
+                    "ok": False,
+                    "stage": "schema_probe",
                     "exception_type": type(exc).__name__,
-                    "detail": str(exc)[:700]
+                    "detail": str(exc)[:700],
+                    "checks": {"tables": tables},
                 })
 
         if path == "/v1/webhooks/tribute" and method == "POST":
@@ -1375,7 +1265,6 @@ def handler(event, context):
 
         if path == "/v1/consents" and method in ("GET", "PUT"):
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_consent_schema()
             if method == "GET":
                 return _json_response(200, {"ok": True, "consents": _get_user_consents(user_id)})
             try:
@@ -1393,7 +1282,6 @@ def handler(event, context):
             return _json_response(200, {"ok": True, "consents": saved})
         if path == "/v1/profile" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_profile_schema()
             try:
                 payload = json.loads(body or "{}")
                 _upsert_profile(user_id,payload.get("user") or {},str(payload.get("timezone") or "UTC"))
@@ -1403,22 +1291,18 @@ def handler(event, context):
 
         if path == "/v1/premium" and method == "GET":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_premium_schema()
             return _json_response(200, _premium_status(user_id))
 
         if path == "/v1/trial" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_premium_schema()
             return _start_trial(user_id)
         if path == "/v1/ai/test" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_schema()
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error": "deepseek_not_configured"})
             return _deepseek_connection_test()
         if path == "/v1/ai/analyze-onboarding" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_schema()
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error":"deepseek_not_configured"})
             denied = _require_ai_processing(user_id)
@@ -1428,7 +1312,6 @@ def handler(event, context):
 
         if path == "/v1/ai/daily-summary" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_schema()
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error":"deepseek_not_configured"})
             denied = _require_ai_processing(user_id)
@@ -1451,14 +1334,12 @@ def handler(event, context):
             timezone_name = headers.get("x-user-timezone", "UTC")
             user_tz = _safe_user_timezone(timezone_name)
             day_key = datetime.now(user_tz).date().isoformat()
-            _ensure_ai_usage_schema()
             used, summary_done = _daily_ai_usage(user_id, day_key, user_tz)
             return _json_response(200, {"limit": 5, "used": used, "remaining": max(0, 5-used),
                                         "summary_done": summary_done, "premium_required": False})
 
         if path == "/v1/ai/analyze-entry" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_schema()
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error": "deepseek_not_configured"})
             denied = _require_ai_processing(user_id)
@@ -1487,7 +1368,6 @@ def handler(event, context):
                     "daily_summary_created", "ai_analysis_created",
                 }
                 if event_name not in allowed: raise ValueError("Invalid event")
-                _ensure_analytics_schema()
                 metadata=payload.get("metadata") if isinstance(payload.get("metadata"),dict) else {}
                 _record_event(user_id,event_name,metadata)
                 return _json_response(202, {"ok": True})
@@ -1497,13 +1377,13 @@ def handler(event, context):
         if path == "/v1/admin/users" and method == "GET":
             if not ADMIN_PASSWORD or not hmac.compare_digest(headers.get("x-admin-password", ""), ADMIN_PASSWORD):
                 return _json_response(401, {"error": "unauthorized"})
-            _ensure_schema()
-            result = _db().execute_with_retries("SELECT user_id, username, first_name, last_name, timezone, created_at, last_seen FROM user_profiles ORDER BY last_seen DESC LIMIT 2000;")
+            result = _execute("SELECT user_id, username, first_name, last_name, timezone, created_at, last_seen FROM user_profiles ORDER BY last_seen DESC LIMIT 2000;")
             users = []
             for rs in result:
                 for row in rs.rows:
                     uid=str(row.user_id); state=_read_state(uid) or {}
                     try: premium=_premium_status(uid)
+                    except TableMissing: raise
                     except Exception: premium={"active":False,"source":None,"trial_used":False}
                     users.append({"telegram_id":uid,"username":str(row.username or ""),
                         "first_name":str(row.first_name or ""),"last_name":str(row.last_name or ""),
@@ -1517,13 +1397,12 @@ def handler(event, context):
         if path == "/v1/admin/user" and method == "GET":
             if not ADMIN_PASSWORD or not hmac.compare_digest(headers.get("x-admin-password", ""), ADMIN_PASSWORD):
                 return _json_response(401, {"error": "unauthorized"})
-            _ensure_schema()
             query=event.get("queryStringParameters") or {}
             target_id=str(query.get("user_id") or "").strip()
             if not target_id.isdigit(): return _json_response(400,{"error":"invalid_user_id"})
             state=_read_state(target_id) or {}
             analytics_id=hmac.new(ANALYTICS_SECRET.encode("utf-8"),("put-k-sebe-analytics:"+target_id).encode("utf-8"),hashlib.sha256).hexdigest()
-            result=_db().execute_with_retries("""
+            result=_execute("""
                 DECLARE $user_id AS Utf8;
                 SELECT event_name,created_at,metadata_json FROM analytics_events
                 WHERE user_id=$user_id ORDER BY created_at DESC LIMIT 500;
@@ -1535,7 +1414,7 @@ def handler(event, context):
             consents=_get_user_consents(target_id)
             ai_history=[]
             if consents.get("ai_history_storage"):
-                history_result=_db().execute_with_retries("""
+                history_result=_execute("""
                     DECLARE $user_id AS Utf8;
                     SELECT entry_id,analysis_text,created_at,input_tokens,output_tokens
                     FROM ai_analyses WHERE user_id=$user_id ORDER BY created_at DESC LIMIT 300;
@@ -1555,8 +1434,7 @@ def handler(event, context):
                 headers.get("x-admin-password", ""), ADMIN_PASSWORD
             ):
                 return _json_response(401, {"error": "unauthorized"})
-            _ensure_schema()
-            result = _db().execute_with_retries(
+            result = _execute(
                 """
                 SELECT user_id, event_name, created_at
                 FROM analytics_events
@@ -1614,7 +1492,6 @@ def handler(event, context):
         user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
 
         if method == "GET":
-            _ensure_user_state_schema()
             state = _read_state(user_id)
             # No persistent usage event is recorded until the user has submitted consented state.
             return _json_response(
@@ -1631,8 +1508,6 @@ def handler(event, context):
             except (json.JSONDecodeError, ValueError, TypeError) as exc:
                 return _json_response(400, {"error": str(exc)})
 
-            _ensure_user_state_schema()
-            _ensure_analytics_schema()
             previous = _read_state(user_id)
             _write_state(user_id, state)
 
@@ -1645,9 +1520,7 @@ def handler(event, context):
             return _json_response(200, {"ok": True, "saved": True})
 
         if method == "DELETE":
-            _ensure_user_state_schema()
-            _ensure_analytics_schema()
-            _db().execute_with_retries(
+            _execute(
                 """
                 DECLARE $user_id AS Utf8;
                 DELETE FROM user_state WHERE user_id = $user_id;
@@ -1659,6 +1532,15 @@ def handler(event, context):
 
         return _json_response(405, {"error": "method_not_allowed"})
 
+    except TableMissing as exc:
+        stage = "table_missing:" + exc.table_name
+        print("PUT_K_SEBE_503 stage=%s method=%s path=%s" %
+              (stage, locals().get("method", "UNKNOWN"),
+               locals().get("path", "UNKNOWN")), flush=True)
+        LOG.error("API request failed stage=%s method=%s path=%s",
+                  stage, locals().get("method", "UNKNOWN"),
+                  locals().get("path", "UNKNOWN"))
+        return _json_response(503, {"error": "service_unavailable", "stage": stage})
     except ValueError as exc:
         return _json_response(401, {"error": str(exc)})
     except Exception as exc:
