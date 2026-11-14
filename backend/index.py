@@ -879,6 +879,29 @@ def _save_ai_result(user_id, cache_key, text_value, usage, created):
             "$input_tokens": ydb.TypedValue(max(0, int(usage.get("input_tokens", 0))), ydb.PrimitiveType.Uint64),
             "$output_tokens": ydb.TypedValue(max(0, int(usage.get("output_tokens", 0))), ydb.PrimitiveType.Uint64), "$created_at": created})
 
+def _get_previous_daily_summary(user_id, timezone_name="UTC"):
+    from datetime import datetime, timedelta
+    user_tz = _safe_user_timezone(timezone_name)
+    day_key = (datetime.now(user_tz).date() - timedelta(days=1)).isoformat()
+    consent = _get_user_consents(user_id)
+    if not consent.get("ai_history_storage"):
+        return _json_response(403, {"error":"summary_history_not_enabled",
+            "message":"Для просмотра прошлых сводок нужно включить хранение истории AI."})
+    cache_key = "daily-summary:" + day_key
+    rows = _db().execute_with_retries("""
+        DECLARE $user_id AS Utf8;
+        DECLARE $entry_id AS Utf8;
+        SELECT analysis_text, created_at FROM ai_analyses
+        WHERE user_id=$user_id AND entry_id=$entry_id;
+        """, parameters={"$user_id":user_id, "$entry_id":cache_key})
+    for result_set in rows:
+        for row in result_set.rows:
+            return _json_response(200, {"ok":True, "day":day_key,
+                "summary":str(row.analysis_text), "created_at":str(row.created_at)})
+    return _json_response(404, {"error":"previous_summary_not_found",
+        "message":"Сохранённая сводка за предыдущий день не найдена."})
+
+
 def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
     from datetime import datetime, timezone
     import urllib.error
@@ -1228,8 +1251,12 @@ def handler(event, context):
             try:
                 payload = json.loads(body or "{}")
                 timezone_name = str(payload.get("timezone") or "UTC")
+                action = str(payload.get("action") or "")
             except (json.JSONDecodeError, TypeError):
                 timezone_name = "UTC"
+                action = ""
+            if action == "previous":
+                return _get_previous_daily_summary(user_id, timezone_name)
             return _deepseek_daily_summary(user_id, timezone_name, False)
 
         if path == "/v1/ai/usage" and method == "GET":
