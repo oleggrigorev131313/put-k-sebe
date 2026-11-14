@@ -64,7 +64,9 @@ GATEWAY_SA_FOLDER_ID="$(printf '%s' "$GATEWAY_SA_JSON" | python3 -c 'import json
 
 NETWORK_JSON="$(yc vpc network get "$NETWORK_ID" --format json)" || fail "Не найдена облачная сеть $NETWORK_ID"
 NETWORK_FOLDER_ID="$(printf '%s' "$NETWORK_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("folder_id",""))')"
+NETWORK_NAME="$(printf '%s' "$NETWORK_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("name",""))')"
 [[ "$NETWORK_FOLDER_ID" == "$FOLDER_ID" ]] || fail "Облачная сеть $NETWORK_ID находится в другой папке: $NETWORK_FOLDER_ID"
+[[ "$NETWORK_NAME" == "default" ]] || fail "Сеть $NETWORK_ID имеет имя '$NETWORK_NAME', ожидалась сеть default"
 
 DB_JSON="$(yc ydb database get "$DB_NAME" --format json)" || fail "Не найдена база $DB_NAME"
 DB_STATUS="$(printf '%s' "$DB_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')"
@@ -208,9 +210,14 @@ fi
 FUNCTION_ID="$(printf '%s' "$FUNCTION_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 [[ "$FUNCTION_ID" == "$EXPECTED_FUNCTION_ID" ]] || fail "Найдена другая Cloud Function: $FUNCTION_ID; ожидалась $EXPECTED_FUNCTION_ID. Остановка без обновления."
 
-if ! yc serverless function list-access-bindings "$FUNCTION_ID" 2>/dev/null | grep -q "$GATEWAY_SA_ID"; then
-  yc serverless function add-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --subject "serviceAccount:$GATEWAY_SA_ID" || fail "Не удалось разрешить API Gateway вызывать Cloud Function"
+FUNCTION_BINDINGS="$(yc serverless function list-access-bindings "$FUNCTION_ID" --format json)" || fail "Не удалось прочитать права Cloud Function"
+HAS_GATEWAY_INVOKER="$(printf '%s' "$FUNCTION_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",d.get("accessBindings",[])); print("yes" if any(x.get("role_id",x.get("roleId"))=="functions.functionInvoker" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$GATEWAY_SA_ID")"
+if [[ "$HAS_GATEWAY_INVOKER" != "yes" ]]; then
+  yc serverless function add-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --subject "serviceAccount:$GATEWAY_SA_ID" >/dev/null || fail "Не удалось разрешить API Gateway вызывать Cloud Function"
+  FUNCTION_BINDINGS="$(yc serverless function list-access-bindings "$FUNCTION_ID" --format json)" || fail "Не удалось повторно прочитать права Cloud Function"
+  HAS_GATEWAY_INVOKER="$(printf '%s' "$FUNCTION_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",d.get("accessBindings",[])); print("yes" if any(x.get("role_id",x.get("roleId"))=="functions.functionInvoker" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$GATEWAY_SA_ID")"
 fi
+[[ "$HAS_GATEWAY_INVOKER" == "yes" ]] || fail "У gateway service account $GATEWAY_SA_ID отсутствует подтверждённая роль functions.functionInvoker на Cloud Function"
 # Timer invocation permission belongs on the folder, not on the individual function.
 # Keep this binding: removing it makes the timer's service account unable to invoke the function.
 TIMER_BINDINGS="$(yc resource-manager folder list-access-bindings "$FOLDER_ID" --format json)" || fail "Не удалось прочитать IAM-привязки каталога для таймера"
