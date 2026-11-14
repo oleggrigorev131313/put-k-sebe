@@ -264,6 +264,13 @@ def _ensure_schema():
                 PRIMARY KEY (event_id)
             );
             """)
+        _tables_ready.update({
+            "user_state", "analytics_events", "user_profiles",
+            "premium_purchases", "premium_trials", "ai_analyses",
+            "user_consents", "daily_summary_claims", "ai_usage_events",
+        })
+        global _consent_schema_ready
+        _consent_schema_ready = True
         _schema_ready = True
 
 
