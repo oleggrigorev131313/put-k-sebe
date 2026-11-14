@@ -133,6 +133,14 @@ def _ensure_schema():
             );
             """)
         pool.execute_with_retries("""
+            CREATE TABLE IF NOT EXISTS daily_summary_claims (
+                user_id Utf8 NOT NULL,
+                day_key Utf8 NOT NULL,
+                created_at Utf8 NOT NULL,
+                PRIMARY KEY (user_id, day_key)
+            );
+            """)
+        pool.execute_with_retries("""
             CREATE TABLE IF NOT EXISTS ai_usage_events (
                 event_id Utf8 NOT NULL,
                 user_id Utf8 NOT NULL,
@@ -927,6 +935,16 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
         return _json_response(422, {"error":"no_meaningful_entries",
             "message":"В сегодняшних записях пока недостаточно понятного контекста для сводки."})
     todays = meaningful_entries
+    # A unique YDB primary key serializes manual and scheduled requests for this user/day.
+    try:
+        _db().execute_with_retries("""
+            DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DECLARE $created_at AS Utf8;
+            INSERT INTO daily_summary_claims (user_id, day_key, created_at)
+            VALUES ($user_id, $day_key, $created_at);
+        """, parameters={"$user_id": user_id, "$day_key": day_key, "$created_at": now.isoformat()})
+    except Exception:
+        return _json_response(409, {"error":"daily_summary_already_used",
+            "message":"Итоги за сегодня уже формируются или уже подведены."})
     snippets = []
     for i, entry in enumerate(todays[-30:], 1):
         fields = [("Ситуация","situation"),("Эмоция","emotion"),("Интенсивность","intensity"),
@@ -1002,12 +1020,15 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
         _record_event(user_id, "daily_summary_created")
         return _json_response(200, {"ok":True,"cached":False,"summary":summary,"usage":usage,"created_at":created})
     except urllib.error.HTTPError as exc:
+        _db().execute_with_retries("DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;", parameters={"$user_id":user_id,"$day_key":day_key})
         LOG.error("DeepSeek daily summary HTTP error status=%s", exc.code)
         return _json_response(502, {"error":"deepseek_provider_error","provider_status":int(exc.code)})
     except urllib.error.URLError as exc:
+        _db().execute_with_retries("DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;", parameters={"$user_id":user_id,"$day_key":day_key})
         LOG.error("DeepSeek daily summary network error: %s", type(exc.reason).__name__)
         return _json_response(502, {"error":"deepseek_network_error"})
     except Exception as exc:
+        _db().execute_with_retries("DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;", parameters={"$user_id":user_id,"$day_key":day_key})
         safe_detail = str(exc).replace("\\n", " ")[:500]
         LOG.exception("Daily summary failed type=%s detail=%s", type(exc).__name__, safe_detail)
         return _json_response(502, {"error":"daily_summary_failed",
