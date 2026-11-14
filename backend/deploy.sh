@@ -189,6 +189,9 @@ FUNCTION_ID="$(printf '%s' "$FUNCTION_JSON" | python3 -c 'import json,sys; print
 if ! yc serverless function list-access-bindings "$FUNCTION_ID" 2>/dev/null | grep -q "$GATEWAY_SA_ID"; then
   yc serverless function add-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --subject "serviceAccount:$GATEWAY_SA_ID" || fail "Не удалось разрешить API Gateway вызывать Cloud Function"
 fi
+if ! yc serverless function list-access-bindings "$FUNCTION_ID" 2>/dev/null | grep -q "$SA_ID"; then
+  yc serverless function add-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --subject "serviceAccount:$SA_ID" || fail "Не удалось разрешить таймеру вызывать Cloud Function"
+fi
 # The initial deployment attempt may have granted invoker to the backend identity.
 if yc serverless function list-access-bindings "$FUNCTION_ID" 2>/dev/null | grep -q "$SA_ID"; then
   yc serverless function remove-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --service-account-id "$SA_ID" >/dev/null 2>&1 || true
@@ -209,6 +212,20 @@ yc serverless function version create \
   --secret "environment-variable=TRIBUTE_API_KEY,id=$TRIBUTE_SECRET_ID,version-id=$TRIBUTE_VERSION_ID,key=api_key" \
   --secret "environment-variable=DEEPSEEK_API_KEY,id=$DEEPSEEK_SECRET_ID,version-id=$DEEPSEEK_VERSION_ID,key=api_key" \
   --description "Put-k-sebe API deployment" >/dev/null
+
+# Timer runs each minute; backend generates summaries only for users at local 23:59.
+TIMER_NAME="put-k-sebe-daily-summary"
+TIMER_JSON="$(yc serverless trigger get "$TIMER_NAME" --format json 2>/dev/null || true)"
+if [[ -z "$TIMER_JSON" ]]; then
+  yc serverless trigger create timer "$TIMER_NAME" \
+    --description "One daily summary at 23:59 in each user's local timezone" \
+    --cron-expression '* * * * ? *' \
+    --payload '{"job":"daily_summary"}' \
+    --invoke-function-id "$FUNCTION_ID" \
+    --invoke-function-service-account-id "$SA_ID" >/dev/null || fail "Не удалось создать таймер ежедневной сводки"
+else
+  echo "    Таймер ежедневной сводки уже существует."
+fi
 
 # Cloud Functions copies the package during version creation; remove the temporary object.
 yc storage s3api delete-object --bucket "$BUCKET_NAME" --key "$OBJECT_KEY" >/dev/null 2>&1 || true
@@ -244,6 +261,17 @@ paths:
       responses:
         "200":
           description: Tribute event processed
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /v1/profile:
+    post:
+      operationId: registerUserProfile
+      responses:
+        "200":
+          description: User profile updated
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
@@ -371,6 +399,28 @@ paths:
       responses:
         "202":
           description: Event accepted
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /v1/admin/users:
+    get:
+      operationId: getAdminUsers
+      responses:
+        "200":
+          description: Admin user list
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /v1/admin/user:
+    get:
+      operationId: getAdminUser
+      responses:
+        "200":
+          description: Admin user details
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
