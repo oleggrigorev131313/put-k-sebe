@@ -31,6 +31,7 @@ _driver = None
 _pool = None
 _db_lock = RLock()
 _schema_ready = False
+_consent_schema_ready = False
 
 
 def _db():
@@ -50,15 +51,53 @@ def _db():
 
 
 def _run_schema_query(pool, table_name, query):
-    try:
-        pool.execute_with_retries(query)
-    except Exception as exc:
-        # Keep the failing DDL step visible even when Cloud Logging is unavailable.
-        LOG.exception("YDB schema initialization failed table=%s", table_name)
-        message = " ".join(str(exc).split())[:500]
-        raise RuntimeError(
-            f"table={table_name}; cause={type(exc).__name__}; detail={message}"
-        ) from exc
+    delays = (1, 2, 4, 8)
+    for attempt in range(len(delays) + 1):
+        try:
+            pool.execute_with_retries(query)
+            # YDB limits the rate of schema changes. Spread DDL operations
+            # instead of issuing nine CREATE TABLE requests back-to-back.
+            time.sleep(0.6)
+            return
+        except Exception as exc:
+            raw = " ".join(str(exc).split())
+            quota_limited = (
+                "exceeded a limit on the number of schema operations" in raw.lower()
+                or "400080" in raw
+            )
+            if not quota_limited or attempt >= len(delays):
+                LOG.exception("YDB schema initialization failed table=%s", table_name)
+                message = raw[:500]
+                raise RuntimeError(
+                    f"table={table_name}; cause={type(exc).__name__}; detail={message}"
+                ) from exc
+            delay = delays[attempt]
+            LOG.warning(
+                "YDB schema rate limit table=%s retry=%s wait=%ss",
+                table_name, attempt + 1, delay,
+            )
+            time.sleep(delay)
+
+
+def _ensure_consent_schema():
+    global _consent_schema_ready
+    if _consent_schema_ready:
+        return
+    with _db_lock:
+        if _consent_schema_ready:
+            return
+        pool = _db()
+        _run_schema_query(pool, "user_consents", """
+            CREATE TABLE IF NOT EXISTS user_consents (
+                user_id Utf8 NOT NULL,
+                ai_processing Bool NOT NULL,
+                ai_history_storage Bool NOT NULL,
+                consent_version Utf8 NOT NULL,
+                updated_at Utf8 NOT NULL,
+                PRIMARY KEY (user_id)
+            );
+            """)
+        _consent_schema_ready = True
 
 
 def _ensure_schema():
@@ -1191,17 +1230,18 @@ def handler(event, context):
             return _json_response(204, {"ok": True})
 
         if path == "/health" and method == "GET":
-            # Deployment health must include YDB and the complete schema, not just process liveness.
+            # Liveness/readiness only. Schema migrations are checked separately
+            # to avoid repeating DDL on health probes and cold starts.
             try:
-                _ensure_schema()
+                _db().execute_with_retries("SELECT 1 AS health_check;")
                 return _json_response(200, {
                     "ok": True, "service": "put-k-sebe-api",
-                    "checks": {"handler": "ok", "ydb": "ok", "schema": "ok"}
+                    "checks": {"handler": "ok", "ydb": "ok"}
                 })
             except Exception as exc:
-                LOG.exception("Health check failed stage=schema_initialization")
+                LOG.exception("Health check failed stage=ydb_connect_or_query")
                 return _json_response(503, {
-                    "ok": False, "stage": "schema_initialization",
+                    "ok": False, "stage": "ydb_connect_or_query",
                     "exception_type": type(exc).__name__,
                     "detail": str(exc)[:700]
                 })
@@ -1222,14 +1262,14 @@ def handler(event, context):
 
         if path == "/health/schema" and method == "GET":
             try:
-                _ensure_schema()
+                _ensure_consent_schema()
                 return _json_response(200, {
-                    "ok": True, "checks": {"handler": "ok", "ydb": "ok", "schema": "ok"}
+                    "ok": True, "checks": {"handler": "ok", "ydb": "ok", "consent_schema": "ok"}
                 })
             except Exception as exc:
-                LOG.exception("Health check failed stage=schema_initialization")
+                LOG.exception("Health check failed stage=consent_schema_initialization")
                 return _json_response(503, {
-                    "ok": False, "stage": "schema_initialization",
+                    "ok": False, "stage": "consent_schema_initialization",
                     "exception_type": type(exc).__name__,
                     "detail": str(exc)[:700]
                 })
@@ -1241,7 +1281,7 @@ def handler(event, context):
 
         if path == "/v1/consents" and method in ("GET", "PUT"):
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_schema()
+            _ensure_consent_schema()
             if method == "GET":
                 return _json_response(200, {"ok": True, "consents": _get_user_consents(user_id)})
             try:
