@@ -189,12 +189,14 @@ FUNCTION_ID="$(printf '%s' "$FUNCTION_JSON" | python3 -c 'import json,sys; print
 if ! yc serverless function list-access-bindings "$FUNCTION_ID" 2>/dev/null | grep -q "$GATEWAY_SA_ID"; then
   yc serverless function add-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --subject "serviceAccount:$GATEWAY_SA_ID" || fail "Не удалось разрешить API Gateway вызывать Cloud Function"
 fi
-if ! yc serverless function list-access-bindings "$FUNCTION_ID" 2>/dev/null | grep -q "$SA_ID"; then
-  yc serverless function add-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --subject "serviceAccount:$SA_ID" || fail "Не удалось разрешить таймеру вызывать Cloud Function"
-fi
-# The initial deployment attempt may have granted invoker to the backend identity.
-if yc serverless function list-access-bindings "$FUNCTION_ID" 2>/dev/null | grep -q "$SA_ID"; then
-  yc serverless function remove-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --service-account-id "$SA_ID" >/dev/null 2>&1 || true
+# Timer invocation permission belongs on the folder, not on the individual function.
+# Keep this binding: removing it makes the timer's service account unable to invoke the function.
+TIMER_BINDINGS="$(yc resource-manager folder list-access-bindings "$FOLDER_ID" --format json)" || fail "Не удалось прочитать IAM-привязки каталога для таймера"
+HAS_TIMER_INVOKER="$(printf '%s' "$TIMER_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",[]); print("yes" if any(x.get("role_id",x.get("roleId"))=="functions.functionInvoker" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$SA_ID")"
+if [[ "$HAS_TIMER_INVOKER" != "yes" ]]; then
+  yc resource-manager folder add-access-binding "$FOLDER_ID" \
+    --role functions.functionInvoker \
+    --subject "serviceAccount:$SA_ID" >/dev/null || fail "Не удалось выдать backend-сервисному аккаунту functions.functionInvoker на каталог"
 fi
 
 yc serverless function version create \
@@ -214,15 +216,19 @@ yc serverless function version create \
   --description "Put-k-sebe API deployment" >/dev/null
 
 # Timer runs each minute; backend generates summaries only for users at local 23:59.
+# Use Trigger API v2 (the v1 CLI is deprecated).
 TIMER_NAME="put-k-sebe-daily-summary"
-TIMER_JSON="$(yc serverless trigger get "$TIMER_NAME" --format json 2>/dev/null || true)"
+TIMER_JSON="$(yc serverless trigger v2 get "$TIMER_NAME" --format json 2>/dev/null || true)"
 if [[ -z "$TIMER_JSON" ]]; then
-  yc serverless trigger create timer "$TIMER_NAME" \
+  TIMER_ACTION_FILE="$WORKDIR/timer-action.json"
+  cat > "$TIMER_ACTION_FILE" <<JSON
+{"invoke_function":{"function_id":"$FUNCTION_ID","function_tag":"\\$latest","service_account_id":"$SA_ID"}}
+JSON
+  yc serverless trigger v2 create timer "$TIMER_NAME" \
     --description "One daily summary at 23:59 in each user's local timezone" \
     --cron-expression '* * * * ? *' \
     --payload '{"job":"daily_summary"}' \
-    --invoke-function-id "$FUNCTION_ID" \
-    --invoke-function-service-account-id "$SA_ID" >/dev/null || fail "Не удалось создать таймер ежедневной сводки"
+    --action "@$TIMER_ACTION_FILE" >/dev/null || fail "Не удалось создать таймер ежедневной сводки"
 else
   echo "    Таймер ежедневной сводки уже существует."
 fi
