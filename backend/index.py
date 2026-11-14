@@ -1126,6 +1126,10 @@ DIARY_BUTTON_TEXT = "Открыть дневник"
 TELEGRAM_SEND_INTERVAL_SECONDS = 0.05
 SUMMARY_NOTIFY_KEY_PREFIX = "notify:"
 _last_telegram_send_at = 0.0
+TELEGRAM_CONNECT_TIMEOUT_SECONDS = 5
+TELEGRAM_TOTAL_TIMEOUT_SECONDS = 10
+TELEGRAM_MAX_CONSECUTIVE_NETWORK_FAILURES = 3
+_telegram_consecutive_network_failures = 0
 # Blank lines below are real newline characters. Do not write the two characters \n.
 SUMMARY_READY_TEXT = """\
 ✨ Твои итоги дня готовы!
@@ -1203,6 +1207,48 @@ def _pace_telegram_send():
     _last_telegram_send_at = time.monotonic()
 
 
+def _telegram_api_base():
+    configured = os.environ.get("TELEGRAM_API_BASE", "").strip().rstrip("/")
+    if not configured:
+        return "https://api.telegram.org"
+    return configured
+
+
+def _telegram_urlopen(request):
+    """POST with a 5s connect bound and a 10s overall socket timeout."""
+    import http.client
+    import socket
+    import urllib.request
+
+    class _TelegramHTTPSConnection(http.client.HTTPSConnection):
+        def connect(self):
+            self.sock = socket.create_connection(
+                (self.host, self.port),
+                TELEGRAM_CONNECT_TIMEOUT_SECONDS,
+            )
+            self.sock.settimeout(TELEGRAM_TOTAL_TIMEOUT_SECONDS)
+            self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
+
+    class _TelegramHTTPConnection(http.client.HTTPConnection):
+        def connect(self):
+            self.sock = socket.create_connection(
+                (self.host, self.port),
+                TELEGRAM_CONNECT_TIMEOUT_SECONDS,
+            )
+            self.sock.settimeout(TELEGRAM_TOTAL_TIMEOUT_SECONDS)
+
+    class _TelegramHTTPSHandler(urllib.request.HTTPSHandler):
+        def https_open(self, req):
+            return self.do_open(_TelegramHTTPSConnection, req)
+
+    class _TelegramHTTPHandler(urllib.request.HTTPHandler):
+        def http_open(self, req):
+            return self.do_open(_TelegramHTTPConnection, req)
+
+    opener = urllib.request.build_opener(_TelegramHTTPSHandler, _TelegramHTTPHandler)
+    return opener.open(request, timeout=TELEGRAM_TOTAL_TIMEOUT_SECONDS)
+
+
 def _send_telegram_message(method, payload):
     """Call the Bot API. Never log the URL: it contains the bot token."""
     import urllib.error
@@ -1210,7 +1256,7 @@ def _send_telegram_message(method, payload):
     if not BOT_TOKEN:
         LOG.error("Telegram %s skipped: BOT_TOKEN is not configured", method)
         return "skipped"
-    url = "https://api.telegram.org/bot" + BOT_TOKEN + "/" + method
+    url = _telegram_api_base() + "/bot" + BOT_TOKEN + "/" + method
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(
         url,
@@ -1219,7 +1265,7 @@ def _send_telegram_message(method, payload):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
+        with _telegram_urlopen(request) as response:
             raw = response.read(16_000)
         try:
             parsed = json.loads(raw.decode("utf-8"))
@@ -1239,6 +1285,9 @@ def _send_telegram_message(method, payload):
         if code == 403:
             return "blocked"
         return "error"
+    except (urllib.error.URLError, TimeoutError, OSError):
+        LOG.error("Telegram %s network failure", method)
+        return "network"
     except Exception as exc:
         LOG.error("Telegram %s failed type=%s", method, type(exc).__name__)
         return "error"
@@ -1286,6 +1335,7 @@ def _release_summary_notification(user_id, day_key):
 
 
 def _send_summary_notification(user_id, day_key, response, created_at):
+    global _telegram_consecutive_network_failures
     try:
         kind = _summary_notification_kind(response)
         if kind is None:
@@ -1296,6 +1346,9 @@ def _send_summary_notification(user_id, day_key, response, created_at):
         if not BOT_TOKEN:
             LOG.error("summary notify skipped: BOT_TOKEN is not configured")
             return None
+        if _telegram_consecutive_network_failures >= TELEGRAM_MAX_CONSECUTIVE_NETWORK_FAILURES:
+            LOG.error("summary notify stopped after network failures")
+            return "stopped"
         if not _claim_summary_notification(user_id, day_key, created_at):
             return "duplicate"
         _pace_telegram_send()
@@ -1303,6 +1356,10 @@ def _send_summary_notification(user_id, day_key, response, created_at):
             "sendMessage",
             build_summary_notification(kind, int(user_id)),
         )
+        if result == "network":
+            _telegram_consecutive_network_failures += 1
+        else:
+            _telegram_consecutive_network_failures = 0
         if result not in ("ok", "blocked"):
             _release_summary_notification(user_id, day_key)
         LOG.info("summary notify kind=%s result=%s", kind, result)
@@ -1320,6 +1377,8 @@ def _local_day_key(timezone_name, now):
 
 def _run_due_daily_summaries(now=None):
     from datetime import datetime, timezone
+    global _telegram_consecutive_network_failures
+    _telegram_consecutive_network_failures = 0
     if now is None:
         now = datetime.now(timezone.utc)
     elif now.tzinfo is None:
@@ -1461,39 +1520,27 @@ def build_start_reply(chat_id, caption=None):
     ]
 
 
-def _telegram_bot_call(method, payload):
-    import urllib.error
-    import urllib.request
-    if not BOT_TOKEN:
-        LOG.error("Telegram %s skipped: BOT_TOKEN is not configured", method)
-        return
-    # The token stays in the request URL only. Do not log the URL or the payload.
-    url = "https://api.telegram.org/bot" + BOT_TOKEN + "/" + method
-    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=25) as response:
-            raw = response.read(16_000)
-        try:
-            parsed = json.loads(raw.decode("utf-8"))
-        except json.JSONDecodeError:
-            LOG.error("Telegram %s returned unreadable JSON", method)
-            return
-        if not parsed.get("ok"):
-            LOG.error("Telegram %s rejected error_code=%s", method, parsed.get("error_code"))
-    except urllib.error.HTTPError as exc:
-        LOG.error("Telegram %s failed status=%s", method, getattr(exc, "code", "unknown"))
-    except Exception as exc:
-        LOG.error("Telegram %s failed type=%s", method, type(exc).__name__)
+def _webhook_response(payload):
+    # API Gateway payload format 1.0 copies statusCode, headers, and body
+    # into the HTTP response. isBase64Encoded stays false so the JSON is raw.
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        "isBase64Encoded": False,
+    }
+
+
+def _start_webhook_method(chat_id):
+    """One Bot API method for Telegram's webhook-response feature. No outbound call."""
+    method, fields = build_start_reply(chat_id)[0]
+    reply = {"method": method}
+    reply.update(fields)
+    return reply
 
 
 def _handle_telegram_webhook(headers, body):
-    # Bot updates only. No YDB reads or writes: /start does not create a profile.
+    # Bot updates only. No YDB reads or writes, and no call to api.telegram.org.
     if not _telegram_webhook_authorized(headers):
         LOG.error("Telegram webhook rejected")
         return _json_response(401, {"error": "unauthorized"})
@@ -1502,30 +1549,28 @@ def _handle_telegram_webhook(headers, body):
             body = ""
         if len(body.encode("utf-8")) > 100_000:
             LOG.error("Telegram webhook body too large")
-            return _json_response(200, {"ok": True})
+            return _webhook_response({"ok": True})
         try:
             update = json.loads(body or "{}")
         except json.JSONDecodeError:
             LOG.error("Telegram webhook ignored: invalid JSON")
-            return _json_response(200, {"ok": True})
+            return _webhook_response({"ok": True})
         message = update.get("message") if isinstance(update, dict) else None
         if not isinstance(message, dict) or not _is_start_command(message.get("text")):
-            return _json_response(200, {"ok": True})
+            return _webhook_response({"ok": True})
         chat = message.get("chat") if isinstance(message.get("chat"), dict) else {}
         # web_app buttons are delivered in a private chat with the bot.
         if chat.get("type") not in (None, "private"):
-            return _json_response(200, {"ok": True})
+            return _webhook_response({"ok": True})
         chat_id = chat.get("id")
         if isinstance(chat_id, bool) or not isinstance(chat_id, int):
             LOG.error("Telegram /start ignored: chat id missing")
-            return _json_response(200, {"ok": True})
-        for method, payload in build_start_reply(chat_id):
-            _telegram_bot_call(method, payload)
-        LOG.info("Telegram /start reply attempted")
-        return _json_response(200, {"ok": True})
+            return _webhook_response({"ok": True})
+        LOG.info("Telegram /start inline reply")
+        return _webhook_response(_start_webhook_method(chat_id))
     except Exception as exc:
         LOG.error("Telegram webhook failed type=%s", type(exc).__name__)
-        return _json_response(200, {"ok": True})
+        return _webhook_response({"ok": True})
 
 
 def handler(event, context):

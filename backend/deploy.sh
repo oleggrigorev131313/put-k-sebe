@@ -306,6 +306,15 @@ rollback_hint() {
   fi
 }
 
+FUNCTION_ENV="YDB_ENDPOINT=$YDB_ENDPOINT,YDB_DATABASE=$YDB_DATABASE"
+# Optional relay origin for outbound Bot API calls. Never print the value.
+if [[ -n "${TELEGRAM_API_BASE:-}" ]]; then
+  if [[ "$TELEGRAM_API_BASE" != https://* || "$TELEGRAM_API_BASE" == *","* || "$TELEGRAM_API_BASE" == *" "* || "$TELEGRAM_API_BASE" == *"'"* ]]; then
+    fail "TELEGRAM_API_BASE должен быть https URL без пробелов, кавычек и запятых"
+  fi
+  FUNCTION_ENV="${FUNCTION_ENV},TELEGRAM_API_BASE=${TELEGRAM_API_BASE}"
+fi
+
 VERSION_JSON="$(yc serverless function version create \
   --function-id "$FUNCTION_ID" \
   --runtime python312 \
@@ -316,7 +325,7 @@ VERSION_JSON="$(yc serverless function version create \
   --package-object-name "$OBJECT_KEY" \
   --service-account-id "$SA_ID" \
   --network-id "$NETWORK_ID" \
-  --environment "YDB_ENDPOINT=$YDB_ENDPOINT,YDB_DATABASE=$YDB_DATABASE" \
+  --environment "$FUNCTION_ENV" \
   --secret "environment-variable=BOT_TOKEN,id=$SECRET_ID,version-id=$VERSION_ID,key=bot_token" \
   --secret "environment-variable=ADMIN_PASSWORD,id=$ADMIN_SECRET_ID,version-id=$ADMIN_VERSION_ID,key=admin_password" \
   --secret "environment-variable=TRIBUTE_API_KEY,id=$TRIBUTE_SECRET_ID,version-id=$TRIBUTE_VERSION_ID,key=api_key" \
@@ -409,6 +418,9 @@ paths:
       responses:
         "200":
           description: Telegram bot update accepted
+      # payload_format_version 1.0 copies the function statusCode, headers
+      # (including Content-Type) and body through unchanged. The body is raw
+      # JSON when isBase64Encoded is false, which is how /start answers inline.
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
