@@ -32,6 +32,7 @@ _pool = None
 _db_lock = RLock()
 _schema_ready = False
 _schema_failure = None
+_consent_schema_ready = False
 
 
 def _db():
@@ -172,6 +173,29 @@ def _ensure_schema():
             """)
         _schema_ready = True
     
+
+def _ensure_consent_schema():
+    """Initialize only the consent table; consent loading must not depend on
+    unrelated analytics, premium, or AI tables being initialized."""
+    global _consent_schema_ready
+    if _consent_schema_ready:
+        return
+    with _db_lock:
+        if _consent_schema_ready:
+            return
+        pool = _db()
+        _run_schema_step(pool, "user_consents", """
+            CREATE TABLE IF NOT EXISTS user_consents (
+                user_id Utf8 NOT NULL,
+                ai_processing Bool NOT NULL,
+                ai_history_storage Bool NOT NULL,
+                consent_version Utf8 NOT NULL,
+                updated_at Utf8 NOT NULL,
+                PRIMARY KEY (user_id)
+            );
+        """)
+        _consent_schema_ready = True
+
 
 CONSENT_VERSION = "2026-11-14-v1"
 
@@ -1247,7 +1271,7 @@ def handler(event, context):
 
         if path == "/v1/consents" and method in ("GET", "PUT"):
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_schema()
+            _ensure_consent_schema()
             if method == "GET":
                 return _json_response(200, {"ok": True, "consents": _get_user_consents(user_id)})
             try:
