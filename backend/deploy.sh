@@ -11,7 +11,10 @@ ADMIN_SECRET_NAME="put-k-sebe-admin-password"
 TRIBUTE_SECRET_NAME="put-k-sebe-tribute-api-key"
 DEEPSEEK_SECRET_NAME="put-k-sebe-deepseek-api-key"
 FUNCTION_NAME="put-k-sebe-api"
+EXPECTED_FUNCTION_ID="d4etj8737dl7lmfb36d0"
 GATEWAY_NAME="put-k-sebe-gateway"
+EXPECTED_GATEWAY_ID="d5dhdhkofvnr2t1fnkag"
+EXPECTED_GATEWAY_DOMAIN="d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net"
 REPO_URL="https://github.com/oleggrigorev131313/put-k-sebe.git"
 WORKDIR="$(mktemp -d /tmp/put-k-sebe.XXXXXX)"
 BUILD_DIR="$WORKDIR/.build"
@@ -201,6 +204,7 @@ if [[ -z "$FUNCTION_JSON" ]]; then
   FUNCTION_JSON="$(yc serverless function create "$FUNCTION_NAME" --description "API for Put-k-sebe Telegram Mini App" --format json)"
 fi
 FUNCTION_ID="$(printf '%s' "$FUNCTION_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+[[ "$FUNCTION_ID" == "$EXPECTED_FUNCTION_ID" ]] || fail "Найдена другая Cloud Function: $FUNCTION_ID; ожидалась $EXPECTED_FUNCTION_ID. Остановка без обновления."
 
 if ! yc serverless function list-access-bindings "$FUNCTION_ID" 2>/dev/null | grep -q "$GATEWAY_SA_ID"; then
   yc serverless function add-access-binding --id "$FUNCTION_ID" --role functions.functionInvoker --subject "serviceAccount:$GATEWAY_SA_ID" || fail "Не удалось разрешить API Gateway вызывать Cloud Function"
@@ -521,6 +525,10 @@ YAML
 
 echo "[8/8] Создаю или обновляю API Gateway..."
 GATEWAY_JSON="$(yc serverless api-gateway get "$GATEWAY_NAME" --format json 2>/dev/null || true)"
+if [[ -n "$GATEWAY_JSON" ]]; then
+  CURRENT_GATEWAY_ID="$(printf '%s' "$GATEWAY_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+  [[ "$CURRENT_GATEWAY_ID" == "$EXPECTED_GATEWAY_ID" ]] || fail "Ресурс $GATEWAY_NAME имеет ID $CURRENT_GATEWAY_ID, ожидался $EXPECTED_GATEWAY_ID. Остановка без обновления."
+fi
 if [[ -z "$GATEWAY_JSON" ]]; then
   GATEWAY_JSON="$(yc serverless api-gateway create "$GATEWAY_NAME" --description "API for Put-k-sebe Telegram Mini App" --spec "$SPEC_FILE" --format json)"
 else
@@ -530,7 +538,9 @@ fi
 GATEWAY_ID="$(printf '%s' "$GATEWAY_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 GATEWAY_JSON="$(yc serverless api-gateway get "$GATEWAY_ID" --format json)"
 GATEWAY_DOMAIN="$(printf '%s' "$GATEWAY_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("domain") or d.get("domain_name") or d.get("domainName") or "")')"
+[[ "$GATEWAY_ID" == "$EXPECTED_GATEWAY_ID" ]] || fail "Обновлён не тот API Gateway: $GATEWAY_ID; ожидался $EXPECTED_GATEWAY_ID"
 [[ -n "$GATEWAY_DOMAIN" ]] || fail "API Gateway создан, но поле domain не найдено. ID: $GATEWAY_ID"
+[[ "$GATEWAY_DOMAIN" == "$EXPECTED_GATEWAY_DOMAIN" ]] || fail "Домен API Gateway ($GATEWAY_DOMAIN) не совпадает с адресом, зашитым во frontend ($EXPECTED_GATEWAY_DOMAIN)"
 
 echo "[9/9] Проверяю API, YDB и схему базы..."
 API_URL="https://$GATEWAY_DOMAIN"
@@ -539,20 +549,21 @@ check_endpoint() {
   local label="$2"
   local ok="false"
   local output="/tmp/put-k-sebe-health.json"
+  local http_code="000"
   for attempt in 1 2 3 4 5 6; do
-    if curl -fsS "$API_URL$endpoint" -o "$output"; then
-      if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); raise SystemExit(0 if d.get("ok") is True else 1)' "$output"; then
-        ok="true"
-        break
-      fi
+    rm -f "$output"
+    http_code="$(curl -sS --connect-timeout 10 --max-time 30 -o "$output" -w '%{http_code}' "$API_URL$endpoint" || true)"
+    if [[ "$http_code" == "200" ]] && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); raise SystemExit(0 if d.get("ok") is True else 1)' "$output" 2>/dev/null; then
+      ok="true"
+      break
     fi
     sleep 5
   done
   if [[ "$ok" != "true" ]]; then
-    echo "Проверка $label не пройдена ($endpoint):"
-    cat "$output" 2>/dev/null || true
+    echo "Проверка $label не пройдена ($endpoint), HTTP $http_code:"
+    cat "$output" 2>/dev/null || echo "Ответ сервера отсутствует."
     echo
-    fail "API не считается развёрнутым: $label недоступен. Смотри Cloud Function logs."
+    fail "API не считается развёрнутым: $label недоступен. HTTP $http_code; смотри Cloud Function logs."
   fi
   echo "    $label: OK"
 }
