@@ -189,3 +189,44 @@ user_state содержит один JSON-документ на Telegram user ID
 analytics_events содержит тип события, HMAC-псевдонимизированный Telegram ID, время и служебные метаданные; тексты дневников туда не записываются. user_profiles связывает реальный Telegram ID с профилем пользователя для закрытой админ-панели. user_state содержит дневник, паттерны и практики. ai_analyses хранит тексты AI-ответов только при включённом согласии ai_history_storage; при выключенном согласии записываются только минимальные метаданные использования. Администратор видит AI-ответы только при активном согласии на их хранение.
 
 Сервис предназначен для саморефлексии и не является медицинской диагностикой или лечением.
+
+## Сообщение бота об итогах дня
+
+Таймер `put-k-sebe-daily-summary` уже вызывает эту же Cloud Function каждую минуту (cron `* * * * ? *`, payload `{"job":"daily_summary"}`). Функция сама выбирает часовые пояса, где сейчас 23:59, и работает при закрытом Mini App. Новый таймер, функция, шлюз и сервисный аккаунт не нужны. Вызов таймера идёт от существующего backend service account.
+
+Часовой пояс уже пишется в `user_profiles.timezone` из `Intl.DateTimeFormat().resolvedOptions().timeZone` при регистрации профиля. Telegram user id хранится в `user_profiles.user_id` и для личного чата совпадает с chat id.
+
+В 23:59 для пользователей с согласием на AI-обработку вызывается та же генерация сводки, что и из приложения. Если сводка есть (в том числе сделанная раньше в этот день), бот один раз шлёт текст «итоги готовы» и кнопку «Открыть дневник». Если за локальные сутки нет записей и практик, один раз уходит мягкое сообщение, что итоги не собраны. Повтор в те же сутки блокирует строка `daily_summary_claims` с ключом `notify:YYYY-MM-DD`. Это не новая таблица и не DDL. Ответ Telegram 403 (бот заблокирован) не повторяется в этот день. Отправка не чаще 20 сообщений в секунду.
+
+В Mini App нет отдельного адреса экрана итогов, поэтому кнопка открывает `https://oleggrigorev131313.github.io/put-k-sebe/`. Если сводка за сегодня уже есть, кнопка называется «Открыть итоги дня» и запрашивает сохранённый текст, а не запускает вторую генерацию. Повторно текст открывается при включённом хранении истории AI. Без этого согласия приложение по-прежнему не хранит текст сводки.
+
+Проверка без сети и без токена: `python3 backend/test_daily_summary_notify.py`.
+
+Деплой после вливания, в Cloud Shell, тем же скриптом:
+
+```bash
+bash backend/deploy.sh --yes --ref main
+```
+
+До вливания можно передать ветку в `--ref`: скрипт скачает `index.py` оттуда. Спека шлюза для этого изменения не нужна, таймер бьёт в функцию напрямую.
+
+Таймер создавать второй раз не нужно. Если `yc serverless trigger v2 get put-k-sebe-daily-summary` пустой, та же команда, что в `deploy.sh` (каталог `b1gf2t5b7torui7nm4be`, функция `d4etj8737dl7lmfb36d0`, сервисный аккаунт backend `ajerjr8ohhto6gbm9gpo`):
+
+```bash
+cat > /tmp/put-k-sebe-timer-action.json <<'JSON'
+{"invoke_function":{"function_id":"d4etj8737dl7lmfb36d0","function_tag":"$latest","service_account_id":"ajerjr8ohhto6gbm9gpo"}}
+JSON
+yc serverless trigger v2 create timer put-k-sebe-daily-summary \
+  --description "One daily summary at 23:59 in each user's local timezone" \
+  --cron-expression '* * * * ? *' \
+  --payload '{"job":"daily_summary"}' \
+  --action @/tmp/put-k-sebe-timer-action.json
+```
+
+Откат функции (id печатает `deploy.sh`):
+
+```bash
+yc serverless function version set-tag --id <PREVIOUS_VERSION_ID> --tag '$latest'
+```
+
+Таймер можно оставить: старая версия снова только готовит сводку и ничего не пишет в чат. Строки `notify:` в `daily_summary_claims` ни на что не влияют.

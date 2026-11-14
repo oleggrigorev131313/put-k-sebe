@@ -42,3 +42,7 @@ jobs:
           Path("/tmp/put-k-sebe-inline.js").write_text("\n".join(scripts), encoding="utf-8")
           PY
           node --check /tmp/put-k-sebe-inline.js
+      - name: Simulate daily summary notifications
+        run: |
+          python -m py_compile backend/test_daily_summary_notify.py
+          python backend/test_daily_summary_notify.py

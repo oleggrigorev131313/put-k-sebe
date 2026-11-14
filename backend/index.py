@@ -1120,9 +1120,210 @@ def _deepseek_connection_test():
         return _json_response(502, {"error": "deepseek_request_failed", "detail": type(exc).__name__})
 
 
-def _run_due_daily_summaries():
+MINI_APP_URL = "https://oleggrigorev131313.github.io/put-k-sebe/"
+DIARY_BUTTON_TEXT = "Открыть дневник"
+# Stay under 25 messages/s. One send every 50ms is 20/s.
+TELEGRAM_SEND_INTERVAL_SECONDS = 0.05
+SUMMARY_NOTIFY_KEY_PREFIX = "notify:"
+_last_telegram_send_at = 0.0
+# Blank lines below are real newline characters. Do not write the two characters \n.
+SUMMARY_READY_TEXT = """\
+✨ Твои итоги дня готовы!
+
+Мы разобрали твои записи за сегодня: какие мысли повторялись, что удалось заметить и какие небольшие шаги могут помочь завтра.
+
+👇 Нажми «Открыть дневник», чтобы посмотреть.\
+"""
+SUMMARY_EMPTY_TEXT = """\
+🌙 Сегодня в дневнике не появилось новых записей, поэтому итоги дня подвести не получилось.
+
+Перемены в мышлении складываются из маленьких шагов каждый день. Даже одна короткая запись или пять минут практики помогают лучше понять себя и заметить мысли, которые тянут назад.
+
+Не пропускай дни, твой прогресс собирается из них 🌿
+
+👇 Нажми «Открыть дневник» и добавь запись уже завтра или прямо сейчас.\
+"""
+
+
+def _diary_reply_markup():
+    return {
+        "inline_keyboard": [[{
+            "text": DIARY_BUTTON_TEXT,
+            "web_app": {"url": MINI_APP_URL},
+        }]]
+    }
+
+
+def build_summary_notification(kind, chat_id):
+    """Plain-text sendMessage body. The Mini App has no summary deep link."""
+    if kind == "ready":
+        text = SUMMARY_READY_TEXT
+    elif kind == "empty":
+        text = SUMMARY_EMPTY_TEXT
+    else:
+        raise ValueError("unknown summary notification")
+    return {
+        "chat_id": chat_id,
+        "text": text,
+        "reply_markup": _diary_reply_markup(),
+    }
+
+
+def _summary_notification_kind(response):
+    if not isinstance(response, dict):
+        return None
+    try:
+        body = json.loads(response.get("body") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(body, dict):
+        return None
+    status = response.get("statusCode")
+    error = body.get("error")
+    if status == 200 and body.get("summary"):
+        return "ready"
+    if status == 409 and error == "daily_summary_already_used":
+        return "ready"
+    if status == 400 and error == "no_entries_today":
+        return "empty"
+    if status == 404 and error == "user_state_not_found":
+        return "empty"
+    return None
+
+
+def _pace_telegram_send():
+    global _last_telegram_send_at
+    gap = TELEGRAM_SEND_INTERVAL_SECONDS
+    if gap <= 0:
+        _last_telegram_send_at = time.monotonic()
+        return
+    wait = gap - (time.monotonic() - _last_telegram_send_at)
+    if wait > 0:
+        time.sleep(wait)
+    _last_telegram_send_at = time.monotonic()
+
+
+def _send_telegram_message(method, payload):
+    """Call the Bot API. Never log the URL: it contains the bot token."""
+    import urllib.error
+    import urllib.request
+    if not BOT_TOKEN:
+        LOG.error("Telegram %s skipped: BOT_TOKEN is not configured", method)
+        return "skipped"
+    url = "https://api.telegram.org/bot" + BOT_TOKEN + "/" + method
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            raw = response.read(16_000)
+        try:
+            parsed = json.loads(raw.decode("utf-8"))
+        except json.JSONDecodeError:
+            LOG.error("Telegram %s returned unreadable JSON", method)
+            return "error"
+        if not parsed.get("ok"):
+            code = parsed.get("error_code")
+            LOG.error("Telegram %s rejected error_code=%s", method, code)
+            if code == 403:
+                return "blocked"
+            return "error"
+        return "ok"
+    except urllib.error.HTTPError as exc:
+        code = getattr(exc, "code", None)
+        LOG.error("Telegram %s failed status=%s", method, code if code is not None else "unknown")
+        if code == 403:
+            return "blocked"
+        return "error"
+    except Exception as exc:
+        LOG.error("Telegram %s failed type=%s", method, type(exc).__name__)
+        return "error"
+
+
+def _claim_summary_notification(user_id, day_key, created_at):
+    # Same table as the summary lock. The notify: prefix does not collide with YYYY-MM-DD.
+    claim_key = SUMMARY_NOTIFY_KEY_PREFIX + day_key
+    try:
+        _execute(
+            """
+            DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DECLARE $created_at AS Utf8;
+            INSERT INTO daily_summary_claims (user_id, day_key, created_at)
+            VALUES ($user_id, $day_key, $created_at);
+            """,
+            parameters={
+                "$user_id": user_id,
+                "$day_key": claim_key,
+                "$created_at": created_at,
+            },
+            table="daily_summary_claims",
+        )
+        return True
+    except TableMissing:
+        raise
+    except Exception:
+        return False
+
+
+def _release_summary_notification(user_id, day_key):
+    claim_key = SUMMARY_NOTIFY_KEY_PREFIX + day_key
+    try:
+        _execute(
+            """
+            DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8;
+            DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;
+            """,
+            parameters={"$user_id": user_id, "$day_key": claim_key},
+            table="daily_summary_claims",
+        )
+    except TableMissing:
+        raise
+    except Exception as exc:
+        LOG.error("summary notify release failed type=%s", type(exc).__name__)
+
+
+def _send_summary_notification(user_id, day_key, response, created_at):
+    try:
+        kind = _summary_notification_kind(response)
+        if kind is None:
+            return None
+        if not str(user_id).isdigit():
+            LOG.error("summary notify skipped: chat id is not numeric")
+            return None
+        if not BOT_TOKEN:
+            LOG.error("summary notify skipped: BOT_TOKEN is not configured")
+            return None
+        if not _claim_summary_notification(user_id, day_key, created_at):
+            return "duplicate"
+        _pace_telegram_send()
+        result = _send_telegram_message(
+            "sendMessage",
+            build_summary_notification(kind, int(user_id)),
+        )
+        if result not in ("ok", "blocked"):
+            _release_summary_notification(user_id, day_key)
+        LOG.info("summary notify kind=%s result=%s", kind, result)
+        return result
+    except TableMissing:
+        raise
+    except Exception as exc:
+        LOG.error("summary notify failed type=%s", type(exc).__name__)
+        return "error"
+
+
+def _local_day_key(timezone_name, now):
+    return now.astimezone(_safe_user_timezone(timezone_name)).date().isoformat()
+
+
+def _run_due_daily_summaries(now=None):
     from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
+    if now is None:
+        now = datetime.now(timezone.utc)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
     try:
         listed = _execute(
             "SELECT timezone FROM user_profiles GROUP BY timezone;",
@@ -1161,8 +1362,15 @@ def _run_due_daily_summaries():
             for row in result_set.rows:
                 user_id = str(row.user_id)
                 try:
-                    if _get_user_consents(user_id).get("ai_processing"):
-                        _deepseek_daily_summary(user_id, tz_name, False)
+                    if not _get_user_consents(user_id).get("ai_processing"):
+                        continue
+                    response = _deepseek_daily_summary(user_id, tz_name, False)
+                    _send_summary_notification(
+                        user_id,
+                        _local_day_key(tz_name, now),
+                        response,
+                        now.isoformat(),
+                    )
                 except TableMissing as exc:
                     LOG.error("Scheduled summary skipped stage=table_missing:%s", exc.table_name)
                     print("PUT_K_SEBE_503 stage=table_missing:%s" % exc.table_name, flush=True)
