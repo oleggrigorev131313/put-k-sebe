@@ -49,6 +49,18 @@ def _db():
     return _pool
 
 
+def _run_schema_query(pool, table_name, query):
+    try:
+        pool.execute_with_retries(query)
+    except Exception as exc:
+        # Keep the failing DDL step visible even when Cloud Logging is unavailable.
+        LOG.exception("YDB schema initialization failed table=%s", table_name)
+        message = " ".join(str(exc).split())[:500]
+        raise RuntimeError(
+            f"table={table_name}; cause={type(exc).__name__}; detail={message}"
+        ) from exc
+
+
 def _ensure_schema():
     global _schema_ready
     if _schema_ready:
@@ -57,7 +69,7 @@ def _ensure_schema():
         if _schema_ready:
             return
         pool = _db()
-        pool.execute_with_retries(
+        _run_schema_query(pool, "user_state", 
             """
             CREATE TABLE IF NOT EXISTS user_state (
                 user_id Utf8 NOT NULL,
@@ -67,7 +79,7 @@ def _ensure_schema():
             );
             """
         )
-        pool.execute_with_retries(
+        _run_schema_query(pool, "analytics_events", 
             """
             CREATE TABLE IF NOT EXISTS analytics_events (
                 event_id Utf8 NOT NULL,
@@ -79,14 +91,14 @@ def _ensure_schema():
             );
             """
         )
-        pool.execute_with_retries("""
+        _run_schema_query(pool, "user_profiles", """
             CREATE TABLE IF NOT EXISTS user_profiles (
                 user_id Utf8 NOT NULL, username Utf8, first_name Utf8, last_name Utf8,
                 timezone Utf8, created_at Utf8 NOT NULL, last_seen Utf8 NOT NULL,
                 PRIMARY KEY (user_id)
             );
             """)
-        pool.execute_with_retries(
+        _run_schema_query(pool, "premium_purchases", 
             """
             CREATE TABLE IF NOT EXISTS premium_purchases (
                 purchase_id Utf8 NOT NULL,
@@ -99,7 +111,7 @@ def _ensure_schema():
             );
             """
         )
-        pool.execute_with_retries(
+        _run_schema_query(pool, "premium_trials", 
             """
             CREATE TABLE IF NOT EXISTS premium_trials (
                 user_id Utf8 NOT NULL,
@@ -109,7 +121,7 @@ def _ensure_schema():
             );
             """
         )
-        pool.execute_with_retries(
+        _run_schema_query(pool, "ai_analyses", 
             """
             CREATE TABLE IF NOT EXISTS ai_analyses (
                 user_id Utf8 NOT NULL,
@@ -122,7 +134,7 @@ def _ensure_schema():
             );
             """
         )
-        pool.execute_with_retries("""
+        _run_schema_query(pool, "user_consents", """
             CREATE TABLE IF NOT EXISTS user_consents (
                 user_id Utf8 NOT NULL,
                 ai_processing Bool NOT NULL,
@@ -132,7 +144,7 @@ def _ensure_schema():
                 PRIMARY KEY (user_id)
             );
             """)
-        pool.execute_with_retries("""
+        _run_schema_query(pool, "daily_summary_claims", """
             CREATE TABLE IF NOT EXISTS daily_summary_claims (
                 user_id Utf8 NOT NULL,
                 day_key Utf8 NOT NULL,
@@ -140,7 +152,7 @@ def _ensure_schema():
                 PRIMARY KEY (user_id, day_key)
             );
             """)
-        pool.execute_with_retries("""
+        _run_schema_query(pool, "ai_usage_events", """
             CREATE TABLE IF NOT EXISTS ai_usage_events (
                 event_id Utf8 NOT NULL,
                 user_id Utf8 NOT NULL,
@@ -1190,7 +1202,8 @@ def handler(event, context):
                 LOG.exception("Health check failed stage=schema_initialization")
                 return _json_response(503, {
                     "ok": False, "stage": "schema_initialization",
-                    "exception_type": type(exc).__name__
+                    "exception_type": type(exc).__name__,
+                    "detail": str(exc)[:700]
                 })
 
         if path == "/health/db" and method == "GET":
@@ -1203,7 +1216,8 @@ def handler(event, context):
                 LOG.exception("Health check failed stage=ydb_connect_or_query")
                 return _json_response(503, {
                     "ok": False, "stage": "ydb_connect_or_query",
-                    "exception_type": type(exc).__name__
+                    "exception_type": type(exc).__name__,
+                    "detail": str(exc)[:700]
                 })
 
         if path == "/health/schema" and method == "GET":
@@ -1216,7 +1230,8 @@ def handler(event, context):
                 LOG.exception("Health check failed stage=schema_initialization")
                 return _json_response(503, {
                     "ok": False, "stage": "schema_initialization",
-                    "exception_type": type(exc).__name__
+                    "exception_type": type(exc).__name__,
+                    "detail": str(exc)[:700]
                 })
 
         if path == "/v1/webhooks/tribute" and method == "POST":
