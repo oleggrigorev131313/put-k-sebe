@@ -272,6 +272,32 @@ paths:
         function_id: "$FUNCTION_ID"
         service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
+  /health/db:
+    get:
+      operationId: healthDatabase
+      responses:
+        "200":
+          description: YDB connectivity check passed
+        "503":
+          description: YDB connectivity check failed
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /health/schema:
+    get:
+      operationId: healthSchema
+      responses:
+        "200":
+          description: YDB schema initialization passed
+        "503":
+          description: YDB schema initialization failed
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
   /v1/webhooks/tribute:
     post:
       operationId: tributeWebhook

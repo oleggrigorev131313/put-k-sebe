@@ -297,7 +297,6 @@ def _telegram_user(init_data):
         raise ValueError("Telegram authentication is not configured")
     if not init_data or len(init_data) > 10_000:
         raise ValueError("Missing Telegram init data")
-
     pairs = parse_qsl(init_data, keep_blank_values=True, strict_parsing=False)
     values = {}
     for key, value in pairs:
@@ -1165,6 +1164,7 @@ def _run_due_daily_summaries():
     
 
 def handler(event, context):
+    print("PUT_K_SEBE_INVOCATION handler_entered", flush=True)
     try:
         messages=event.get("messages") if isinstance(event,dict) else None
         if messages:
@@ -1178,9 +1178,45 @@ def handler(event, context):
         if method == "OPTIONS":
             return _json_response(204, {"ok": True})
 
+        # Liveness must not depend on YDB: this endpoint only proves that
+        # the function package started and the HTTP handler is reachable.
         if path == "/health" and method == "GET":
-            _ensure_schema()
-            return _json_response(200, {"ok": True, "service": "put-k-sebe-api"})
+            return _json_response(200, {
+                "ok": True, "service": "put-k-sebe-api", "checks": {"handler": "ok"}
+            })
+
+        # Isolate connectivity/query failures from schema initialization.
+        if path == "/health/db" and method == "GET":
+            try:
+                _db().execute_with_retries("SELECT 1 AS health_check;")
+                return _json_response(200, {
+                    "ok": True, "checks": {"handler": "ok", "ydb": "ok"}
+                })
+            except Exception as exc:
+                print("PUT_K_SEBE_503 stage=ydb_connect_or_query exception_type=%s error=%r" %
+                      (type(exc).__name__, exc), flush=True)
+                LOG.exception("Health check failed stage=ydb_connect_or_query")
+                return _json_response(503, {
+                    "ok": False, "stage": "ydb_connect_or_query",
+                    "exception_type": type(exc).__name__
+                })
+
+        # Schema initialization is tested separately so a failure here cannot
+        # make the basic liveness endpoint appear dead.
+        if path == "/health/schema" and method == "GET":
+            try:
+                _ensure_schema()
+                return _json_response(200, {
+                    "ok": True, "checks": {"handler": "ok", "ydb": "ok", "schema": "ok"}
+                })
+            except Exception as exc:
+                print("PUT_K_SEBE_503 stage=schema_initialization exception_type=%s error=%r" %
+                      (type(exc).__name__, exc), flush=True)
+                LOG.exception("Health check failed stage=schema_initialization")
+                return _json_response(503, {
+                    "ok": False, "stage": "schema_initialization",
+                    "exception_type": type(exc).__name__
+                })
 
         if path == "/v1/webhooks/tribute" and method == "POST":
             return _handle_tribute_webhook(
@@ -1473,10 +1509,11 @@ def handler(event, context):
 
     except ValueError as exc:
         return _json_response(401, {"error": str(exc)})
-    except Exception:
-        # Log the traceback and request route only; never log bodies, initData,
-        # credentials, or diary content. This preserves the real backend failure
-        # in Cloud Functions logs while keeping user data private.
+    except Exception as exc:
+        # Never log request bodies, initData, credentials, or diary content.
+        print("PUT_K_SEBE_503 stage=handler method=%s path=%s exception_type=%s error=%r" %
+              (locals().get("method", "UNKNOWN"),
+               locals().get("path", "UNKNOWN"), type(exc).__name__, exc), flush=True)
         LOG.exception("API request failed method=%s path=%s",
                       locals().get("method", "UNKNOWN"),
                       locals().get("path", "UNKNOWN"))
