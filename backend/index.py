@@ -115,8 +115,75 @@ def _ensure_schema():
             );
             """
         )
+        pool.execute_with_retries("""
+            CREATE TABLE IF NOT EXISTS user_consents (
+                user_id Utf8 NOT NULL,
+                ai_processing Bool NOT NULL,
+                ai_history_storage Bool NOT NULL,
+                consent_version Utf8 NOT NULL,
+                updated_at Utf8 NOT NULL,
+                PRIMARY KEY (user_id)
+            );
+            """)
+        pool.execute_with_retries("""
+            CREATE TABLE IF NOT EXISTS ai_usage_events (
+                event_id Utf8 NOT NULL,
+                user_id Utf8 NOT NULL,
+                feature Utf8 NOT NULL,
+                request_key Utf8 NOT NULL,
+                created_at Utf8 NOT NULL,
+                PRIMARY KEY (event_id)
+            );
+            """)
         _schema_ready = True
 
+
+CONSENT_VERSION = "2026-11-14-v1"
+
+def _get_user_consents(user_id):
+    result = _db().execute_with_retries("""
+        DECLARE $user_id AS Utf8;
+        SELECT ai_processing, ai_history_storage, consent_version, updated_at
+        FROM user_consents WHERE user_id = $user_id;
+        """, parameters={"$user_id": user_id})
+    for result_set in result:
+        for row in result_set.rows:
+            return {"ai_processing": bool(row.ai_processing),
+                    "ai_history_storage": bool(row.ai_history_storage),
+                    "version": str(row.consent_version), "updated_at": str(row.updated_at)}
+    return {"ai_processing": False, "ai_history_storage": False, "version": CONSENT_VERSION, "updated_at": None}
+
+def _save_user_consents(user_id, processing, history):
+    from datetime import datetime, timezone
+    updated = datetime.now(timezone.utc).isoformat()
+    _db().execute_with_retries("""
+        DECLARE $user_id AS Utf8;
+        DECLARE $processing AS Bool;
+        DECLARE $history AS Bool;
+        DECLARE $version AS Utf8;
+        DECLARE $updated AS Utf8;
+        UPSERT INTO user_consents (user_id, ai_processing, ai_history_storage, consent_version, updated_at)
+        VALUES ($user_id, $processing, $history, $version, $updated);
+        """, parameters={"$user_id": user_id, "$processing": processing, "$history": history, "$version": CONSENT_VERSION, "$updated": updated})
+    return _get_user_consents(user_id)
+
+def _require_ai_processing(user_id):
+    if not _get_user_consents(user_id)["ai_processing"]:
+        return _json_response(403, {"error": "ai_consent_required", "message": "AI-обработка не разрешена."})
+    return None
+
+def _delete_ai_history(user_id):
+    _db().execute_with_retries("""
+        DECLARE $user_id AS Utf8;
+        DELETE FROM ai_analyses WHERE user_id = $user_id;
+        """, parameters={"$user_id": user_id})
+    state = _read_state(user_id)
+    if isinstance(state, dict):
+        for entry in state.get("entries") or []:
+            if isinstance(entry, dict):
+                entry.pop("analysis", None)
+        state["chat"] = []
+        _write_state(user_id, state)
 
 def _record_event(user_id, event_name, metadata=None):
     pool = _db()
@@ -721,54 +788,63 @@ def _created_at_is_local_day(value, day_key, user_tz):
 
 
 def _daily_ai_usage(user_id, day_key, user_tz):
-    result = _db().execute_with_retries(
-        """
-        DECLARE $user_id AS Utf8;
-        SELECT entry_id, created_at FROM ai_analyses WHERE user_id = $user_id;
-        """,
-        parameters={"$user_id": user_id},
-    )
     analyzed_entries = set()
     summary_exists = False
+    result = _db().execute_with_retries("""
+        DECLARE $user_id AS Utf8;
+        SELECT feature, request_key, created_at FROM ai_usage_events WHERE user_id = $user_id;
+        """, parameters={"$user_id": user_id})
     for result_set in result:
+        for row in result_set.rows:
+            feature, request_key, created_at = str(row.feature), str(row.request_key), str(row.created_at)
+            if not _created_at_is_local_day(created_at, day_key, user_tz):
+                continue
+            if feature == "daily_summary":
+                summary_exists = True
+            elif feature == "analyze_entry":
+                analyzed_entries.add(request_key)
+    legacy = _db().execute_with_retries("""
+        DECLARE $user_id AS Utf8;
+        SELECT entry_id, created_at FROM ai_analyses WHERE user_id = $user_id;
+        """, parameters={"$user_id": user_id})
+    for result_set in legacy:
         for row in result_set.rows:
             entry_id, created_at = str(row.entry_id), str(row.created_at)
             if not _created_at_is_local_day(created_at, day_key, user_tz):
                 continue
             if entry_id.startswith("daily-summary:"):
                 summary_exists = True
-                continue
-            if entry_id.startswith("onboarding-profile:"):
-                continue
-            # Cache keys may include model/prompt versions. One diary entry
-            # must consume only one daily analysis, regardless of cache versions.
-            logical_entry_id = entry_id.rsplit(":", 1)[-1]
-            analyzed_entries.add(logical_entry_id)
+            elif not entry_id.startswith("onboarding-profile:"):
+                analyzed_entries.add(entry_id.rsplit(":", 1)[-1])
     return len(analyzed_entries), summary_exists
 
-
 def _save_ai_result(user_id, cache_key, text_value, usage, created):
-    _db().execute_with_retries(
-        """
+    consent = _get_user_consents(user_id)
+    feature = "daily_summary" if cache_key.startswith("daily-summary:") else ("onboarding" if cache_key.startswith("onboarding-profile:") else "analyze_entry")
+    request_key = cache_key.rsplit(":", 1)[-1]
+    _db().execute_with_retries("""
+        DECLARE $event_id AS Utf8;
+        DECLARE $user_id AS Utf8;
+        DECLARE $feature AS Utf8;
+        DECLARE $request_key AS Utf8;
+        DECLARE $created_at AS Utf8;
+        INSERT INTO ai_usage_events (event_id, user_id, feature, request_key, created_at)
+        VALUES ($event_id, $user_id, $feature, $request_key, $created_at);
+        """, parameters={"$event_id": str(uuid.uuid4()), "$user_id": user_id, "$feature": feature, "$request_key": request_key, "$created_at": created})
+    if not consent["ai_history_storage"]:
+        return
+    _db().execute_with_retries("""
         DECLARE $user_id AS Utf8;
         DECLARE $entry_id AS Utf8;
         DECLARE $analysis_text AS Utf8;
         DECLARE $input_tokens AS Uint64;
         DECLARE $output_tokens AS Uint64;
         DECLARE $created_at AS Utf8;
-        UPSERT INTO ai_analyses
-            (user_id, entry_id, analysis_text, input_tokens, output_tokens, created_at)
-        VALUES
-            ($user_id, $entry_id, $analysis_text, $input_tokens, $output_tokens, $created_at);
-        """,
-        parameters={
-            "$user_id": user_id, "$entry_id": cache_key, "$analysis_text": text_value,
+        UPSERT INTO ai_analyses (user_id, entry_id, analysis_text, input_tokens, output_tokens, created_at)
+        VALUES ($user_id, $entry_id, $analysis_text, $input_tokens, $output_tokens, $created_at);
+        """, parameters={"$user_id": user_id, "$entry_id": cache_key, "$analysis_text": text_value,
             "$input_tokens": ydb.TypedValue(max(0, int(usage.get("input_tokens", 0))), ydb.PrimitiveType.Uint64),
-            "$output_tokens": ydb.TypedValue(max(0, int(usage.get("output_tokens", 0))), ydb.PrimitiveType.Uint64),
-            "$created_at": created,
-        },
-    )
-
+            "$output_tokens": ydb.TypedValue(max(0, int(usage.get("output_tokens", 0))), ydb.PrimitiveType.Uint64), "$created_at": created})
 
 def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
     from datetime import datetime, timezone
@@ -1030,6 +1106,24 @@ def handler(event, context):
                 body.encode("utf-8"), headers.get("trbt-signature", "")
             )
 
+        if path == "/v1/consents" and method in ("GET", "PUT"):
+            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            _ensure_schema()
+            if method == "GET":
+                return _json_response(200, {"ok": True, "consents": _get_user_consents(user_id)})
+            try:
+                payload = json.loads(body or "{}")
+                processing = payload.get("ai_processing")
+                history = payload.get("ai_history_storage")
+                if not isinstance(processing, bool) or not isinstance(history, bool) or (history and not processing):
+                    raise ValueError("invalid_consent_values")
+            except (json.JSONDecodeError, ValueError, TypeError) as exc:
+                return _json_response(400, {"error": str(exc)})
+            previous = _get_user_consents(user_id)
+            saved = _save_user_consents(user_id, processing, history)
+            if previous["ai_history_storage"] and not history:
+                _delete_ai_history(user_id)
+            return _json_response(200, {"ok": True, "consents": saved})
         if path == "/v1/premium" and method == "GET":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             _ensure_schema()
@@ -1050,6 +1144,9 @@ def handler(event, context):
             _ensure_schema()
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error":"deepseek_not_configured"})
+            denied = _require_ai_processing(user_id)
+            if denied:
+                return denied
             return _deepseek_analyze_onboarding(user_id)
 
         if path == "/v1/ai/daily-summary" and method == "POST":
@@ -1057,6 +1154,9 @@ def handler(event, context):
             _ensure_schema()
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error":"deepseek_not_configured"})
+            denied = _require_ai_processing(user_id)
+            if denied:
+                return denied
             try:
                 payload = json.loads(body or "{}")
                 timezone_name = str(payload.get("timezone") or "UTC")
@@ -1082,6 +1182,9 @@ def handler(event, context):
             _ensure_schema()
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error": "deepseek_not_configured"})
+            denied = _require_ai_processing(user_id)
+            if denied:
+                return denied
             try:
                 payload = json.loads(body or "{}")
                 entry_id = str(payload.get("entry_id", "")).strip()

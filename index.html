@@ -56,7 +56,7 @@ if(tg){try{tg.ready();tg.expand();tg.setHeaderColor("#fbfbfd");tg.setBackgroundC
 var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.first_name;
 document.getElementById("settings").textContent=(first||"О").charAt(0).toUpperCase();
 var defaults={entries:[],patterns:[],completed:[],practiceHistory:[],personalPractices:[],onboarding:null,chat:[]};
-var state=load(),page=state.onboarding?"home":"onboarding",step=6,draft=blank(),onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
+var state=load(),page=state.onboarding?"home":"privacy",step=6,draft=blank(),onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding(),consentSettings={ai_processing:false,ai_history_storage:false},consentLoaded=false;
 var pageHistory=[],progressPeriod="day",cloudReady=false,cloudSyncTimer=null,cloudErrorShown=false,cloudStatus="paused",cloudErrorText="",premiumStatus={active:false,trial_used:false},premiumLoading=false,aiUsage={limit:5,used:0,remaining:5,loading:true};
 function load(){try{var x=JSON.parse(localStorage.getItem(KEY));if(!x||!Array.isArray(x.entries))return JSON.parse(JSON.stringify(defaults));var out=Object.assign({},defaults,x);out.patterns=(out.patterns||[]).filter(function(p){return ["p1","p2","p3","p4"].indexOf(p.id)<0;});out.practiceHistory=Array.isArray(out.practiceHistory)?out.practiceHistory:[];out.personalPractices=Array.isArray(out.personalPractices)?out.personalPractices:[];out.chat=Array.isArray(out.chat)?out.chat:[];return out;}catch(e){return JSON.parse(JSON.stringify(defaults));}}
 function saveLocalOnly(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
@@ -131,7 +131,7 @@ async function analyzeEntry(id,buttonEl){
    throw new Error("Ошибка аналитика: "+diagnostic);
   }
   var entry=state.entries.find(function(x){return String(x.id)===String(id);});
-  if(entry){entry.analysis=data.analysis||"";save();}
+  if(entry&&consentSettings.ai_history_storage){entry.analysis=data.analysis||"";save();}
   if(result){result.style.display="block";result.innerHTML=renderAnalysis(data.analysis||"Анализ не получен.",id);}
   var accept=document.getElementById("accept-ai-pattern");
   if(accept){var mm=String(data.analysis||"").match(/\*{0,2}Гипотеза паттерна:\*{0,2}\s*\*{0,2}([^|\n*]+)\*{0,2}\s*\|\s*\*{0,2}([^\n*]+)\*{0,2}/i);if(mm)accept.onclick=function(){addSuggestedPattern(mm[1].trim(),mm[2].trim(),id);};}
@@ -235,19 +235,19 @@ if(!tg){cloudStatus="not_telegram";render();return;}
 if(!tg.initData){cloudStatus="telegram_data_missing";render();return;}
 cloudStatus="connecting";
 try{
+var consentResponse=await fetch(API_BASE+"/v1/consents",{method:"GET",headers:apiHeaders(),cache:"no-store"});
+if(!consentResponse.ok)throw new Error("Не удалось получить настройки согласий");
+var consentData=await consentResponse.json();
+consentSettings=consentData.consents||{ai_processing:false,ai_history_storage:false};consentLoaded=true;
+if(!consentSettings.updated_at){cloudReady=false;cloudStatus="consent_required";page="privacy";render();return;}
 var r=await fetch(API_BASE+"/v1/state",{method:"GET",headers:apiHeaders(),cache:"no-store"});
 if(!r.ok){var errBody="";try{var errJson=await r.json();errBody=errJson&&errJson.error?": "+errJson.error:"";}catch(ignore){}throw new Error("HTTP "+r.status+errBody);}
 var result=await r.json();
 var remoteConsent=!!(result.found&&result.state&&result.state.onboarding&&result.state.onboarding.consent);
 var localConsent=!!(state.onboarding&&state.onboarding.consent);
-// Consent is account-level: a second device can reuse the consent already stored for this Telegram account.
-// Only merge remote private data after the server-side account state shows that consent was given.
 if(remoteConsent)state=mergeStates(result.state,state);
-if(!remoteConsent&&!localConsent){
-cloudReady=false;cloudStatus="consent_required";
-onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
-page="onboarding";render();return;
-}
+if(!remoteConsent&&!localConsent){cloudReady=false;cloudStatus="consent_required";onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();page="onboarding";render();return;}
+if(page==="privacy")page=state.onboarding?"home":"onboarding";
 onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
 saveLocalOnly();cloudReady=true;cloudStatus="connected";
 await cloudSaveNow(false);
@@ -318,6 +318,13 @@ function onboardingTags(key,items){
 var selected=onboardingDraft[key]||[];
 return '<div class="chips">'+items.map(function(x){return '<button class="chip '+(selected.indexOf(x)>=0?"active":"")+'" data-onboard-toggle="'+key+'" data-value="'+esc(x)+'">'+esc(x)+'</button>';}).join("")+'</div>';
 }
+function privacy(){
+return '<div class="eyebrow">Перед началом</div><h1 class="title">Добро пожаловать на Путь к себе</h1><p class="sub">Прими условия использования и настройки обработки данных, чтобы начать работу.</p>'+
+'<section class="card"><p style="font-size:13px;line-height:1.6;color:#626b80">Приложение сохраняет твои записи и ответы анкеты в облаке для синхронизации между устройствами. Для персонального анализа необходимые данные передаются AI-сервису DeepSeek. При включённом хранении история AI-запросов и ответов сохраняется в аккаунте.</p>'+
+'<div class="note">Сервис помогает с самонаблюдением и рефлексией, не ставит диагнозы и не заменяет помощь специалиста. Не добавляй пароли, документы и другие особо чувствительные сведения.</div>'+
+'<p style="font-size:12px;line-height:1.5;margin:14px 0">Документы: <a href="terms.html" target="_blank" rel="noopener">Пользовательское соглашение</a> · <a href="privacy.html" target="_blank" rel="noopener">Политика конфиденциальности</a></p>'+
+'<button class="btn primary full" data-act="accept-all-consents">Принять всё и продолжить</button><p class="sub" style="margin:12px 0 0">Нажимая кнопку, ты подтверждаешь согласие с документами и разрешаешь AI-обработку и хранение AI-истории. Настройки можно изменить позже.</p></section>';
+}
 function onboarding(){
 return '<div class="eyebrow">Первое знакомство · 2–3 минуты</div><h1 class="title">С чего начнём?</h1><p class="sub">Эта анкета поможет настроить пространство под твои задачи. Ответы — не диагноз и не психологический тест. Приложение сможет предлагать гипотезы о повторяющихся сценариях, а ты сам решишь, подходят ли они.</p>'+
 '<section class="card"><div class="field"><label>1. Что сейчас больше всего беспокоит?</label><textarea class="area" data-onboard-field="main_issue" placeholder="Опиши своими словами — можно коротко.">'+esc(onboardingDraft.main_issue)+'</textarea></div>'+
@@ -325,7 +332,7 @@ return '<div class="eyebrow">Первое знакомство · 2–3 мину
 '<div class="field"><label>3. Какие мысли тебе знакомы?</label><p class="sub" style="margin:0 0 9px">Отметь те, которые иногда возникают.</p>'+onboardingTags("thoughts",onboardingThoughts)+'</div>'+
 '<div class="field"><label>4. Как ты обычно реагируешь?</label>'+onboardingTags("reactions",onboardingReactions)+'</div>'+
 '<div class="field"><label>5. Что хотелось бы изменить?</label><textarea class="area" data-onboard-field="desired_changes" placeholder="Например: меньше откладывать, спокойнее относиться к ошибкам, лучше понимать свои желания...">'+esc(onboardingDraft.desired_changes)+'</textarea></div>'+
-'<div class="note">Ответы анкеты и записи будут храниться в облаке и синхронизироваться между устройствами, где ты откроешь приложение под тем же аккаунтом Telegram. Не указывай пароли, документы, адреса и данные других людей.</div><label style="display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;margin:14px 0"><input type="checkbox" id="onboardConsent" style="margin-top:3px;flex:none">Я согласен на хранение ответов анкеты и записей дневника в облаке для синхронизации между моими устройствами.</label>'+
+'<div class="note">Ответы анкеты и записи будут храниться в облаке и синхронизироваться между устройствами, где ты откроешь приложение под тем же аккаунтом Telegram. Не указывай пароли, документы, адреса и данные других людей.</div>'+
 button("Сохранить ответы →","finish-onboarding","full")+'<button class="textbtn" style="margin-top:12px" data-act="skip-onboarding">Пока пропустить</button></section>';
 }
 function subscription(){
@@ -443,7 +450,7 @@ var personal=state.personalPractices||[],active=personal.filter(function(p){retu
 return '<div class="eyebrow">Персональный план</div><h1 class="title">Практики</h1><p class="sub">Здесь собраны небольшие действия, предложенные на основе твоих записей. Ты можешь выполнить их, пропустить или убрать из плана.</p>'+section("На сегодня · "+active.length)+(active.length?active.map(function(p){return '<button class="card quick" style="width:100%;margin:7px 0;text-align:left" data-personal-practice="'+esc(p.id)+'"><span class="qi">'+(p.status==="skipped"?"↷":"✦")+'</span><b>'+esc(p.title)+'</b><small>'+esc(p.duration||"5–10 минут")+(p.status==="skipped"?" · Пропущена":" · В плане")+'</small></button>';}).join(""):'<div class="card empty"><h3>Пока нет персональных заданий</h3><p>После анализа записи персональный аналитик может предложить небольшой шаг. Ты сам решишь, добавлять ли его в план.</p></div>')+section("Выполнено · "+completed.length)+(completed.length?completed.map(function(p){return '<button class="card quick" style="width:100%;margin:7px 0;text-align:left" data-personal-practice="'+esc(p.id)+'"><span class="qi">✓</span><b>'+esc(p.title)+'</b><small>'+date(p.completedAt||p.createdAt)+' · Выполнена</small></button>';}).join(""):'<p class="sub">Здесь появятся выполненные персональные практики.</p>')+section("Базовые упражнения")+practices.map(function(p,i){var done=(state.practiceHistory||[]).some(function(x){return x.practiceId===i&&new Date(x.completedAt).toDateString()===new Date().toDateString();});return '<button class="card quick" style="width:100%;margin:7px 0;text-align:left" data-practice="'+i+'"><span class="qi">'+(done?"✓":p.icon)+'</span><b>'+p.title+(done?' · Выполнено сегодня':'')+'</b><small>'+p.time+(done?' · Готово':'')+'</small></button>';}).join("")+'<div class="note">Практики помогают тренировать самонаблюдение и навыки рефлексии. Они не заменяют помощь специалиста.</div>';
 }
 function render(){
-app.innerHTML=page==="onboarding"?onboarding():page==="home"?home():page==="journal"?journal():page==="patterns"?patterns():page==="progress"?progress():page==="subscription"?subscription():library();
+app.innerHTML=page==="privacy"?privacy():page==="onboarding"?onboarding():page==="home"?home():page==="journal"?journal():page==="patterns"?patterns():page==="progress"?progress():page==="subscription"?subscription():library();
 bind();
 }
 function bind(){
@@ -457,7 +464,7 @@ var addEmotion=document.querySelector("[data-add-custom-emotion]");if(addEmotion
 var ps=document.getElementById("patternSelect");if(ps)ps.onchange=function(){draft.patternReviewPending=ps.value==="__ai_suggest_later__";draft.pattern=ps.value&&ps.value!=="__ai_suggest_later__"?ps.value:"";};
 app.querySelectorAll("[data-onboard-field]").forEach(function(el){el.oninput=function(){onboardingDraft[el.dataset.onboardField]=el.value;};});
 app.querySelectorAll("[data-onboard-toggle]").forEach(function(b){b.onclick=function(){var k=b.dataset.onboardToggle,v=b.dataset.value,a=onboardingDraft[k]||[],i=a.indexOf(v);if(i>=0)a.splice(i,1);else a.push(v);onboardingDraft[k]=a;render();};});
-var oc=document.getElementById("onboardConsent");if(oc)oc.onchange=function(){onboardingDraft.consent=oc.checked;};
+
 app.querySelectorAll("[data-entry]").forEach(function(b){b.onclick=function(){entryDetail(b.dataset.entry);};});
 app.querySelectorAll("[data-pattern-records]").forEach(function(b){b.onclick=function(){showPatternEntries(b.dataset.patternRecords,"");};});app.querySelectorAll("[data-pattern-action]").forEach(function(b){b.onclick=function(){patternAction(b.dataset.patternId,b.dataset.patternAction);};});
 app.querySelectorAll("[data-practice]").forEach(function(b){b.onclick=function(){practiceDetail(Number(b.dataset.practice));};});app.querySelectorAll("[data-personal-practice]").forEach(function(b){b.onclick=function(){personalPracticeDetail(b.dataset.personalPractice);};});app.querySelectorAll("[data-add-micro]").forEach(function(b){b.onclick=function(){addMicroPractice(b.dataset.addMicro);};});app.querySelectorAll("[data-progress-period]").forEach(function(b){b.onclick=function(){progressPeriod=b.dataset.progressPeriod;render();};});var historyBtn=document.getElementById("show-practice-history");if(historyBtn)historyBtn.onclick=function(){showPracticeHistory("");};app.querySelectorAll("[data-chart-point]").forEach(function(p){p.onclick=function(){toast("Активность: "+p.getAttribute("data-chart-value")+" баллов");};});
@@ -475,12 +482,16 @@ render();
 }).catch(function(){toast("Не удалось активировать пробный период. Попробуй позже.");});
 return;
 }
+if(a==="accept-all-consents"){
+if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
+fetch(API_BASE+"/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:true,ai_history_storage:true})}).then(async function(r){var data=await r.json();if(!r.ok)throw new Error(data.error||"Не удалось сохранить согласия");consentSettings=data.consents;consentLoaded=true;onboardingDraft.consent=true;cloudReady=true;cloudStatus="connected";if(state.onboarding){state.onboarding.consent=true;page="home";saveLocalOnly();await cloudSaveNow(false);render();refreshAiUsage();}else{page="onboarding";render();}}).catch(function(e){toast(e.message||"Не удалось сохранить согласия. Попробуй ещё раз.");});
+}
 if(a==="finish-onboarding"){
-if(!onboardingDraft.consent){toast("Подтверди согласие на облачное хранение, чтобы сохранить анкету.");return;}
+onboardingDraft.consent=true;
 state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false,analysisStatus:"pending"});saveLocalOnly();cloudReady=true;cloudStatus="connected";trackEvent("onboarding_completed");go("home");
 cloudSaveNow(false).then(function(){cloudStatus="synced";render();toast("Ответы сохранены и синхронизированы.");analyzeOnboarding();}).catch(function(e){cloudReady=false;cloudStatus="error";cloudErrorText=e&&e.message?e.message:"Ошибка соединения";render();toast("Не удалось сохранить анкету в облаке. Ответы пока остались на устройстве.");});
 }
-if(a==="skip-onboarding"){state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:false};saveLocalOnly();go("home");}
+if(a==="skip-onboarding"){state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:true};saveLocalOnly();go("home");cloudSaveNow(false).catch(function(){cloudStatus="error";render();});}
 if(a==="new"){draft=blank();step=0;go("journal");}
 if(a==="next"){var checks=[!!draft.situation.trim(),selectedEmotions().length>0,!!draft.thought.trim(),!!(draft.forText.trim()||draft.against.trim()),!!draft.balanced.trim(),!!draft.action.trim()];var prompts=["Опиши ситуацию, чтобы продолжить.","Выбери хотя бы одну эмоцию.","Запиши автоматическую мысль.","Добавь хотя бы один факт за или против этой мысли.","Сформулируй более объективный взгляд.","Укажи один небольшой следующий шаг."];if(!checks[step]){toast(prompts[step]);return;}if(step<5)step++;render();}
 if(a==="prev"){if(step>0)step--;render();}
@@ -511,7 +522,24 @@ var p=practices[i],k=new Date().toDateString()+"-"+i,isDone=(state.practiceHisto
 modal('<div class="eyebrow">Практика · '+p.time+'</div><h2>'+p.icon+' '+p.title+'</h2><p>'+p.text+'</p><button class="btn primary full" id="done">'+(isDone?"Снять отметку":"Отметить выполненной")+'</button>');
 document.getElementById("done").onclick=function(){state.practiceHistory=state.practiceHistory||[];var at=state.practiceHistory.findIndex(function(x){return x.practiceId===i&&new Date(x.completedAt).toDateString()===new Date().toDateString();});if(at>=0){state.practiceHistory.splice(at,1);toast("Отметка снята");}else{state.practiceHistory.push({id:"ph"+Date.now(),practiceId:i,title:p.title,completedAt:new Date().toISOString()});trackEvent("practice_completed");toast("Практика добавлена в историю");}save();closeModal();render();};
 }
-function settings(){modal('<h2>Настройки и данные</h2><p>'+(({
+function manageConsents(){
+modal('<h2>Настройки конфиденциальности</h2><p>AI-обработка использует необходимые записи и ответы анкеты. Если отключить хранение истории, сохранённые AI-результаты будут удалены.</p>'+
+'<label style="display:flex;gap:9px;margin:14px 0;font-size:13px"><input type="checkbox" id="consent-processing" '+(consentSettings.ai_processing?"checked":"")+'>Разрешить AI-обработку</label>'+
+'<label style="display:flex;gap:9px;margin:14px 0;font-size:13px"><input type="checkbox" id="consent-history" '+(consentSettings.ai_history_storage?"checked":"")+'>Сохранять историю AI</label>'+
+'<button class="btn primary full" id="save-consents">Сохранить настройки</button>');
+document.getElementById("save-consents").onclick=async function(){
+var processing=document.getElementById("consent-processing").checked;
+var history=document.getElementById("consent-history").checked;
+if(history&&!processing){toast("Для хранения истории нужно разрешить AI-обработку.");return;}
+try{var response=await fetch(API_BASE+"/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:processing,ai_history_storage:history})});
+var data=await response.json();if(!response.ok)throw new Error(data.error||"Не удалось сохранить настройки");
+consentSettings=data.consents;
+if(!processing||!history){state.entries.forEach(function(entry){delete entry.analysis;});state.chat=[];save();}
+closeModal();settings();toast("Настройки сохранены.");
+}catch(e){toast(e.message||"Ошибка сохранения.");}
+};
+}
+function settings(){modal('<h2>Настройки и данные</h2><button class="btn outline full" id="manage-consents">Настройки конфиденциальности</button><div style="height:9px"></div><p>'+(({
 synced:"Облачная синхронизация подтверждена: последние изменения отправлены в Yandex Cloud.",
 connected:"Соединение с облаком установлено.",
 pending:"Есть изменения, ожидающие синхронизации.",
@@ -524,7 +552,7 @@ error:"Ошибка облачного соединения: "+(cloudErrorText||
 starting:"Облачное соединение не используется.",
  paused:"Облачная синхронизация временно отключена. Данные сохраняются только на этом устройстве."
 })[cloudStatus]||"Статус облачного соединения пока не определён.")+'</p><button class="btn secondary full" id="export">Скачать резервную копию JSON</button><div style="height:9px"></div><button class="btn outline full" id="import">Восстановить из JSON</button><input type="file" id="file" accept="application/json" hidden><div style="height:9px"></div><button class="btn outline full" id="clear">Удалить все мои данные</button><div class="note">Не записывай сведения, по которым тебя можно идентифицировать, если не хочешь хранить их в браузере устройства. Очистка данных браузера может удалить записи.</div>');
-document.getElementById("export").onclick=function(){var blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="put-k-sebe-backup.json";a.click();URL.revokeObjectURL(url);};
+document.getElementById("manage-consents").onclick=manageConsents;document.getElementById("export").onclick=function(){var blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="put-k-sebe-backup.json";a.click();URL.revokeObjectURL(url);};
 var f=document.getElementById("file");document.getElementById("import").onclick=function(){f.click();};f.onchange=async function(){try{var x=JSON.parse(await f.files[0].text());if(!Array.isArray(x.entries)||!Array.isArray(x.patterns))throw Error();state=Object.assign({},defaults,x);save();closeModal();render();toast("Данные восстановлены");}catch(e){toast("Не удалось прочитать файл");}};
 document.getElementById("clear").onclick=async function(){if(confirm("Удалить все записи, паттерны и ответы анкеты? Сначала скачай резервную копию, если она нужна.")){if(cloudReady&&API_BASE&&tg&&tg.initData){try{var r=await fetch(API_BASE+"/v1/state",{method:"DELETE",headers:apiHeaders()});if(!r.ok)throw new Error("delete failed");}catch(e){toast("Не удалось удалить облачные данные. Проверь соединение.");return;}}state=JSON.parse(JSON.stringify(defaults));onboardingDraft=emptyOnboarding();saveLocalOnly();closeModal();go("onboarding");}};
 }
