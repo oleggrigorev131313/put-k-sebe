@@ -246,7 +246,7 @@ var localConsent=!!(state.onboarding&&state.onboarding.consent);
 // Consent is account-level: a second device can reuse the consent already stored for this Telegram account.
 // Only merge remote private data after the server-side account state shows that consent was given.
 if(remoteConsent)state=mergeStates(result.state,state);
-if(!consentSettings.ai_processing){
+if(!consentSettings.updated_at){
 cloudReady=false;cloudStatus="consent_required";page="privacy";render();return;
 }
 if(!remoteConsent&&!localConsent){
@@ -490,7 +490,7 @@ return;
 }
 if(a==="accept-all-consents"){
 if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
-fetch(API_BASE+"/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:true,ai_history_storage:true})}).then(async function(r){var data=await r.json();if(!r.ok)throw new Error(data.error||"Не удалось сохранить согласия");consentSettings=data.consents;consentLoaded=true;onboardingDraft.consent=true;cloudReady=true;cloudStatus="connected";if(state.onboarding){page="home";saveLocalOnly();await cloudSaveNow(false);render();refreshAiUsage();}else{page="onboarding";render();}}).catch(function(e){toast(e.message||"Не удалось сохранить согласия. Попробуй ещё раз.");});
+fetch(API_BASE+"/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:true,ai_history_storage:true})}).then(async function(r){var data=await r.json();if(!r.ok)throw new Error(data.error||"Не удалось сохранить согласия");consentSettings=data.consents;consentLoaded=true;onboardingDraft.consent=true;cloudReady=true;cloudStatus="connected";if(state.onboarding){state.onboarding.consent=true;page="home";saveLocalOnly();await cloudSaveNow(false);render();refreshAiUsage();}else{page="onboarding";render();}}).catch(function(e){toast(e.message||"Не удалось сохранить согласия. Попробуй ещё раз.");});
 }
 if(a==="finish-onboarding"){
 if(!onboardingDraft.consent){toast("Подтверди согласие на облачное хранение, чтобы сохранить анкету.");return;}
