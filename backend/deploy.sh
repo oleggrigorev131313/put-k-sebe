@@ -79,6 +79,12 @@ if [[ "$HAS_YDB_EDITOR" != "yes" ]]; then
     --role ydb.editor --service-account-id "$SA_ID" >/dev/null || fail "Не удалось выдать backend-сервисному аккаунту ydb.editor на базу"
 fi
 
+# Re-read bindings after the grant. Do not continue with a deployment that
+# merely assumed the permission was applied.
+DB_BINDINGS="$(yc ydb database list-access-bindings --id "$DB_ID" --format json)" || fail "Не удалось повторно проверить права доступа YDB"
+HAS_YDB_EDITOR="$(printf '%s' "$DB_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",d.get("accessBindings",[])); print("yes" if any(x.get("role_id",x.get("roleId"))=="ydb.editor" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$SA_ID")"
+[[ "$HAS_YDB_EDITOR" == "yes" ]] || fail "У backend service account $SA_ID отсутствует подтверждённая роль ydb.editor на базе $DB_NAME"
+
 echo "    Backend SA: $SA_ID"
 echo "    Gateway SA: $GATEWAY_SA_ID"
 echo "    База: $DB_NAME ($DB_STATUS)"
@@ -526,21 +532,33 @@ GATEWAY_JSON="$(yc serverless api-gateway get "$GATEWAY_ID" --format json)"
 GATEWAY_DOMAIN="$(printf '%s' "$GATEWAY_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("domain") or d.get("domain_name") or d.get("domainName") or "")')"
 [[ -n "$GATEWAY_DOMAIN" ]] || fail "API Gateway создан, но поле domain не найдено. ID: $GATEWAY_ID"
 
-echo "[9/9] Проверяю API..."
+echo "[9/9] Проверяю API, YDB и схему базы..."
 API_URL="https://$GATEWAY_DOMAIN"
-HEALTH_OK="false"
-for attempt in 1 2 3 4 5 6; do
-  if curl -fsS "$API_URL/health" >/tmp/put-k-sebe-health.json; then
-    if python3 -c 'import json; d=json.load(open("/tmp/put-k-sebe-health.json")); raise SystemExit(0 if d.get("ok") is True else 1)'; then
-      HEALTH_OK="true"
-      break
+check_endpoint() {
+  local endpoint="$1"
+  local label="$2"
+  local ok="false"
+  local output="/tmp/put-k-sebe-health.json"
+  for attempt in 1 2 3 4 5 6; do
+    if curl -fsS "$API_URL$endpoint" -o "$output"; then
+      if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); raise SystemExit(0 if d.get("ok") is True else 1)' "$output"; then
+        ok="true"
+        break
+      fi
     fi
+    sleep 5
+  done
+  if [[ "$ok" != "true" ]]; then
+    echo "Проверка $label не пройдена ($endpoint):"
+    cat "$output" 2>/dev/null || true
+    echo
+    fail "API не считается развёрнутым: $label недоступен. Смотри Cloud Function logs."
   fi
-  sleep 5
-done
-cat /tmp/put-k-sebe-health.json 2>/dev/null || true
-echo
-[[ "$HEALTH_OK" == "true" ]] || fail "Health check не прошёл. Проверь Cloud Function logs; API не считаем развёрнутым."
+  echo "    $label: OK"
+}
+check_endpoint "/health" "Backend + YDB + schema"
+check_endpoint "/health/db" "YDB connection"
+check_endpoint "/health/schema" "YDB schema"
 echo "=============================================="
 echo "РАЗВЁРТЫВАНИЕ BACKEND ЗАВЕРШЕНО"
 echo "API_BASE=$API_URL"
