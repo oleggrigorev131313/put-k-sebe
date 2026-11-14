@@ -596,7 +596,8 @@ def _handle_tribute_webhook(raw_body, signature):
                 WHERE purchase_id = $purchase_id;
                 """,
                 parameters={"$purchase_id": purchase_id},
-            )            return _json_response(200, {"ok": True})
+            )
+            return _json_response(200, {"ok": True})
 
         return _json_response(200, {"ok": True, "ignored": True})
     except (json.JSONDecodeError, ValueError, TypeError) as exc:
