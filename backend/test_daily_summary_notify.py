@@ -270,27 +270,98 @@ def main():
         index.TELEGRAM_SEND_INTERVAL_SECONDS = 0
 
     index._send_telegram_message = original_send
+    original_open = index._telegram_urlopen
     logs = _LogCapture()
     index.LOG.addHandler(logs)
     try:
-        def blocked_urlopen(request, timeout=None):
+        def blocked_open(request):
             raise urllib.error.HTTPError(
-                request.full_url, 403, "Forbidden", {},
+                "https://relay.example.test/sendMessage", 403, "Forbidden", {},
                 io.BytesIO(b'{"ok":false,"error_code":403,"description":"Forbidden: bot was blocked by the user"}'),
             )
-        original_urlopen = urllib.request.urlopen
-        urllib.request.urlopen = blocked_urlopen
-        try:
-            result = index._send_telegram_message("sendMessage", ready)
-        finally:
-            urllib.request.urlopen = original_urlopen
+        index._telegram_urlopen = blocked_open
+        result = index._send_telegram_message("sendMessage", ready)
         _assert(result == "blocked", "HTTP 403")
         logged = "\n".join(logs.messages)
         _assert(FIXTURE_TOKEN not in logged, "token leaked into logs")
         _assert("api.telegram.org" not in logged, "request URL leaked into logs")
         _assert("403" in logged, "status is logged")
+
+        hosts = []
+
+        def grab(request):
+            from urllib.parse import urlparse
+            hosts.append(urlparse(request.full_url).hostname)
+            class _Response:
+                def read(self, n=-1):
+                    return b'{"ok":true,"result":{}}'
+                def __enter__(self):
+                    return self
+                def __exit__(self, *args):
+                    return False
+            return _Response()
+
+        os.environ["TELEGRAM_API_BASE"] = "https://relay.example.test/"
+        index._telegram_urlopen = grab
+        try:
+            relay_result = index._send_telegram_message("sendMessage", {"chat_id": 1, "text": "hi"})
+        finally:
+            os.environ.pop("TELEGRAM_API_BASE", None)
+        _assert(relay_result == "ok", "relay send")
+        _assert(hosts == ["relay.example.test"], "TELEGRAM_API_BASE host")
+        _assert(index._telegram_api_base() == "https://api.telegram.org", "default API base")
+
+        os.environ["TELEGRAM_API_BASE"] = "https://127.0.0.1:9"
+        index._telegram_urlopen = original_open
+        try:
+            refused = index._send_telegram_message("sendMessage", {"chat_id": 1, "text": "hi"})
+        finally:
+            os.environ.pop("TELEGRAM_API_BASE", None)
+            index._telegram_urlopen = original_open
+        _assert(refused == "network", "connection refused is a network failure")
+        _assert(FIXTURE_TOKEN not in "\n".join(logs.messages), "token leaked after network failure")
     finally:
+        index._telegram_urlopen = original_open
         index.LOG.removeHandler(logs)
+
+    calls = []
+
+    def network_down(request):
+        calls.append(1)
+        raise urllib.error.URLError("timed out")
+
+    index.TELEGRAM_SEND_INTERVAL_SECONDS = 0
+    index._telegram_consecutive_network_failures = 0
+    index._telegram_urlopen = network_down
+    index._execute = _DB({"1": True, "2": True, "3": True, "4": True}).execute
+
+    def network_execute(query, parameters=None, table=None):
+        compact = " ".join(query.split())
+        parameters = parameters or {}
+        if "GROUP BY timezone" in compact:
+            return [_Result([_Row(timezone="Europe/Moscow")])]
+        if "SELECT user_id FROM user_profiles" in compact:
+            return [_Result([_Row(user_id=user_id) for user_id in ("1", "2", "3", "4")])]
+        if "FROM user_consents" in compact:
+            return [_Result([_Row(
+                ai_processing=True, ai_history_storage=False,
+                consent_version="test", updated_at="2026-11-14T00:00:00+00:00",
+            )])]
+        if "INSERT INTO daily_summary_claims" in compact or "DELETE FROM daily_summary_claims" in compact:
+            return []
+        raise AssertionError(compact[:160])
+
+    index._execute = network_execute
+    index._deepseek_daily_summary = lambda user_id, tz_name, force=False: _response(
+        400, {"error": "no_entries_today"}
+    )
+    index._send_telegram_message = original_send
+    try:
+        index._run_due_daily_summaries(DUE_NOW)
+        _assert(len(calls) == index.TELEGRAM_MAX_CONSECUTIVE_NETWORK_FAILURES, "stop after consecutive network failures")
+        _assert(index._telegram_consecutive_network_failures == index.TELEGRAM_MAX_CONSECUTIVE_NETWORK_FAILURES, "failure counter")
+    finally:
+        index._telegram_urlopen = original_open
 
     called = []
     original_job = index._run_due_daily_summaries

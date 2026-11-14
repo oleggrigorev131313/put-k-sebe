@@ -121,6 +121,12 @@ def _assert(condition, message):
         raise SystemExit("FAIL: " + message)
 
 
+def _inline(response):
+    _assert(response.get("isBase64Encoded") is False, "gateway body must be raw JSON")
+    _assert(response.get("headers", {}).get("Content-Type") == "application/json", "content type")
+    return json.loads(response["body"])
+
+
 def main():
     index = _load_index()
     secret = _derived_secret(FIXTURE_TOKEN)
@@ -138,35 +144,33 @@ def main():
     try:
         response = index.handler(_event("/start", secret), None)
         _assert(response["statusCode"] == 200, "start status")
-        _assert(len(capture) == 1, "start should call Telegram once")
-        sent = capture[0]
-        _assert(sent["method_name"] == "sendPhoto", "method")
-        _assert(FIXTURE_TOKEN not in json.dumps(sent["body"]), "token leaked into body")
-        _assert(sent["body"]["chat_id"] == 4242, "chat id")
-        _assert(sent["body"]["photo"].endswith("/assets/bot/welcome.jpg"), "photo url")
-        _assert(sent["body"]["caption"] == EXPECTED_CAPTION, "caption")
-        _assert("parse_mode" not in sent["body"], "parse_mode on wire")
-        button = sent["body"]["reply_markup"]["inline_keyboard"][0][0]
+        _assert(capture == [], "/start must not call the Bot API")
+        sent = _inline(response)
+        _assert(sent["method"] == "sendPhoto", "method")
+        _assert(FIXTURE_TOKEN not in response["body"], "token leaked into body")
+        _assert(sent["chat_id"] == 4242, "chat id")
+        _assert(sent["photo"].endswith("/assets/bot/welcome.jpg"), "photo url")
+        _assert(sent["caption"] == EXPECTED_CAPTION, "caption")
+        _assert(sent["caption"].count("\n\n") == EXPECTED_CAPTION.count("\n\n") > 0, "caption paragraphs")
+        _assert("\\" + "n" not in sent["caption"], "literal backslash-n in caption")
+        _assert("parse_mode" not in sent, "parse_mode on wire")
+        button = sent["reply_markup"]["inline_keyboard"][0][0]
         _assert(button["text"] == "Открыть дневник", "button text")
         _assert(button["web_app"]["url"] == "https://oleggrigorev131313.github.io/put-k-sebe/", "mini app url")
 
-        capture.clear()
         response = index.handler(_event("/start promo_payload", secret, chat_id=-100), None)
-        _assert(response["statusCode"] == 200, "payload start status")
-        _assert(len(capture) == 1 and capture[0]["body"]["chat_id"] == -100, "payload chat")
-        _assert(capture[0]["body"]["caption"] == EXPECTED_CAPTION, "payload caption")
+        payload_body = _inline(response)
+        _assert(response["statusCode"] == 200 and capture == [], "payload start status")
+        _assert(payload_body["chat_id"] == -100 and payload_body["caption"] == EXPECTED_CAPTION, "payload chat")
 
-        capture.clear()
         response = index.handler(_event("/start@kptprorabotkabot ref", secret), None)
-        _assert(response["statusCode"] == 200 and len(capture) == 1, "mention start")
+        _assert(response["statusCode"] == 200 and capture == [] and _inline(response)["method"] == "sendPhoto", "mention start")
 
-        capture.clear()
         response = index.handler(_event("/started", secret), None)
-        _assert(response["statusCode"] == 200 and capture == [], "not a start command")
+        _assert(response["statusCode"] == 200 and capture == [] and _inline(response) == {"ok": True}, "not a start command")
 
-        capture.clear()
         response = index.handler(_event("/help", secret), None)
-        _assert(response["statusCode"] == 200 and capture == [], "other command")
+        _assert(response["statusCode"] == 200 and capture == [] and _inline(response) == {"ok": True}, "other command")
 
         group_event = _event("/start", secret)
         group_event["body"] = json.dumps({
@@ -177,26 +181,22 @@ def main():
                 "text": "/start",
             },
         })
-        capture.clear()
         response = index.handler(group_event, None)
-        _assert(response["statusCode"] == 200 and capture == [], "group start is ignored")
+        _assert(response["statusCode"] == 200 and capture == [] and _inline(response) == {"ok": True}, "group start is ignored")
 
-        capture.clear()
         bad = _event("/start", "wrong-secret")
         response = index.handler(bad, None)
         _assert(response["statusCode"] == 401 and capture == [], "bad secret must not send")
 
         os.environ["TELEGRAM_WEBHOOK_SECRET"] = "override_secret_value"
         try:
-            capture.clear()
             response = index.handler(_event("/start", secret), None)
             _assert(response["statusCode"] == 401 and capture == [], "derived secret ignored when override is set")
             response = index.handler(_event("/start", "override_secret_value"), None)
-            _assert(response["statusCode"] == 200 and len(capture) == 1, "override secret")
+            _assert(response["statusCode"] == 200 and capture == [] and _inline(response)["method"] == "sendPhoto", "override secret")
         finally:
             os.environ.pop("TELEGRAM_WEBHOOK_SECRET", None)
 
-        capture.clear()
         state_response = index.handler({
             "httpMethod": "GET",
             "path": "/v1/state",
@@ -218,7 +218,9 @@ def main():
 
         urllib.request.urlopen = explode
         response = index.handler(_event("/start", secret), None)
-        _assert(response["statusCode"] == 200, "send failure still returns 200")
+        inline = _inline(response)
+        _assert(response["statusCode"] == 200 and inline["method"] == "sendPhoto", "inline reply survives a broken Bot API")
+        _assert(capture == [], "broken Bot API is not called")
         logged = "\n".join(logs.messages)
         _assert(FIXTURE_TOKEN not in logged, "token leaked into logs")
         _assert("api.telegram.org" not in logged, "request URL leaked into logs")
@@ -240,8 +242,8 @@ def main():
         "caption_limit": index.TELEGRAM_CAPTION_LIMIT,
         "split": units > index.TELEGRAM_CAPTION_LIMIT,
         "calls": [{
-            "method": sent["method_name"],
-            "payload": sent["body"],
+            "method": sent["method"],
+            "payload": {key: value for key, value in sent.items() if key != "method"},
         }],
     }
     print(json.dumps(printable, ensure_ascii=False, indent=2))

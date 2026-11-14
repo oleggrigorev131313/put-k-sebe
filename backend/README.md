@@ -73,7 +73,7 @@ yc serverless function version set-tag --id <PREVIOUS_VERSION_ID> --tag '$latest
 
 `POST /v1/webhooks/telegram`
 
-На `/start` и `/start <payload>` функция вызывает `sendPhoto` (без `parse_mode`) с картинкой `https://oleggrigorev131313.github.io/put-k-sebe/assets/bot/welcome.jpg` и кнопкой «Открыть дневник» (`web_app`, URL Mini App `https://oleggrigorev131313.github.io/put-k-sebe/`). Запись в YDB при этом не выполняется. Ошибка отправки логируется без секретов, Telegram всё равно получает HTTP 200. Чужой запрос без секрета получает 401 и боту ничего не шлёт.
+На `/start` и `/start <payload>` функция не ходит в `api.telegram.org`. Ответ вебхука — это сам вызов метода: HTTP 200, `Content-Type: application/json`, тело `{"method":"sendPhoto","chat_id":...,"photo":"https://oleggrigorev131313.github.io/put-k-sebe/assets/bot/welcome.jpg","caption":...,"reply_markup":...}` с кнопкой «Открыть дневник». Шлюз с `payload_format_version: 1.0` отдаёт Telegram `statusCode`, заголовки и `body` функции как есть; `isBase64Encoded` остаётся `false`. Остальные апдейты отвечают `{"ok":true}` сразу. Запись в YDB не выполняется. Чужой запрос без секрета получает 401.
 
 Проверка секрета: заголовок `X-Telegram-Bot-Api-Secret-Token`. Ожидаемое значение — переменная `TELEGRAM_WEBHOOK_SECRET`, если она задана. Иначе это hex HMAC-SHA256 от `BOT_TOKEN` с меткой `put-k-sebe-telegram-webhook-v1` (64 символа `0-9a-f`, формат Telegram `secret_token`).
 
@@ -196,7 +196,37 @@ analytics_events содержит тип события, HMAC-псевдоним
 
 Часовой пояс уже пишется в `user_profiles.timezone` из `Intl.DateTimeFormat().resolvedOptions().timeZone` при регистрации профиля. Telegram user id хранится в `user_profiles.user_id` и для личного чата совпадает с chat id.
 
-В 23:59 для пользователей с согласием на AI-обработку вызывается та же генерация сводки, что и из приложения. Если сводка есть (в том числе сделанная раньше в этот день), бот один раз шлёт текст «итоги готовы» и кнопку «Открыть дневник». Если за локальные сутки нет записей и практик, один раз уходит мягкое сообщение, что итоги не собраны. Повтор в те же сутки блокирует строка `daily_summary_claims` с ключом `notify:YYYY-MM-DD`. Это не новая таблица и не DDL. Ответ Telegram 403 (бот заблокирован) не повторяется в этот день. Отправка не чаще 20 сообщений в секунду.
+В 23:59 для пользователей с согласием на AI-обработку вызывается та же генерация сводки, что и из приложения. Если сводка есть (в том числе сделанная раньше в этот день), бот один раз шлёт текст «итоги готовы» и кнопку «Открыть дневник». Если за локальные сутки нет записей и практик, один раз уходит мягкое сообщение, что итоги не собраны. Повтор в те же сутки блокирует строка `daily_summary_claims` с ключом `notify:YYYY-MM-DD`. Это не новая таблица и не DDL. Ответ Telegram 403 (бот заблокирован) не повторяется в этот день. Отправка не чаще 20 сообщений в секунду. Исходящий вызов ждёт соединение 5 секунд и весь запрос 10 секунд. После трёх сетевых ошибок подряд этот запуск таймера больше ничего не отправляет, чтобы функция не висела до таймаута. Метка `notify:` при сетевой ошибке снимается, следующий запуск может попробовать снова.
+
+Исходящие вызовы идут на `TELEGRAM_API_BASE` (по умолчанию `https://api.telegram.org`). Из этой облачной сети прямой доступ к Telegram не открывается, поэтому для ночных сообщений нужен HTTPS-прокси снаружи. Приветствие `/start` прокси не использует: его отправляет сам Telegram, прочитав тело вебхука. Прокси нужен только для `sendMessage` по таймеру.
+
+Минимальный Cloudflare Worker. Не логируйте путь: в нём есть токен бота.
+
+```javascript
+export default {
+  async fetch(request) {
+    const incoming = new URL(request.url);
+    const target = "https://api.telegram.org" + incoming.pathname + incoming.search;
+    const headers = new Headers(request.headers);
+    headers.delete("host");
+    return fetch(target, {
+      method: request.method,
+      headers,
+      body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+    });
+  },
+};
+```
+
+Подойдёт и любой другой HTTPS reverse proxy до `api.telegram.org`, если он отдаёт путь с корня хоста (`/bot<token>/sendMessage`).
+
+Перед деплоем задайте адрес прокси в этой сессии и не печатайте его. `deploy.sh` добавит переменную в версию функции только если она задана, и сам её не выводит. Без переменной код снова зовёт `https://api.telegram.org`.
+
+```bash
+export TELEGRAM_API_BASE='https://<relay-host>'
+bash backend/deploy.sh --yes --ref main
+unset TELEGRAM_API_BASE
+```
 
 В Mini App нет отдельного адреса экрана итогов, поэтому кнопка открывает `https://oleggrigorev131313.github.io/put-k-sebe/`. Если сводка за сегодня уже есть, кнопка называется «Открыть итоги дня» и запрашивает сохранённый текст, а не запускает вторую генерацию. Повторно текст открывается при включённом хранении истории AI. Без этого согласия приложение по-прежнему не хранит текст сводки.
 
