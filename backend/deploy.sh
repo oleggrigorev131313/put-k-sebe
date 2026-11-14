@@ -221,8 +221,9 @@ TIMER_NAME="put-k-sebe-daily-summary"
 TIMER_JSON="$(yc serverless trigger v2 get "$TIMER_NAME" --format json 2>/dev/null || true)"
 if [[ -z "$TIMER_JSON" ]]; then
   TIMER_ACTION_FILE="$WORKDIR/timer-action.json"
+  FUNCTION_TAG='$latest'
   cat > "$TIMER_ACTION_FILE" <<JSON
-{"invoke_function":{"function_id":"$FUNCTION_ID","function_tag":"\\$latest","service_account_id":"$SA_ID"}}
+{"invoke_function":{"function_id":"$FUNCTION_ID","function_tag":"$FUNCTION_TAG","service_account_id":"$SA_ID"}}
 JSON
   yc serverless trigger v2 create timer "$TIMER_NAME" \
     --description "One daily summary at 23:59 in each user's local timezone" \
