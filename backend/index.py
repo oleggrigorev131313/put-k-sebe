@@ -404,7 +404,7 @@ def _validate_state(value):
         "onboarding": onboarding,
     }
     # Keep optional application metadata, but do not accept arbitrary top-level keys.
-    for key in ("settings", "meta", "aiProfile"):
+    for key in ("settings", "meta", "aiProfile", "dailySummaryMeta"):
         if key in value and isinstance(value[key], dict):
             clean[key] = value[key]
 
@@ -1473,7 +1473,11 @@ def handler(event, context):
 
     except ValueError as exc:
         return _json_response(401, {"error": str(exc)})
-    except Exception as exc:
-        # Do not log request bodies, Telegram initData, tokens, or diary content.
-        LOG.error("API request failed: %s", type(exc).__name__)
+    except Exception:
+        # Log the traceback and request route only; never log bodies, initData,
+        # credentials, or diary content. This preserves the real backend failure
+        # in Cloud Functions logs while keeping user data private.
+        LOG.exception("API request failed method=%s path=%s",
+                      locals().get("method", "UNKNOWN"),
+                      locals().get("path", "UNKNOWN"))
         return _json_response(503, {"error": "service_unavailable"})
