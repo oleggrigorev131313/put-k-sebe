@@ -235,25 +235,18 @@ if(!tg){cloudStatus="not_telegram";render();return;}
 if(!tg.initData){cloudStatus="telegram_data_missing";render();return;}
 cloudStatus="connecting";
 try{
-var r=await fetch(API_BASE+"/v1/state",{method:"GET",headers:apiHeaders(),cache:"no-store"});
-if(!r.ok){var errBody="";try{var errJson=await r.json();errBody=errJson&&errJson.error?": "+errJson.error:"";}catch(ignore){}throw new Error("HTTP "+r.status+errBody);}
 var consentResponse=await fetch(API_BASE+"/v1/consents",{method:"GET",headers:apiHeaders(),cache:"no-store"});
 if(!consentResponse.ok)throw new Error("Не удалось получить настройки согласий");
-var consentData=await consentResponse.json();consentSettings=consentData.consents||{ai_processing:false,ai_history_storage:false};consentLoaded=true;
+var consentData=await consentResponse.json();
+consentSettings=consentData.consents||{ai_processing:false,ai_history_storage:false};consentLoaded=true;
+if(!consentSettings.updated_at){cloudReady=false;cloudStatus="consent_required";page="privacy";render();return;}
+var r=await fetch(API_BASE+"/v1/state",{method:"GET",headers:apiHeaders(),cache:"no-store"});
+if(!r.ok){var errBody="";try{var errJson=await r.json();errBody=errJson&&errJson.error?": "+errJson.error:"";}catch(ignore){}throw new Error("HTTP "+r.status+errBody);}
 var result=await r.json();
 var remoteConsent=!!(result.found&&result.state&&result.state.onboarding&&result.state.onboarding.consent);
 var localConsent=!!(state.onboarding&&state.onboarding.consent);
-// Consent is account-level: a second device can reuse the consent already stored for this Telegram account.
-// Only merge remote private data after the server-side account state shows that consent was given.
 if(remoteConsent)state=mergeStates(result.state,state);
-if(!consentSettings.updated_at){
-cloudReady=false;cloudStatus="consent_required";page="privacy";render();return;
-}
-if(!remoteConsent&&!localConsent){
-cloudReady=false;cloudStatus="consent_required";
-onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
-page="onboarding";render();return;
-}
+if(!remoteConsent&&!localConsent){cloudReady=false;cloudStatus="consent_required";onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();page="onboarding";render();return;}
 if(page==="privacy")page=state.onboarding?"home":"onboarding";
 onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
 saveLocalOnly();cloudReady=true;cloudStatus="connected";
