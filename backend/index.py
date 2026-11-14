@@ -141,6 +141,30 @@ def _ensure_analytics_schema():
         """)
 
 
+def _ensure_ai_usage_schema():
+    _ensure_table("ai_usage_events", """
+        CREATE TABLE IF NOT EXISTS ai_usage_events (
+            event_id Utf8 NOT NULL,
+            user_id Utf8 NOT NULL,
+            feature Utf8 NOT NULL,
+            request_key Utf8 NOT NULL,
+            created_at Utf8 NOT NULL,
+            PRIMARY KEY (event_id)
+        );
+        """)
+    _ensure_table("ai_analyses", """
+        CREATE TABLE IF NOT EXISTS ai_analyses (
+            user_id Utf8 NOT NULL,
+            entry_id Utf8 NOT NULL,
+            analysis_text Utf8 NOT NULL,
+            input_tokens Uint64 NOT NULL,
+            output_tokens Uint64 NOT NULL,
+            created_at Utf8 NOT NULL,
+            PRIMARY KEY (user_id, entry_id)
+        );
+        """)
+
+
 def _ensure_premium_schema():
     _ensure_table("premium_purchases", """
         CREATE TABLE IF NOT EXISTS premium_purchases (
@@ -1427,7 +1451,7 @@ def handler(event, context):
             timezone_name = headers.get("x-user-timezone", "UTC")
             user_tz = _safe_user_timezone(timezone_name)
             day_key = datetime.now(user_tz).date().isoformat()
-            _ensure_schema()
+            _ensure_ai_usage_schema()
             used, summary_done = _daily_ai_usage(user_id, day_key, user_tz)
             return _json_response(200, {"limit": 5, "used": used, "remaining": max(0, 5-used),
                                         "summary_done": summary_done, "premium_required": False})
