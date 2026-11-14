@@ -49,6 +49,18 @@ def _db():
     return _pool
 
 
+def _run_schema_step(pool, table_name, statement):
+    print("PUT_K_SEBE_SCHEMA step_start table=%s" % table_name, flush=True)
+    try:
+        pool.execute_with_retries(statement)
+    except Exception as exc:
+        print("PUT_K_SEBE_SCHEMA step_failed table=%s exception_type=%s error=%r" %
+              (table_name, type(exc).__name__, exc), flush=True)
+        LOG.exception("Schema initialization failed table=%s", table_name)
+        raise
+    print("PUT_K_SEBE_SCHEMA step_ok table=%s" % table_name, flush=True)
+
+
 def _ensure_schema():
     global _schema_ready
     if _schema_ready:
@@ -57,7 +69,7 @@ def _ensure_schema():
         if _schema_ready:
             return
         pool = _db()
-        pool.execute_with_retries(
+        _run_schema_step(pool, "user_state", 
             """
             CREATE TABLE IF NOT EXISTS user_state (
                 user_id Utf8 NOT NULL,
@@ -67,7 +79,7 @@ def _ensure_schema():
             );
             """
         )
-        pool.execute_with_retries(
+        _run_schema_step(pool, "analytics_events", 
             """
             CREATE TABLE IF NOT EXISTS analytics_events (
                 event_id Utf8 NOT NULL,
@@ -79,14 +91,14 @@ def _ensure_schema():
             );
             """
         )
-        pool.execute_with_retries("""
+        _run_schema_step(pool, "user_profiles", """
             CREATE TABLE IF NOT EXISTS user_profiles (
                 user_id Utf8 NOT NULL, username Utf8, first_name Utf8, last_name Utf8,
                 timezone Utf8, created_at Utf8 NOT NULL, last_seen Utf8 NOT NULL,
                 PRIMARY KEY (user_id)
             );
             """)
-        pool.execute_with_retries(
+        _run_schema_step(pool, "premium_purchases", 
             """
             CREATE TABLE IF NOT EXISTS premium_purchases (
                 purchase_id Utf8 NOT NULL,
@@ -99,7 +111,7 @@ def _ensure_schema():
             );
             """
         )
-        pool.execute_with_retries(
+        _run_schema_step(pool, "premium_trials", 
             """
             CREATE TABLE IF NOT EXISTS premium_trials (
                 user_id Utf8 NOT NULL,
@@ -109,7 +121,7 @@ def _ensure_schema():
             );
             """
         )
-        pool.execute_with_retries(
+        _run_schema_step(pool, "ai_analyses", 
             """
             CREATE TABLE IF NOT EXISTS ai_analyses (
                 user_id Utf8 NOT NULL,
@@ -122,7 +134,7 @@ def _ensure_schema():
             );
             """
         )
-        pool.execute_with_retries("""
+        _run_schema_step(pool, "user_consents", """
             CREATE TABLE IF NOT EXISTS user_consents (
                 user_id Utf8 NOT NULL,
                 ai_processing Bool NOT NULL,
@@ -132,7 +144,7 @@ def _ensure_schema():
                 PRIMARY KEY (user_id)
             );
             """)
-        pool.execute_with_retries("""
+        _run_schema_step(pool, "daily_summary_claims", """
             CREATE TABLE IF NOT EXISTS daily_summary_claims (
                 user_id Utf8 NOT NULL,
                 day_key Utf8 NOT NULL,
@@ -140,7 +152,7 @@ def _ensure_schema():
                 PRIMARY KEY (user_id, day_key)
             );
             """)
-        pool.execute_with_retries("""
+        _run_schema_step(pool, "ai_usage_events", """
             CREATE TABLE IF NOT EXISTS ai_usage_events (
                 event_id Utf8 NOT NULL,
                 user_id Utf8 NOT NULL,
@@ -151,7 +163,7 @@ def _ensure_schema():
             );
             """)
         _schema_ready = True
-
+    
 
 CONSENT_VERSION = "2026-11-14-v1"
 
