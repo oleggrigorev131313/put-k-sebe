@@ -1126,6 +1126,7 @@ DIARY_BUTTON_TEXT = "Открыть дневник"
 TELEGRAM_SEND_INTERVAL_SECONDS = 0.05
 SUMMARY_NOTIFY_KEY_PREFIX = "notify:"
 _last_telegram_send_at = 0.0
+# Blank lines below are real newline characters. Do not write the two characters \n.
 SUMMARY_READY_TEXT = """\
 ✨ Твои итоги дня готовы!
 

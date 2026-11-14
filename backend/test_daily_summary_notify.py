@@ -149,9 +149,15 @@ def main():
     _assert(index.TELEGRAM_SEND_INTERVAL_SECONDS <= 0.05, "send interval is not under 25/s")
     ready = index.build_summary_notification("ready", 42)
     empty = index.build_summary_notification("empty", 44)
-    for payload, text in ((ready, READY_TEXT), (empty, EMPTY_TEXT)):
+    for payload, text, blank_lines in ((ready, READY_TEXT, 2), (empty, EMPTY_TEXT, 3)):
         _assert("parse_mode" not in payload, "parse_mode must be absent")
         _assert(payload["text"] == text, "notification text")
+        # Draft '\n\n' is a blank line: two newline characters, not backslash + n.
+        _assert(payload["text"].count("\n\n") == blank_lines, "missing real paragraph breaks")
+        _assert("\\" + "n" not in payload["text"], "literal backslash-n in notification text")
+        encoded = json.dumps(payload["text"], ensure_ascii=False)
+        _assert("\\n\\n" in encoded, "JSON payload must encode real newlines")
+        _assert("\\\\n" not in encoded, "JSON payload encodes a literal backslash-n")
         button = payload["reply_markup"]["inline_keyboard"][0][0]
         _assert(button["text"] == "Открыть дневник", "button text")
         _assert(button["web_app"]["url"] == "https://oleggrigorev131313.github.io/put-k-sebe/", "mini app url")
@@ -181,6 +187,8 @@ def main():
     _assert(by_chat[42] == READY_TEXT, "ready message")
     _assert(by_chat[44] == EMPTY_TEXT, "empty message")
     _assert(by_chat[46] == READY_TEXT, "already-used summary still notifies once")
+    _assert(by_chat[42].count("\n\n") == 2 and "\\" + "n" not in by_chat[42], "sent ready text paragraphs")
+    _assert(by_chat[44].count("\n\n") == 3 and "\\" + "n" not in by_chat[44], "sent empty text paragraphs")
     _assert(all(key[1].startswith("notify:") for key in db.claims), "claim key must be notify-prefixed")
     _assert(("42", "notify:2026-11-14") in db.claims, "ready claim")
     _assert(("43", "notify:2026-11-14") not in db.claims, "no consent must not claim")
