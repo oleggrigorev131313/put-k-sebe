@@ -1,0 +1,27 @@
+:root {
+  --bg: #f7f5ef;
+  --bg-2: #eeeae1;
+  --ink: #20282a;
+  --muted: #7f8985;
+  --pine: #465752;
+  --sage: #a7b4a1;
+  --stone: #dcd3c4;
+  --card: #fcfbf8;
+  --line: #e6e3dc;
+  --ok: #648875;
+  --warn: #b99563;
+  --shadow: 0 10px 28px rgba(32, 40, 42, 0.045);
+  --shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  --radius-sm: 14px;
+  --radius-btn: 18px;
+  --radius-card: 24px;
+  --radius-hero: 30px;
+  --font: "Manrope", "Segoe UI", sans-serif;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --pad: 20px;
+  color-scheme: light;
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--bg);
+}
