@@ -1014,6 +1014,7 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
         usage = {"input_tokens":int(u.get("prompt_tokens",0)),"output_tokens":int(u.get("completion_tokens",0))}
         created = now.isoformat()
         _save_ai_result(user_id, cache_key, summary, usage, created)
+        _record_event(user_id, "daily_summary_created")
         return _json_response(200, {"ok":True,"cached":False,"summary":summary,"usage":usage,"created_at":created})
     except urllib.error.HTTPError as exc:
         LOG.error("DeepSeek daily summary HTTP error status=%s", exc.code)
