@@ -781,31 +781,35 @@ def _created_at_is_local_day(value, day_key, user_tz):
 
 
 def _daily_ai_usage(user_id, day_key, user_tz):
-    result = _db().execute_with_retries(
-        """
-        DECLARE $user_id AS Utf8;
-        SELECT entry_id, created_at FROM ai_analyses WHERE user_id = $user_id;
-        """,
-        parameters={"$user_id": user_id},
-    )
     analyzed_entries = set()
     summary_exists = False
+    result = _db().execute_with_retries("""
+        DECLARE $user_id AS Utf8;
+        SELECT feature, request_key, created_at FROM ai_usage_events WHERE user_id = $user_id;
+        """, parameters={"$user_id": user_id})
     for result_set in result:
+        for row in result_set.rows:
+            feature, request_key, created_at = str(row.feature), str(row.request_key), str(row.created_at)
+            if not _created_at_is_local_day(created_at, day_key, user_tz):
+                continue
+            if feature == "daily_summary":
+                summary_exists = True
+            elif feature == "analyze_entry":
+                analyzed_entries.add(request_key)
+    legacy = _db().execute_with_retries("""
+        DECLARE $user_id AS Utf8;
+        SELECT entry_id, created_at FROM ai_analyses WHERE user_id = $user_id;
+        """, parameters={"$user_id": user_id})
+    for result_set in legacy:
         for row in result_set.rows:
             entry_id, created_at = str(row.entry_id), str(row.created_at)
             if not _created_at_is_local_day(created_at, day_key, user_tz):
                 continue
             if entry_id.startswith("daily-summary:"):
                 summary_exists = True
-                continue
-            if entry_id.startswith("onboarding-profile:"):
-                continue
-            # Cache keys may include model/prompt versions. One diary entry
-            # must consume only one daily analysis, regardless of cache versions.
-            logical_entry_id = entry_id.rsplit(":", 1)[-1]
-            analyzed_entries.add(logical_entry_id)
+            elif not entry_id.startswith("onboarding-profile:"):
+                analyzed_entries.add(entry_id.rsplit(":", 1)[-1])
     return len(analyzed_entries), summary_exists
-
 
 def _save_ai_result(user_id, cache_key, text_value, usage, created):
     consent = _get_user_consents(user_id)
