@@ -177,6 +177,13 @@ def _delete_ai_history(user_id):
         DECLARE $user_id AS Utf8;
         DELETE FROM ai_analyses WHERE user_id = $user_id;
         """, parameters={"$user_id": user_id})
+    state = _read_state(user_id)
+    if isinstance(state, dict):
+        for entry in state.get("entries") or []:
+            if isinstance(entry, dict):
+                entry.pop("analysis", None)
+        state["chat"] = []
+        _write_state(user_id, state)
 
 def _record_event(user_id, event_name, metadata=None):
     pool = _db()
