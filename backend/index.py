@@ -808,27 +808,32 @@ def _daily_ai_usage(user_id, day_key, user_tz):
 
 
 def _save_ai_result(user_id, cache_key, text_value, usage, created):
-    _db().execute_with_retries(
-        """
+    consent = _get_user_consents(user_id)
+    feature = "daily_summary" if cache_key.startswith("daily-summary:") else ("onboarding" if cache_key.startswith("onboarding-profile:") else "analyze_entry")
+    request_key = cache_key.rsplit(":", 1)[-1]
+    _db().execute_with_retries("""
+        DECLARE $event_id AS Utf8;
+        DECLARE $user_id AS Utf8;
+        DECLARE $feature AS Utf8;
+        DECLARE $request_key AS Utf8;
+        DECLARE $created_at AS Utf8;
+        INSERT INTO ai_usage_events (event_id, user_id, feature, request_key, created_at)
+        VALUES ($event_id, $user_id, $feature, $request_key, $created_at);
+        """, parameters={"$event_id": str(uuid.uuid4()), "$user_id": user_id, "$feature": feature, "$request_key": request_key, "$created_at": created})
+    if not consent["ai_history_storage"]:
+        return
+    _db().execute_with_retries("""
         DECLARE $user_id AS Utf8;
         DECLARE $entry_id AS Utf8;
         DECLARE $analysis_text AS Utf8;
         DECLARE $input_tokens AS Uint64;
         DECLARE $output_tokens AS Uint64;
         DECLARE $created_at AS Utf8;
-        UPSERT INTO ai_analyses
-            (user_id, entry_id, analysis_text, input_tokens, output_tokens, created_at)
-        VALUES
-            ($user_id, $entry_id, $analysis_text, $input_tokens, $output_tokens, $created_at);
-        """,
-        parameters={
-            "$user_id": user_id, "$entry_id": cache_key, "$analysis_text": text_value,
+        UPSERT INTO ai_analyses (user_id, entry_id, analysis_text, input_tokens, output_tokens, created_at)
+        VALUES ($user_id, $entry_id, $analysis_text, $input_tokens, $output_tokens, $created_at);
+        """, parameters={"$user_id": user_id, "$entry_id": cache_key, "$analysis_text": text_value,
             "$input_tokens": ydb.TypedValue(max(0, int(usage.get("input_tokens", 0))), ydb.PrimitiveType.Uint64),
-            "$output_tokens": ydb.TypedValue(max(0, int(usage.get("output_tokens", 0))), ydb.PrimitiveType.Uint64),
-            "$created_at": created,
-        },
-    )
-
+            "$output_tokens": ydb.TypedValue(max(0, int(usage.get("output_tokens", 0))), ydb.PrimitiveType.Uint64), "$created_at": created})
 
 def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
     from datetime import datetime, timezone
@@ -1128,6 +1133,9 @@ def handler(event, context):
             _ensure_schema()
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error":"deepseek_not_configured"})
+            denied = _require_ai_processing(user_id)
+            if denied:
+                return denied
             return _deepseek_analyze_onboarding(user_id)
 
         if path == "/v1/ai/daily-summary" and method == "POST":
@@ -1135,6 +1143,9 @@ def handler(event, context):
             _ensure_schema()
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error":"deepseek_not_configured"})
+            denied = _require_ai_processing(user_id)
+            if denied:
+                return denied
             try:
                 payload = json.loads(body or "{}")
                 timezone_name = str(payload.get("timezone") or "UTC")
@@ -1160,6 +1171,9 @@ def handler(event, context):
             _ensure_schema()
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error": "deepseek_not_configured"})
+            denied = _require_ai_processing(user_id)
+            if denied:
+                return denied
             try:
                 payload = json.loads(body or "{}")
                 entry_id = str(payload.get("entry_id", "")).strip()
