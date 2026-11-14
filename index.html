@@ -77,7 +77,7 @@ async function refreshAiUsage(){
  try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
  var usageHeaders=apiHeaders();usageHeaders["X-User-Timezone"]=tz;
  var r=await fetch(API_BASE+"/v1/ai/usage",{method:"GET",headers:usageHeaders,cache:"no-store"});
- if(r.ok){aiUsage=await r.json();if(page==="home"){render();var today=new Date().toDateString(),hasEntryToday=(state.entries||[]).some(function(e){return new Date(e.date).toDateString()===today;}),hasPracticeToday=(state.practiceHistory||[]).some(function(p){return p.completedAt&&new Date(p.completedAt).toDateString()===today;}),hasToday=hasEntryToday||hasPracticeToday;if(hasToday&&!aiUsage.summary_done&&!sessionStorage.getItem("pks_auto_summary_attempted")){sessionStorage.setItem("pks_auto_summary_attempted","1");runDailySummary(null);}}}}catch(e){}
+ if(r.ok){aiUsage=await r.json();if(page==="home")render();}}catch(e){}
 }
 function formatAnalysis(raw){
  var safe=esc(String(raw||""));
@@ -109,7 +109,7 @@ function addSuggestedPattern(name,detail,entryId){
   toast("Запись привязана к существующему паттерну.");closeModal();go("patterns");return;
  }
  var id="p"+Date.now();
- state.patterns.push({id:id,name:name,detail:detail||"",status:"suggested",source:"ai",createdAt:new Date().toISOString(),entryId:String(entryId)});
+ state.patterns.push({id:id,name:name,detail:detail||"",status:"suggested",source:"ai",createdAt:new Date().toISOString(),entryId:String(entryId)});trackEvent("pattern_created",{source:"ai"});
  linkEntryToPattern(entryId,id);
  save();toast("Гипотеза добавлена, а запись привязана к ней.");closeModal();go("patterns");
 }
@@ -132,6 +132,7 @@ async function analyzeEntry(id,buttonEl){
   }
   var entry=state.entries.find(function(x){return String(x.id)===String(id);});
   if(entry&&consentSettings.ai_history_storage){entry.analysis=data.analysis||"";save();}
+   trackEvent("ai_analysis_created",{entry_id:String(id),cached:!!data.cached});
   if(result){result.style.display="block";result.innerHTML=renderAnalysis(data.analysis||"Анализ не получен.",id);}
   var accept=document.getElementById("accept-ai-pattern");
   if(accept){var mm=String(data.analysis||"").match(/\*{0,2}Гипотеза паттерна:\*{0,2}\s*\*{0,2}([^|\n*]+)\*{0,2}\s*\|\s*\*{0,2}([^\n*]+)\*{0,2}/i);if(mm)accept.onclick=function(){addSuggestedPattern(mm[1].trim(),mm[2].trim(),id);};}
@@ -155,12 +156,12 @@ async function analyzeOnboarding(){
  }catch(e){console.warn("Onboarding analysis unavailable",e);}
 }
 async function runDailySummary(buttonEl){
- var gate=summaryButtonState();if(!gate.has){toast("Чтобы подвести итоги, добавь запись в дневник или выполни хотя бы одну практику.");return;}if(gate.done){toast("На сегодня итоги уже подведены. Добавь новое событие, чтобы обновить сводку.");return;}
+ var gate=summaryButtonState();if(!gate.has){toast("Чтобы подвести итоги, добавь запись в дневник или выполни хотя бы одну практику.");return;}
  if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
  
  if(buttonEl){buttonEl.disabled=true;buttonEl.textContent="Собираю сводку…";}
  try{
-  var response=await fetch(API_BASE+"/v1/ai/daily-summary",{method:"POST",headers:apiHeaders(),body:JSON.stringify({timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC",force:!!(aiUsage.summary_done&&premiumStatus&&premiumStatus.active)})});
+  var response=await fetch(API_BASE+"/v1/ai/daily-summary",{method:"POST",headers:apiHeaders(),body:JSON.stringify({timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
   var raw=await response.text(),data={};try{data=raw?JSON.parse(raw):{};}catch(parseError){data={error:"invalid_server_response",detail:raw.slice(0,180)};}
   if(!response.ok){
    if(response.status===403)throw new Error(data.message||"Повторный обзор доступен в Premium.");
@@ -171,7 +172,7 @@ async function runDailySummary(buttonEl){
   }
   var dailyPracticeLines=String(data.summary||"").split("\n").filter(function(line){return /^Практика на завтра:/i.test(line.trim());});
   var dailyPracticeCards=dailyPracticeLines.map(function(line,index){var parts=line.replace(/^Практика на завтра:\s*/i,"").split("|").map(function(x){return x.trim();});if(parts.length<2)return "";return '<div class="card ai-suggestion" style="margin-top:9px"><b>'+esc(parts[0])+'</b><p>'+esc(parts[1])+'</p><small>'+esc(parts[2]||"5–10 минут")+'</small><button class="btn secondary full" style="margin-top:9px" data-daily-practice="'+index+'">＋ Добавить в план на завтра</button></div>';}).join("");
-  state.dailySummaryMeta={day:localDayKey(),signature:todayActivitySignature()};save();
+  state.dailySummaryMeta={day:localDayKey()};save();
   modal('<div class="eyebrow">Итоги дня</div><h2>Твоя дневная сводка</h2><div class="note analysis-text" style="color:var(--ink);font-size:12px;line-height:1.65">'+formatAnalysis(String(data.summary||"Сводка не получена.").replace(/^Практика на завтра:.*$/gmi,"").trim())+'</div>'+(dailyPracticeCards?'<h3 style="margin-top:14px">Небольшие шаги на завтра</h3>'+dailyPracticeCards:'')+(state.patterns.some(function(p){return p.status==="suggested";})?'<p>Есть гипотезы паттернов, которые можно проверить в соответствующем разделе.</p><button class="btn secondary full" id="summary-patterns">Посмотреть предложенные паттерны</button>':''));
   var summaryPatterns=document.getElementById("summary-patterns");if(summaryPatterns)summaryPatterns.onclick=function(){closeModal();go("patterns");};
   document.querySelectorAll("[data-daily-practice]").forEach(function(btn){btn.onclick=function(){var line=dailyPracticeLines[Number(btn.dataset.dailyPractice)]||"",parts=line.replace(/^Практика на завтра:\s*/i,"").split("|").map(function(x){return x.trim();});if(parts.length<2)return;state.personalPractices=state.personalPractices||[];state.personalPractices.unshift({id:"pp"+Date.now(),title:parts[0],instruction:parts[1],duration:parts[2]||"5–10 минут",status:"active",source:"daily_review",createdAt:new Date().toISOString(),feedback:null});save();btn.disabled=true;btn.textContent="✓ Добавлено в план";toast("Практика добавлена в твой план.");};});
@@ -186,10 +187,18 @@ async function runDailySummary(buttonEl){
 function localDayKey(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function todayActivity(){var k=localDayKey();function same(v){var d=new Date(v);return !isNaN(d)&&d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")===k;}return {entries:(state.entries||[]).filter(function(e){return same(e.date);}),practices:(state.practiceHistory||[]).filter(function(p){return same(p.completedAt);})};}
 function todayActivitySignature(){var a=todayActivity();return a.entries.map(function(x){return "e"+x.id+":"+x.date;}).concat(a.practices.map(function(x){return "p"+x.id+":"+x.completedAt;})).sort().join("|");}
-function summaryButtonState(){var a=todayActivity(),has=a.entries.length+a.practices.length>0;return {has:has,done:!!(state.dailySummaryMeta&&state.dailySummaryMeta.day===localDayKey()&&state.dailySummaryMeta.signature===todayActivitySignature())};}
-function trackEvent(name){
+function summaryButtonState(){var a=todayActivity(),has=a.entries.length+a.practices.length>0;return {has:has,done:!!(aiUsage&&aiUsage.summary_done)||(!!(state.dailySummaryMeta&&state.dailySummaryMeta.day===localDayKey()))};}
+function trackEvent(name,metadata){
 if(!API_BASE||!tg||!tg.initData)return;
-fetch(API_BASE+"/v1/events",{method:"POST",headers:apiHeaders(),body:JSON.stringify({event:name})}).catch(function(){});
+fetch(API_BASE+"/v1/events",{method:"POST",headers:apiHeaders(),body:JSON.stringify({event:name,metadata:metadata||{}})}).catch(function(){});
+}
+function registerAdminProfile(){
+if(!API_BASE||!tg||!tg.initData)return;
+var u=tg.initDataUnsafe&&tg.initDataUnsafe.user||{};
+fetch(API_BASE+"/v1/profile",{method:"POST",headers:apiHeaders(),body:JSON.stringify({
+ user:{username:u.username||"",first_name:u.first_name||"",last_name:u.last_name||""},
+ timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"
+})}).catch(function(){});
 }
 function trackInitialSession(){
 try{
@@ -240,6 +249,7 @@ if(!consentResponse.ok)throw new Error("Не удалось получить н�
 var consentData=await consentResponse.json();
 consentSettings=consentData.consents||{ai_processing:false,ai_history_storage:false};consentLoaded=true;
 if(!consentSettings.updated_at){cloudReady=false;cloudStatus="consent_required";page="privacy";render();return;}
+registerAdminProfile();
 var r=await fetch(API_BASE+"/v1/state",{method:"GET",headers:apiHeaders(),cache:"no-store"});
 if(!r.ok){var errBody="";try{var errJson=await r.json();errBody=errJson&&errJson.error?": "+errJson.error:"";}catch(ignore){}throw new Error("HTTP "+r.status+errBody);}
 var result=await r.json();
@@ -304,7 +314,7 @@ if(premium.active){
  }
 }
 return '<section class="hero card"><div class="eyebrow">Личное пространство</div><h1>Привет, '+esc(first||"Олег")+' ✦</h1><p>Не нужно менять всю жизнь за один день. Достаточно лучше понять себя и сделать следующий небольшой шаг.</p>'+button("Записать мысль →","new")+'</section>'+
-'<section class="card" style="margin-top:12px"><div class="eyebrow">Персональный аналитик · сегодня</div><p style="font-size:12px;color:var(--muted);margin:6px 0 8px">'+(premium.active?'Использовано '+aiUsage.used+' из 5 анализов за сегодня · осталось '+aiUsage.remaining:'Доступно 0 из 5 анализов на сегодня')+'</p><div style="height:6px;background:#eceef6;border-radius:9px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:'+(premium.active?Math.min(100,aiUsage.used/5*100):0)+'%;background:#7783df"></div></div>'+(premium.active?'':'<p style="font-size:12px;color:var(--muted);margin:0 0 12px">Персональный аналитик и разбор записей доступны только в Premium.</p><p style="font-size:12px;color:var(--muted);margin:0 0 12px">'+(premium.trial_used?'Пробный период уже использован. Выбери платный тариф, чтобы продолжить.':'Активируй бесплатный пробный период на 7 дней или выбери платный тариф.')+'</p><button class="btn secondary full" style="margin-bottom:14px" data-go="subscription">'+(premium.trial_used?'Выбрать Premium →':'Активировать пробный период →')+'</button>')+'<div class="eyebrow">Ежедневный обзор</div><p style="font-size:12px;color:var(--muted);margin:6px 0 12px">Один персональный обзор в день: что происходило, какие мысли и реакции повторялись, что удалось заметить и какие небольшие шаги могут помочь завтра.</p><button class="btn secondary full daily-summary-btn" id="daily-summary" '+(summaryButtonState().has&&!summaryButtonState().done?'':'disabled')+'>'+(summaryButtonState().done?'✓ На сегодня итоги дня уже подведены':summaryButtonState().has?'✦ Подвести итоги дня':'Пока нечего подводить — добавь запись или выполни практику')+'</button></section>'+ '<section class="card billing-teaser" style="margin-top:14px"><div><div class="eyebrow">Тариф и доступ</div><b style="display:block;font-size:14px;margin:5px 0">'+esc(premiumLabel)+'</b><span class="billtag">'+premiumTag+'</span></div><button class="btn secondary" data-go="subscription">Тарифы →</button></section>'+
+'<section class="card" style="margin-top:12px"><div class="eyebrow">Персональный аналитик · сегодня</div><p style="font-size:12px;color:var(--muted);margin:6px 0 8px">'+(premium.active?'Использовано '+aiUsage.used+' из 5 анализов за сегодня · осталось '+aiUsage.remaining:'Доступно 0 из 5 анализов на сегодня')+'</p><div style="height:6px;background:#eceef6;border-radius:9px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:'+(premium.active?Math.min(100,aiUsage.used/5*100):0)+'%;background:#7783df"></div></div>'+(premium.active?'':'<p style="font-size:12px;color:var(--muted);margin:0 0 12px">Персональный аналитик и разбор записей доступны только в Premium.</p><p style="font-size:12px;color:var(--muted);margin:0 0 12px">'+(premium.trial_used?'Пробный период уже использован. Выбери платный тариф, чтобы продолжить.':'Активируй бесплатный пробный период на 7 дней или выбери платный тариф.')+'</p><button class="btn secondary full" style="margin-bottom:14px" data-go="subscription">'+(premium.trial_used?'Выбрать Premium →':'Активировать пробный период →')+'</button>')+'<div class="eyebrow">Ежедневный обзор</div><p style="font-size:12px;color:var(--muted);margin:6px 0 12px">Один персональный обзор в день: что происходило, какие мысли и реакции повторялись, что удалось заметить и какие небольшие шаги могут помочь завтра.</p><button class="btn secondary full daily-summary-btn" id="daily-summary" '+(summaryButtonState().has?'':'disabled')+'>'+(summaryButtonState().done?'Открыть итоги дня':summaryButtonState().has?'✦ Подвести итоги дня':'Пока нечего подводить — добавь запись или выполни практику')+'</button></section>'+ '<section class="card billing-teaser" style="margin-top:14px"><div><div class="eyebrow">Тариф и доступ</div><b style="display:block;font-size:14px;margin:5px 0">'+esc(premiumLabel)+'</b><span class="billtag">'+premiumTag+'</span></div><button class="btn secondary" data-go="subscription">Тарифы →</button></section>'+
 '<div class="card" style="margin-top:12px"><div class="meta"><span>ВЫПОЛНЕННЫЕ ПРАКТИКИ</span><span>'+practiceCount+'</span></div><p style="font-size:12px;color:var(--muted);margin:7px 0 0">Все отметки и даты выполнения доступны в разделе «Прогресс».</p></div>'+section("Твой путь","progress")+'<div class="statrow"><div class="card stat"><strong>'+n+'</strong><span>записей в дневнике</span></div><div class="card stat"><strong>'+Object.keys(days).length+'</strong><span>дней с записями</span></div></div>'+
 section("Что можно сделать")+'<div class="grid"><button class="quick" data-act="new"><span class="qi">✎</span><b>Разобрать мысль</b><small>Ситуация, эмоция, факты и новый взгляд</small></button><button class="quick" data-go="patterns"><span class="qi">◎</span><b>Мои паттерны</b><small>Замечать повторяющиеся сценарии</small></button><button class="quick" data-go="progress"><span class="qi">⌁</span><b>Мой прогресс</b><small>История реальных записей</small></button><button class="quick" data-go="library"><span class="qi">▤</span><b>Практики</b><small>Небольшие упражнения</small></button></div>'+
 section("Последняя запись","journal")+(last?'<article class="card entry"><div class="meta"><span>'+date(last.date)+'</span><span>'+esc(last.emotion)+' · '+last.intensity+'/10</span></div><h3>'+esc(last.thought||"Запись")+'</h3><p>'+esc(last.balanced||last.situation)+'</p></article>':'<div class="card empty"><div class="symbol">☁</div><h3>Начни с одной мысли</h3><p>Запиши ситуацию, которая занимает внимание. Здесь постепенно появится твоя личная история изменений.</p>'+button("Создать первую запись","new","secondary")+'</div>')+
@@ -376,9 +386,9 @@ return '<div class="eyebrow">Повторяющиеся сценарии</div><h
 
 function patternAction(id,action){
  var p=(state.patterns||[]).find(function(x){return String(x.id)===String(id);});if(!p)return;
- if(action==="confirm"){p.status="confirmed";p.confirmedAt=new Date().toISOString();save();render();toast("Паттерн подтверждён.");return;}
- if(action==="reject"){p.status="rejected";p.rejectedAt=new Date().toISOString();save();render();toast("Гипотеза отклонена. Она останется в истории решений.");return;}
- if(action==="edit"){modal('<h2>Уточнить паттерн</h2><p class="sub">Переформулируй гипотезу так, чтобы она точно отражала твой опыт.</p><div class="field"><label>Формулировка</label><input class="input" id="edit-pattern-name" value="'+esc(p.name)+'"></div><div class="field"><label>Описание</label><textarea class="area" id="edit-pattern-detail">'+esc(p.detail||"")+'</textarea></div><button class="btn primary full" id="edit-pattern-save">Сохранить и подтвердить</button>');document.getElementById("edit-pattern-save").onclick=function(){var name=document.getElementById("edit-pattern-name").value.trim();if(!name){toast("Добавь формулировку.");return;}p.name=name;p.detail=document.getElementById("edit-pattern-detail").value.trim();p.status="confirmed";p.confirmedAt=new Date().toISOString();save();closeModal();render();toast("Паттерн обновлён и подтверждён.");};}
+ if(action==="confirm"){p.status="confirmed";p.confirmedAt=new Date().toISOString();trackEvent("pattern_updated",{pattern_id:id,status:"confirmed"});save();render();toast("Паттерн подтверждён.");return;}
+ if(action==="reject"){p.status="rejected";p.rejectedAt=new Date().toISOString();trackEvent("pattern_updated",{pattern_id:id,status:"rejected"});save();render();toast("Гипотеза отклонена. Она останется в истории решений.");return;}
+ if(action==="edit"){modal('<h2>Уточнить паттерн</h2><p class="sub">Переформулируй гипотезу так, чтобы она точно отражала твой опыт.</p><div class="field"><label>Формулировка</label><input class="input" id="edit-pattern-name" value="'+esc(p.name)+'"></div><div class="field"><label>Описание</label><textarea class="area" id="edit-pattern-detail">'+esc(p.detail||"")+'</textarea></div><button class="btn primary full" id="edit-pattern-save">Сохранить и подтвердить</button>');document.getElementById("edit-pattern-save").onclick=function(){var name=document.getElementById("edit-pattern-name").value.trim();if(!name){toast("Добавь формулировку.");return;}p.name=name;p.detail=document.getElementById("edit-pattern-detail").value.trim();p.status="confirmed";p.confirmedAt=new Date().toISOString();trackEvent("pattern_updated",{pattern_id:id,status:"confirmed"});save();closeModal();render();toast("Паттерн обновлён и подтверждён.");};}
 }
 function patternDateKey(value){var d=new Date(value);if(isNaN(d.getTime()))return "";return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function showPatternEntries(patternId,filterDate){
@@ -427,14 +437,14 @@ function addMicroPractice(entryId){
  if(!m){toast("В анализе нет отдельной рекомендации для практики.");return;}
  state.personalPractices=state.personalPractices||[];
  if(state.personalPractices.some(function(p){return p.sourceEntryId===String(entryId)&&p.status!=="rejected";})){toast("Практика по этой записи уже добавлена.");return;}
- state.personalPractices.unshift({id:"pp"+Date.now(),title:m[1].trim(),instruction:m[2].trim(),duration:(m[3]||"5–10 минут").trim(),sourceEntryId:String(entryId),status:"active",createdAt:new Date().toISOString(),feedback:null});
+ state.personalPractices.unshift({id:"pp"+Date.now(),title:m[1].trim(),instruction:m[2].trim(),duration:(m[3]||"5–10 минут").trim(),sourceEntryId:String(entryId),status:"active",createdAt:new Date().toISOString(),feedback:null});trackEvent("personal_practice_added");
  save();toast("Практика добавлена в твой план.");go("library");
 }
 function personalPracticeDetail(id){
  var p=(state.personalPractices||[]).find(function(x){return String(x.id)===String(id);});if(!p)return;
  var done=p.status==="completed";
  modal('<div class="eyebrow">Твоя персональная практика · '+esc(p.duration||"5–10 минут")+'</div><h2>'+esc(p.title)+'</h2><p>'+esc(p.instruction)+'</p><p class="sub">Статус: '+(done?"Выполнена":p.status==="skipped"?"Пропущена":"В плане на сегодня")+'</p>'+(done?'<div class="note">Эта практика уже отмечена выполненной.</div>':'<button class="btn primary full" id="personal-done">Отметить выполненной</button><button class="btn outline full" id="personal-skip" style="margin-top:8px">Пропустить сегодня</button>')+'<button class="textbtn" id="personal-remove" style="margin-top:12px">Убрать из плана</button>');
- var d=document.getElementById("personal-done");if(d)d.onclick=function(){p.status="completed";p.completedAt=new Date().toISOString();state.practiceHistory=state.practiceHistory||[];state.practiceHistory.push({id:"ph"+Date.now(),personalPracticeId:p.id,title:p.title,completedAt:p.completedAt});trackEvent("practice_completed");save();closeModal();practiceFeedback(p.id);};
+ var d=document.getElementById("personal-done");if(d)d.onclick=function(){p.status="completed";p.completedAt=new Date().toISOString();state.practiceHistory=state.practiceHistory||[];state.practiceHistory.push({id:"ph"+Date.now(),personalPracticeId:p.id,title:p.title,completedAt:p.completedAt});trackEvent("practice_completed");trackEvent("personal_practice_completed",{practice_id:p.id});save();closeModal();practiceFeedback(p.id);};
  var sk=document.getElementById("personal-skip");if(sk)sk.onclick=function(){p.status="skipped";p.skippedAt=new Date().toISOString();save();closeModal();render();};
  document.getElementById("personal-remove").onclick=function(){p.status="rejected";p.rejectedAt=new Date().toISOString();save();closeModal();render();};
 }
@@ -484,7 +494,7 @@ return;
 }
 if(a==="accept-all-consents"){
 if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
-fetch(API_BASE+"/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:true,ai_history_storage:true})}).then(async function(r){var data=await r.json();if(!r.ok)throw new Error(data.error||"Не удалось сохранить согласия");consentSettings=data.consents;consentLoaded=true;onboardingDraft.consent=true;cloudReady=true;cloudStatus="connected";if(state.onboarding){state.onboarding.consent=true;page="home";saveLocalOnly();await cloudSaveNow(false);render();refreshAiUsage();}else{page="onboarding";render();}}).catch(function(e){toast(e.message||"Не удалось сохранить согласия. Попробуй ещё раз.");});
+fetch(API_BASE+"/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:true,ai_history_storage:true})}).then(async function(r){var data=await r.json();if(!r.ok)throw new Error(data.error||"Не удалось сохранить согласия");consentSettings=data.consents;consentLoaded=true;onboardingDraft.consent=true;registerAdminProfile();cloudReady=true;cloudStatus="connected";if(state.onboarding){state.onboarding.consent=true;page="home";saveLocalOnly();await cloudSaveNow(false);render();refreshAiUsage();}else{page="onboarding";render();}}).catch(function(e){toast(e.message||"Не удалось сохранить согласия. Попробуй ещё раз.");});
 }
 if(a==="finish-onboarding"){
 onboardingDraft.consent=true;
@@ -497,8 +507,8 @@ if(a==="next"){var checks=[!!draft.situation.trim(),selectedEmotions().length>0,
 if(a==="prev"){if(step>0)step--;render();}
 if(a==="cancel"){step=6;go("journal");}
 if(a==="save"){var missing=!draft.situation.trim()||!selectedEmotions().length||!draft.thought.trim()||!(draft.forText.trim()||draft.against.trim())||!draft.balanced.trim()||!draft.action.trim();if(missing){toast("Заполни обязательные поля дневника — можно вернуться к нужному шагу.");return;}draft.emotions=selectedEmotions().slice();draft.emotion=draft.emotions.join(", ");draft.date=new Date().toISOString();draft.id=Date.now().toString();state.entries.unshift(Object.assign({},draft));save();trackEvent("diary_entry_created");step=6;toast(cloudReady?"Запись сохранена. Отправляю в облако…":"Запись сохранена на устройстве. Облако пока не подключено.");go("journal");}
-if(a==="add-pattern-in-entry"){modal('<h2>Добавить паттерн к записи</h2><p>Предыдущие ответы останутся на месте. Создай паттерн — он сразу появится в списке шестого шага.</p><div class="field"><label>Название паттерна</label><input class="input" id="pn" placeholder="Например: я должен всё делать идеально"></div><div class="field"><label>В каких ситуациях он проявляется? (необязательно)</label><textarea class="area" id="pd" placeholder="Опиши повторяющуюся мысль или сценарий"></textarea></div><button class="btn primary full" id="psave">Сохранить и выбрать паттерн</button>');document.getElementById("psave").onclick=function(){var name=document.getElementById("pn").value.trim(),detail=document.getElementById("pd").value.trim();if(!name){toast("Добавь название паттерна");return;}var id="p"+Date.now();state.patterns.push({id:id,name:name,detail:detail,status:"confirmed",source:"manual",createdAt:new Date().toISOString()});draft.pattern=id;draft.patternReviewPending=false;save();closeModal();render();toast("Паттерн добавлен. Остальные ответы сохранены.");};}
-if(a==="add-pattern"){modal('<h2>Новый паттерн</h2><p>Запиши повторяющуюся мысль или сценарий нейтральными словами — это рабочее наблюдение, а не ярлык.</p><div class="field"><label>Название</label><input class="input" id="pn" placeholder="Например: я должен всё сделать идеально"></div><div class="field"><label>Когда появляется? (необязательно)</label><textarea class="area" id="pd"></textarea></div><button class="btn primary full" id="psave">Сохранить паттерн</button>');document.getElementById("psave").onclick=function(){var name=document.getElementById("pn").value.trim(),detail=document.getElementById("pd").value.trim();if(!name){toast("Добавь название паттерна");return;}state.patterns.push({id:"p"+Date.now(),name:name,detail:detail,status:"confirmed",source:"manual",createdAt:new Date().toISOString()});save();closeModal();render();};}
+if(a==="add-pattern-in-entry"){modal('<h2>Добавить паттерн к записи</h2><p>Предыдущие ответы останутся на месте. Создай паттерн — он сразу появится в списке шестого шага.</p><div class="field"><label>Название паттерна</label><input class="input" id="pn" placeholder="Например: я должен всё делать идеально"></div><div class="field"><label>В каких ситуациях он проявляется? (необязательно)</label><textarea class="area" id="pd" placeholder="Опиши повторяющуюся мысль или сценарий"></textarea></div><button class="btn primary full" id="psave">Сохранить и выбрать паттерн</button>');document.getElementById("psave").onclick=function(){var name=document.getElementById("pn").value.trim(),detail=document.getElementById("pd").value.trim();if(!name){toast("Добавь название паттерна");return;}var id="p"+Date.now();state.patterns.push({id:id,name:name,detail:detail,status:"confirmed",source:"manual",createdAt:new Date().toISOString()});trackEvent("pattern_created",{source:"manual"});draft.pattern=id;draft.patternReviewPending=false;save();closeModal();render();toast("Паттерн добавлен. Остальные ответы сохранены.");};}
+if(a==="add-pattern"){modal('<h2>Новый паттерн</h2><p>Запиши повторяющуюся мысль или сценарий нейтральными словами — это рабочее наблюдение, а не ярлык.</p><div class="field"><label>Название</label><input class="input" id="pn" placeholder="Например: я должен всё сделать идеально"></div><div class="field"><label>Когда появляется? (необязательно)</label><textarea class="area" id="pd"></textarea></div><button class="btn primary full" id="psave">Сохранить паттерн</button>');document.getElementById("psave").onclick=function(){var name=document.getElementById("pn").value.trim(),detail=document.getElementById("pd").value.trim();if(!name){toast("Добавь название паттерна");return;}state.patterns.push({id:"p"+Date.now(),name:name,detail:detail,status:"confirmed",source:"manual",createdAt:new Date().toISOString()});trackEvent("pattern_created",{source:"manual"});save();closeModal();render();};}
 }
 function modal(content){closeModal();var d=document.createElement("div");d.className="modalbg";d.id="modal";d.innerHTML='<section class="modal"><div class="modalhead"><button class="icon" id="close">×</button></div>'+content+'</section>';document.body.appendChild(d);d.onclick=function(e){if(e.target===d)closeModal();};document.getElementById("close").onclick=closeModal;}
 function closeModal(){var m=document.getElementById("modal");if(m)m.remove();}
@@ -517,10 +527,10 @@ function entryDetail(id){
  document.getElementById("del").onclick=function(){if(confirm("Удалить эту запись?")){state.entries=state.entries.filter(function(x){return x.id!==id;});save();closeModal();render();}};
 }
 function practiceDetail(i){
-trackEvent("practice_opened");
+trackEvent("practice_opened",{practice_id:i});
 var p=practices[i],k=new Date().toDateString()+"-"+i,isDone=(state.practiceHistory||[]).some(function(x){return x.practiceId===i&&new Date(x.completedAt).toDateString()===new Date().toDateString();});
 modal('<div class="eyebrow">Практика · '+p.time+'</div><h2>'+p.icon+' '+p.title+'</h2><p>'+p.text+'</p><button class="btn primary full" id="done">'+(isDone?"Снять отметку":"Отметить выполненной")+'</button>');
-document.getElementById("done").onclick=function(){state.practiceHistory=state.practiceHistory||[];var at=state.practiceHistory.findIndex(function(x){return x.practiceId===i&&new Date(x.completedAt).toDateString()===new Date().toDateString();});if(at>=0){state.practiceHistory.splice(at,1);toast("Отметка снята");}else{state.practiceHistory.push({id:"ph"+Date.now(),practiceId:i,title:p.title,completedAt:new Date().toISOString()});trackEvent("practice_completed");toast("Практика добавлена в историю");}save();closeModal();render();};
+document.getElementById("done").onclick=function(){state.practiceHistory=state.practiceHistory||[];var at=state.practiceHistory.findIndex(function(x){return x.practiceId===i&&new Date(x.completedAt).toDateString()===new Date().toDateString();});if(at>=0){state.practiceHistory.splice(at,1);toast("Отметка снята");}else{state.practiceHistory.push({id:"ph"+Date.now(),practiceId:i,title:p.title,completedAt:new Date().toISOString()});trackEvent("practice_completed",{practice_id:i,title:p.title});toast("Практика добавлена в историю");}save();closeModal();render();};
 }
 function manageConsents(){
 modal('<h2>Настройки конфиденциальности</h2><p>AI-обработка использует необходимые записи и ответы анкеты. Если отключить хранение истории, сохранённые AI-результаты будут удалены.</p>'+

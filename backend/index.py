@@ -79,6 +79,13 @@ def _ensure_schema():
             );
             """
         )
+        pool.execute_with_retries("""
+            CREATE TABLE IF NOT EXISTS user_profiles (
+                user_id Utf8 NOT NULL, username Utf8, first_name Utf8, last_name Utf8,
+                timezone Utf8, created_at Utf8 NOT NULL, last_seen Utf8 NOT NULL,
+                PRIMARY KEY (user_id)
+            );
+            """)
         pool.execute_with_retries(
             """
             CREATE TABLE IF NOT EXISTS premium_purchases (
@@ -123,6 +130,14 @@ def _ensure_schema():
                 consent_version Utf8 NOT NULL,
                 updated_at Utf8 NOT NULL,
                 PRIMARY KEY (user_id)
+            );
+            """)
+        pool.execute_with_retries("""
+            CREATE TABLE IF NOT EXISTS daily_summary_claims (
+                user_id Utf8 NOT NULL,
+                day_key Utf8 NOT NULL,
+                created_at Utf8 NOT NULL,
+                PRIMARY KEY (user_id, day_key)
             );
             """)
         pool.execute_with_retries("""
@@ -184,6 +199,24 @@ def _delete_ai_history(user_id):
                 entry.pop("analysis", None)
         state["chat"] = []
         _write_state(user_id, state)
+
+def _upsert_profile(user_id, profile, timezone_name="UTC"):
+    from datetime import datetime, timezone
+    profile = profile if isinstance(profile, dict) else {}
+    now = datetime.now(timezone.utc).isoformat()
+    old = _db().execute_with_retries("DECLARE $user_id AS Utf8; SELECT created_at FROM user_profiles WHERE user_id=$user_id;", parameters={"$user_id":user_id})
+    created = now
+    for rs in old:
+        for row in rs.rows: created = str(row.created_at)
+    _db().execute_with_retries("""
+        DECLARE $user_id AS Utf8; DECLARE $username AS Utf8; DECLARE $first_name AS Utf8;
+        DECLARE $last_name AS Utf8; DECLARE $timezone AS Utf8; DECLARE $created AS Utf8; DECLARE $seen AS Utf8;
+        UPSERT INTO user_profiles (user_id,username,first_name,last_name,timezone,created_at,last_seen)
+        VALUES ($user_id,$username,$first_name,$last_name,$timezone,$created,$seen);
+    """,parameters={"$user_id":user_id,"$username":str(profile.get("username") or "")[:128],
+        "$first_name":str(profile.get("first_name") or "")[:128],"$last_name":str(profile.get("last_name") or "")[:128],
+        "$timezone":str(timezone_name or "UTC")[:80],"$created":created,"$seen":now})
+
 
 def _record_event(user_id, event_name, metadata=None):
     pool = _db()
@@ -849,14 +882,22 @@ def _save_ai_result(user_id, cache_key, text_value, usage, created):
 def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
     from datetime import datetime, timezone
     import urllib.error
-    # The first daily review is available on every tier. Re-running it is a Premium feature.
-    premium = _premium_status(user_id) if force else None
-    if force and not premium.get("active"):
-        return _json_response(403, {"error":"premium_required", "message":"Повторный обзор доступен в Premium."})
+    # Daily summaries are available on every tier, exactly once per local calendar day.
+    # The force argument is intentionally ignored: Premium never bypasses the daily lock.
     user_tz = _safe_user_timezone(timezone_name)
     now = datetime.now(timezone.utc)
     day_key = now.astimezone(user_tz).date().isoformat()
     cache_key = "daily-summary:" + day_key
+    _, summary_exists = _daily_ai_usage(user_id, day_key, user_tz)
+    if summary_exists:
+        cached_once = _db().execute_with_retries("""
+            DECLARE $user_id AS Utf8; DECLARE $entry_id AS Utf8;
+            SELECT analysis_text, created_at FROM ai_analyses WHERE user_id=$user_id AND entry_id=$entry_id;
+        """,parameters={"$user_id":user_id,"$entry_id":cache_key})
+        for rs in cached_once:
+            for row in rs.rows:
+                return _json_response(200,{"ok":True,"cached":True,"summary":str(row.analysis_text),"created_at":str(row.created_at)})
+        return _json_response(409,{"error":"daily_summary_already_used","message":"Итоги за сегодня уже подведены. Повторный обзор недоступен."})
     state = _read_state(user_id)
     if not isinstance(state, dict):
         return _json_response(404, {"error": "user_state_not_found"})
@@ -887,10 +928,6 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
     if not todays and not practice_today:
         return _json_response(400, {"error": "no_entries_today", "message": "Сегодня пока нет записей или выполненных практик для сводки."})
     import hashlib
-    activity_parts = ["e:" + str(item.get("id") or item.get("date") or "") for item in todays]
-    activity_parts += ["p:" + str(item.get("id") or item.get("completedAt") or "") for item in practice_today]
-    activity_signature = hashlib.sha256("|".join(sorted(activity_parts)).encode("utf-8")).hexdigest()[:16]
-    cache_key = "daily-summary:" + day_key + ":" + activity_signature
     # Ignore empty, fragmentary or gibberish entries. A practice-only day is still
     # meaningful input when the user has recorded what they completed.
     meaningful_entries = [item for item in todays if not _diary_entry_quality_error(item)]
@@ -898,21 +935,16 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
         return _json_response(422, {"error":"no_meaningful_entries",
             "message":"В сегодняшних записях пока недостаточно понятного контекста для сводки."})
     todays = meaningful_entries
-    if not force:
-        cached = _db().execute_with_retries(
-            """
-            DECLARE $user_id AS Utf8;
-            DECLARE $entry_id AS Utf8;
-            SELECT analysis_text, input_tokens, output_tokens, created_at
-            FROM ai_analyses WHERE user_id = $user_id AND entry_id = $entry_id;
-            """,
-            parameters={"$user_id": user_id, "$entry_id": cache_key},
-        )
-        for result_set in cached:
-            for row in result_set.rows:
-                return _json_response(200, {"ok": True, "cached": True, "summary": str(row.analysis_text),
-                    "usage": {"input_tokens": int(row.input_tokens), "output_tokens": int(row.output_tokens)},
-                    "created_at": str(row.created_at)})
+    # A unique YDB primary key serializes manual and scheduled requests for this user/day.
+    try:
+        _db().execute_with_retries("""
+            DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DECLARE $created_at AS Utf8;
+            INSERT INTO daily_summary_claims (user_id, day_key, created_at)
+            VALUES ($user_id, $day_key, $created_at);
+        """, parameters={"$user_id": user_id, "$day_key": day_key, "$created_at": now.isoformat()})
+    except Exception:
+        return _json_response(409, {"error":"daily_summary_already_used",
+            "message":"Итоги за сегодня уже формируются или уже подведены."})
     snippets = []
     for i, entry in enumerate(todays[-30:], 1):
         fields = [("Ситуация","situation"),("Эмоция","emotion"),("Интенсивность","intensity"),
@@ -985,14 +1017,18 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
         usage = {"input_tokens":int(u.get("prompt_tokens",0)),"output_tokens":int(u.get("completion_tokens",0))}
         created = now.isoformat()
         _save_ai_result(user_id, cache_key, summary, usage, created)
+        _record_event(user_id, "daily_summary_created")
         return _json_response(200, {"ok":True,"cached":False,"summary":summary,"usage":usage,"created_at":created})
     except urllib.error.HTTPError as exc:
+        _db().execute_with_retries("DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;", parameters={"$user_id":user_id,"$day_key":day_key})
         LOG.error("DeepSeek daily summary HTTP error status=%s", exc.code)
         return _json_response(502, {"error":"deepseek_provider_error","provider_status":int(exc.code)})
     except urllib.error.URLError as exc:
+        _db().execute_with_retries("DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;", parameters={"$user_id":user_id,"$day_key":day_key})
         LOG.error("DeepSeek daily summary network error: %s", type(exc.reason).__name__)
         return _json_response(502, {"error":"deepseek_network_error"})
     except Exception as exc:
+        _db().execute_with_retries("DECLARE $user_id AS Utf8; DECLARE $day_key AS Utf8; DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;", parameters={"$user_id":user_id,"$day_key":day_key})
         safe_detail = str(exc).replace("\\n", " ")[:500]
         LOG.exception("Daily summary failed type=%s detail=%s", type(exc).__name__, safe_detail)
         return _json_response(502, {"error":"daily_summary_failed",
@@ -1090,8 +1126,30 @@ def _deepseek_connection_test():
         return _json_response(502, {"error": "deepseek_request_failed", "detail": type(exc).__name__})
 
 
+def _run_due_daily_summaries():
+    from datetime import datetime, timezone
+    _ensure_schema()
+    now=datetime.now(timezone.utc)
+    result=_db().execute_with_retries("SELECT user_id, timezone FROM user_profiles;")
+    for rs in result:
+        for row in rs.rows:
+            tz_name=str(row.timezone or "UTC")
+            if now.astimezone(_safe_user_timezone(tz_name)).strftime("%H:%M")=="23:59":
+                try:
+                    if _get_user_consents(str(row.user_id)).get("ai_processing"):
+                        _deepseek_daily_summary(str(row.user_id),tz_name,False)
+                except Exception: LOG.exception("Scheduled summary failed")
+    
+
 def handler(event, context):
     try:
+        messages=event.get("messages") if isinstance(event,dict) else None
+        if messages:
+            for msg in messages:
+                try: payload=json.loads((msg.get("details") or {}).get("payload") or "{}")
+                except (TypeError,json.JSONDecodeError): payload={}
+                if payload.get("job")=="daily_summary": _run_due_daily_summaries()
+            return {"statusCode":200,"body":"ok"}
         method, path, headers, body = _request_parts(event)
 
         if method == "OPTIONS":
@@ -1124,6 +1182,16 @@ def handler(event, context):
             if previous["ai_history_storage"] and not history:
                 _delete_ai_history(user_id)
             return _json_response(200, {"ok": True, "consents": saved})
+        if path == "/v1/profile" and method == "POST":
+            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            _ensure_schema()
+            try:
+                payload = json.loads(body or "{}")
+                _upsert_profile(user_id,payload.get("user") or {},str(payload.get("timezone") or "UTC"))
+                return _json_response(200,{"ok":True})
+            except (json.JSONDecodeError,TypeError,ValueError):
+                return _json_response(400,{"error":"invalid_profile"})
+
         if path == "/v1/premium" and method == "GET":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             _ensure_schema()
@@ -1160,11 +1228,9 @@ def handler(event, context):
             try:
                 payload = json.loads(body or "{}")
                 timezone_name = str(payload.get("timezone") or "UTC")
-                force = bool(payload.get("force", False))
             except (json.JSONDecodeError, TypeError):
                 timezone_name = "UTC"
-                force = False
-            return _deepseek_daily_summary(user_id, timezone_name, force)
+            return _deepseek_daily_summary(user_id, timezone_name, False)
 
         if path == "/v1/ai/usage" and method == "GET":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
@@ -1203,14 +1269,73 @@ def handler(event, context):
                 allowed = {
                     "app_open", "onboarding_started", "onboarding_completed",
                     "diary_entry_created", "practice_opened", "practice_completed",
+                    "pattern_created", "pattern_updated", "pattern_deleted",
+                    "personal_practice_added", "personal_practice_completed",
+                    "daily_summary_created", "ai_analysis_created",
                 }
-                if event_name not in allowed:
-                    raise ValueError("Invalid event")
+                if event_name not in allowed: raise ValueError("Invalid event")
                 _ensure_schema()
-                _record_event(user_id, event_name)
+                metadata=payload.get("metadata") if isinstance(payload.get("metadata"),dict) else {}
+                _record_event(user_id,event_name,metadata)
                 return _json_response(202, {"ok": True})
             except (json.JSONDecodeError, ValueError, TypeError) as exc:
                 return _json_response(400, {"error": str(exc)})
+
+        if path == "/v1/admin/users" and method == "GET":
+            if not ADMIN_PASSWORD or not hmac.compare_digest(headers.get("x-admin-password", ""), ADMIN_PASSWORD):
+                return _json_response(401, {"error": "unauthorized"})
+            _ensure_schema()
+            result = _db().execute_with_retries("SELECT user_id, username, first_name, last_name, timezone, created_at, last_seen FROM user_profiles ORDER BY last_seen DESC LIMIT 2000;")
+            users = []
+            for rs in result:
+                for row in rs.rows:
+                    uid=str(row.user_id); state=_read_state(uid) or {}
+                    try: premium=_premium_status(uid)
+                    except Exception: premium={"active":False,"source":None,"trial_used":False}
+                    users.append({"telegram_id":uid,"username":str(row.username or ""),
+                        "first_name":str(row.first_name or ""),"last_name":str(row.last_name or ""),
+                        "timezone":str(row.timezone or "UTC"),"created_at":str(row.created_at),
+                        "last_seen":str(row.last_seen),"entries":len(state.get("entries") or []),
+                        "practices_completed":len(state.get("practiceHistory") or []),
+                        "patterns":len(state.get("patterns") or []),
+                        "personal_practices":len(state.get("personalPractices") or []),"premium":premium})
+            return _json_response(200,{"ok":True,"users":users})
+
+        if path == "/v1/admin/user" and method == "GET":
+            if not ADMIN_PASSWORD or not hmac.compare_digest(headers.get("x-admin-password", ""), ADMIN_PASSWORD):
+                return _json_response(401, {"error": "unauthorized"})
+            _ensure_schema()
+            query=event.get("queryStringParameters") or {}
+            target_id=str(query.get("user_id") or "").strip()
+            if not target_id.isdigit(): return _json_response(400,{"error":"invalid_user_id"})
+            state=_read_state(target_id) or {}
+            analytics_id=hmac.new(ANALYTICS_SECRET.encode("utf-8"),("put-k-sebe-analytics:"+target_id).encode("utf-8"),hashlib.sha256).hexdigest()
+            result=_db().execute_with_retries("""
+                DECLARE $user_id AS Utf8;
+                SELECT event_name,created_at,metadata_json FROM analytics_events
+                WHERE user_id=$user_id ORDER BY created_at DESC LIMIT 500;
+            """,parameters={"$user_id":analytics_id})
+            events=[]
+            for rs in result:
+                for row in rs.rows:
+                    events.append({"event":str(row.event_name),"created_at":row.created_at.isoformat() if hasattr(row.created_at,"isoformat") else str(row.created_at),"metadata":json.loads(str(row.metadata_json or "{}"))})
+            consents=_get_user_consents(target_id)
+            ai_history=[]
+            if consents.get("ai_history_storage"):
+                history_result=_db().execute_with_retries("""
+                    DECLARE $user_id AS Utf8;
+                    SELECT entry_id,analysis_text,created_at,input_tokens,output_tokens
+                    FROM ai_analyses WHERE user_id=$user_id ORDER BY created_at DESC LIMIT 300;
+                """,parameters={"$user_id":target_id})
+                for rs in history_result:
+                    for row in rs.rows:
+                        ai_history.append({"entry_id":str(row.entry_id),"text":str(row.analysis_text),
+                            "created_at":str(row.created_at),"input_tokens":int(row.input_tokens),
+                            "output_tokens":int(row.output_tokens)})
+            else:
+                state=dict(state); state["entries"]=[dict(x,analysis=None) for x in (state.get("entries") or [])]; state["chat"]=[]
+            return _json_response(200,{"ok":True,"telegram_id":target_id,"state":state,"consents":consents,
+                "events":events,"ai_history":ai_history,"premium":_premium_status(target_id)})
 
         if path == "/v1/admin/analytics" and method == "GET":
             if not ADMIN_PASSWORD or not hmac.compare_digest(
