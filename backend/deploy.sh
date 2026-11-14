@@ -249,6 +249,33 @@ paths:
         function_id: "$FUNCTION_ID"
         service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
+  /v1/consents:
+    get:
+      operationId: getUserConsents
+      responses:
+        "200":
+          description: User AI consent settings
+        "401":
+          description: Unauthorized
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+    put:
+      operationId: saveUserConsents
+      responses:
+        "200":
+          description: Consent settings saved
+        "400":
+          description: Invalid consent values
+        "401":
+          description: Unauthorized
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
   /v1/premium:
     get:
       operationId: getPremiumStatus
