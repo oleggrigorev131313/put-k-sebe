@@ -1313,9 +1313,22 @@ def handler(event, context):
                 for row in rs.rows:
                     events.append({"event":str(row.event_name),"created_at":row.created_at.isoformat() if hasattr(row.created_at,"isoformat") else str(row.created_at),"metadata":json.loads(str(row.metadata_json or "{}"))})
             consents=_get_user_consents(target_id)
-            if not consents.get("ai_history_storage"):
+            ai_history=[]
+            if consents.get("ai_history_storage"):
+                history_result=_db().execute_with_retries("""
+                    DECLARE $user_id AS Utf8;
+                    SELECT entry_id,analysis_text,created_at,input_tokens,output_tokens
+                    FROM ai_analyses WHERE user_id=$user_id ORDER BY created_at DESC LIMIT 300;
+                """,parameters={"$user_id":target_id})
+                for rs in history_result:
+                    for row in rs.rows:
+                        ai_history.append({"entry_id":str(row.entry_id),"text":str(row.analysis_text),
+                            "created_at":str(row.created_at),"input_tokens":int(row.input_tokens),
+                            "output_tokens":int(row.output_tokens)})
+            else:
                 state=dict(state); state["entries"]=[dict(x,analysis=None) for x in (state.get("entries") or [])]; state["chat"]=[]
-            return _json_response(200,{"ok":True,"telegram_id":target_id,"state":state,"consents":consents,"events":events,"premium":_premium_status(target_id)})
+            return _json_response(200,{"ok":True,"telegram_id":target_id,"state":state,"consents":consents,
+                "events":events,"ai_history":ai_history,"premium":_premium_status(target_id)})
 
         if path == "/v1/admin/analytics" and method == "GET":
             if not ADMIN_PASSWORD or not hmac.compare_digest(
