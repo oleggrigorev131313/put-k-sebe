@@ -115,8 +115,68 @@ def _ensure_schema():
             );
             """
         )
+        pool.execute_with_retries("""
+            CREATE TABLE IF NOT EXISTS user_consents (
+                user_id Utf8 NOT NULL,
+                ai_processing Bool NOT NULL,
+                ai_history_storage Bool NOT NULL,
+                consent_version Utf8 NOT NULL,
+                updated_at Utf8 NOT NULL,
+                PRIMARY KEY (user_id)
+            );
+            """)
+        pool.execute_with_retries("""
+            CREATE TABLE IF NOT EXISTS ai_usage_events (
+                event_id Utf8 NOT NULL,
+                user_id Utf8 NOT NULL,
+                feature Utf8 NOT NULL,
+                request_key Utf8 NOT NULL,
+                created_at Utf8 NOT NULL,
+                PRIMARY KEY (event_id)
+            );
+            """)
         _schema_ready = True
 
+
+CONSENT_VERSION = "2026-11-14-v1"
+
+def _get_user_consents(user_id):
+    result = _db().execute_with_retries("""
+        DECLARE $user_id AS Utf8;
+        SELECT ai_processing, ai_history_storage, consent_version, updated_at
+        FROM user_consents WHERE user_id = $user_id;
+        """, parameters={"$user_id": user_id})
+    for result_set in result:
+        for row in result_set.rows:
+            return {"ai_processing": bool(row.ai_processing),
+                    "ai_history_storage": bool(row.ai_history_storage),
+                    "version": str(row.consent_version), "updated_at": str(row.updated_at)}
+    return {"ai_processing": False, "ai_history_storage": False, "version": CONSENT_VERSION, "updated_at": None}
+
+def _save_user_consents(user_id, processing, history):
+    from datetime import datetime, timezone
+    updated = datetime.now(timezone.utc).isoformat()
+    _db().execute_with_retries("""
+        DECLARE $user_id AS Utf8;
+        DECLARE $processing AS Bool;
+        DECLARE $history AS Bool;
+        DECLARE $version AS Utf8;
+        DECLARE $updated AS Utf8;
+        UPSERT INTO user_consents (user_id, ai_processing, ai_history_storage, consent_version, updated_at)
+        VALUES ($user_id, $processing, $history, $version, $updated);
+        """, parameters={"$user_id": user_id, "$processing": processing, "$history": history, "$version": CONSENT_VERSION, "$updated": updated})
+    return _get_user_consents(user_id)
+
+def _require_ai_processing(user_id):
+    if not _get_user_consents(user_id)["ai_processing"]:
+        return _json_response(403, {"error": "ai_consent_required", "message": "AI-обработка не разрешена."})
+    return None
+
+def _delete_ai_history(user_id):
+    _db().execute_with_retries("""
+        DECLARE $user_id AS Utf8;
+        DELETE FROM ai_analyses WHERE user_id = $user_id;
+        """, parameters={"$user_id": user_id})
 
 def _record_event(user_id, event_name, metadata=None):
     pool = _db()
@@ -1030,6 +1090,24 @@ def handler(event, context):
                 body.encode("utf-8"), headers.get("trbt-signature", "")
             )
 
+        if path == "/v1/consents" and method in ("GET", "PUT"):
+            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            _ensure_schema()
+            if method == "GET":
+                return _json_response(200, {"ok": True, "consents": _get_user_consents(user_id)})
+            try:
+                payload = json.loads(body or "{}")
+                processing = payload.get("ai_processing")
+                history = payload.get("ai_history_storage")
+                if not isinstance(processing, bool) or not isinstance(history, bool) or (history and not processing):
+                    raise ValueError("invalid_consent_values")
+            except (json.JSONDecodeError, ValueError, TypeError) as exc:
+                return _json_response(400, {"error": str(exc)})
+            previous = _get_user_consents(user_id)
+            saved = _save_user_consents(user_id, processing, history)
+            if previous["ai_history_storage"] and not history:
+                _delete_ai_history(user_id)
+            return _json_response(200, {"ok": True, "consents": saved})
         if path == "/v1/premium" and method == "GET":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             _ensure_schema()
