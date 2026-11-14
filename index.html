@@ -493,11 +493,11 @@ if(!tg||!tg.initData){toast("Открой приложение через Telegr
 fetch(API_BASE+"/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:true,ai_history_storage:true})}).then(async function(r){var data=await r.json();if(!r.ok)throw new Error(data.error||"Не удалось сохранить согласия");consentSettings=data.consents;consentLoaded=true;onboardingDraft.consent=true;cloudReady=true;cloudStatus="connected";if(state.onboarding){state.onboarding.consent=true;page="home";saveLocalOnly();await cloudSaveNow(false);render();refreshAiUsage();}else{page="onboarding";render();}}).catch(function(e){toast(e.message||"Не удалось сохранить согласия. Попробуй ещё раз.");});
 }
 if(a==="finish-onboarding"){
-if(!onboardingDraft.consent){toast("Подтверди согласие на облачное хранение, чтобы сохранить анкету.");return;}
+onboardingDraft.consent=true;
 state.onboarding=Object.assign({},onboardingDraft,{completedAt:new Date().toISOString(),skipped:false,analysisStatus:"pending"});saveLocalOnly();cloudReady=true;cloudStatus="connected";trackEvent("onboarding_completed");go("home");
 cloudSaveNow(false).then(function(){cloudStatus="synced";render();toast("Ответы сохранены и синхронизированы.");analyzeOnboarding();}).catch(function(e){cloudReady=false;cloudStatus="error";cloudErrorText=e&&e.message?e.message:"Ошибка соединения";render();toast("Не удалось сохранить анкету в облаке. Ответы пока остались на устройстве.");});
 }
-if(a==="skip-onboarding"){state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:true};saveLocalOnly();go("home");}
+if(a==="skip-onboarding"){state.onboarding={skipped:true,completedAt:new Date().toISOString(),consent:true};saveLocalOnly();go("home");cloudSaveNow(false).catch(function(){cloudStatus="error";render();});}
 if(a==="new"){draft=blank();step=0;go("journal");}
 if(a==="next"){var checks=[!!draft.situation.trim(),selectedEmotions().length>0,!!draft.thought.trim(),!!(draft.forText.trim()||draft.against.trim()),!!draft.balanced.trim(),!!draft.action.trim()];var prompts=["Опиши ситуацию, чтобы продолжить.","Выбери хотя бы одну эмоцию.","Запиши автоматическую мысль.","Добавь хотя бы один факт за или против этой мысли.","Сформулируй более объективный взгляд.","Укажи один небольшой следующий шаг."];if(!checks[step]){toast(prompts[step]);return;}if(step<5)step++;render();}
 if(a==="prev"){if(step>0)step--;render();}
@@ -540,7 +540,7 @@ if(history&&!processing){toast("Для хранения истории нужн�
 try{var response=await fetch(API_BASE+"/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:processing,ai_history_storage:history})});
 var data=await response.json();if(!response.ok)throw new Error(data.error||"Не удалось сохранить настройки");
 consentSettings=data.consents;
-if(!processing){state.entries.forEach(function(entry){delete entry.analysis;});save();}
+if(!processing||!history){state.entries.forEach(function(entry){delete entry.analysis;});state.chat=[];save();}
 closeModal();settings();toast("Настройки сохранены.");
 }catch(e){toast(e.message||"Ошибка сохранения.");}
 };
