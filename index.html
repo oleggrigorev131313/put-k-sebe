@@ -254,6 +254,7 @@ cloudReady=false;cloudStatus="consent_required";
 onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
 page="onboarding";render();return;
 }
+if(page==="privacy")page=state.onboarding?"home":"onboarding";
 onboardingDraft=state.onboarding?Object.assign(emptyOnboarding(),state.onboarding):emptyOnboarding();
 saveLocalOnly();cloudReady=true;cloudStatus="connected";
 await cloudSaveNow(false);
