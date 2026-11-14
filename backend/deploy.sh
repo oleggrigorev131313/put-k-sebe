@@ -560,9 +560,17 @@ check_endpoint() {
   local ok="false"
   local output="/tmp/put-k-sebe-health.json"
   local http_code="000"
-  for attempt in 1 2 3 4 5 6; do
+  local attempts=6
+  local max_time=30
+  # The schema endpoint performs its own bounded backoff. Repeating it here
+  # would generate another burst of DDL and worsen YDB's schema-operation quota.
+  if [[ "$endpoint" == "/health/schema" ]]; then
+    attempts=1
+    max_time=55
+  fi
+  for ((attempt=1; attempt<=attempts; attempt++)); do
     rm -f "$output"
-    http_code="$(curl -sS --connect-timeout 10 --max-time 30 -o "$output" -w '%{http_code}' "$API_URL$endpoint" || true)"
+    http_code="$(curl -sS --connect-timeout 10 --max-time "$max_time" -o "$output" -w '%{http_code}' "$API_URL$endpoint" || true)"
     if [[ "$http_code" == "200" ]] && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); raise SystemExit(0 if d.get("ok") is True else 1)' "$output" 2>/dev/null; then
       ok="true"
       break
