@@ -69,109 +69,101 @@ def _ensure_schema():
         if _schema_ready:
             return
         pool = _db()
-            global _schema_ready
-            if _schema_ready:
-                return
-            with _db_lock:
-                if _schema_ready:
-                    return
-                pool = _db()
-                _run_schema_step(pool, "user_state", 
-                    """
-                    CREATE TABLE IF NOT EXISTS user_state (
-                        user_id Utf8 NOT NULL,
-                        state_json Utf8 NOT NULL,
-                        updated_at Timestamp,
-                        PRIMARY KEY (user_id)
-                    );
-                    """
-                )
-                _run_schema_step(pool, "analytics_events", 
-                    """
-                    CREATE TABLE IF NOT EXISTS analytics_events (
-                        event_id Utf8 NOT NULL,
-                        user_id Utf8 NOT NULL,
-                        event_name Utf8 NOT NULL,
-                        created_at Timestamp,
-                        metadata_json Utf8,
-                        PRIMARY KEY (event_id)
-                    );
-                    """
-                )
-                _run_schema_step(pool, "user_profiles", """
-                    CREATE TABLE IF NOT EXISTS user_profiles (
-                        user_id Utf8 NOT NULL, username Utf8, first_name Utf8, last_name Utf8,
-                        timezone Utf8, created_at Utf8 NOT NULL, last_seen Utf8 NOT NULL,
-                        PRIMARY KEY (user_id)
-                    );
-                    """)
-                _run_schema_step(pool, "premium_purchases", 
-                    """
-                    CREATE TABLE IF NOT EXISTS premium_purchases (
-                        purchase_id Utf8 NOT NULL,
-                        user_id Utf8 NOT NULL,
-                        product_id Utf8 NOT NULL,
-                        duration_days Uint32 NOT NULL,
-                        purchased_at Utf8 NOT NULL,
-                        status Utf8 NOT NULL,
-                        PRIMARY KEY (purchase_id)
-                    );
-                    """
-                )
-                _run_schema_step(pool, "premium_trials", 
-                    """
-                    CREATE TABLE IF NOT EXISTS premium_trials (
-                        user_id Utf8 NOT NULL,
-                        started_at Utf8 NOT NULL,
-                        expires_at Utf8 NOT NULL,
-                        PRIMARY KEY (user_id)
-                    );
-                    """
-                )
-                _run_schema_step(pool, "ai_analyses", 
-                    """
-                    CREATE TABLE IF NOT EXISTS ai_analyses (
-                        user_id Utf8 NOT NULL,
-                        entry_id Utf8 NOT NULL,
-                        analysis_text Utf8 NOT NULL,
-                        input_tokens Uint64 NOT NULL,
-                        output_tokens Uint64 NOT NULL,
-                        created_at Utf8 NOT NULL,
-                        PRIMARY KEY (user_id, entry_id)
-                    );
-                    """
-                )
-                _run_schema_step(pool, "user_consents", """
-                    CREATE TABLE IF NOT EXISTS user_consents (
-                        user_id Utf8 NOT NULL,
-                        ai_processing Bool NOT NULL,
-                        ai_history_storage Bool NOT NULL,
-                        consent_version Utf8 NOT NULL,
-                        updated_at Utf8 NOT NULL,
-                        PRIMARY KEY (user_id)
-                    );
-                    """)
-                _run_schema_step(pool, "daily_summary_claims", """
-                    CREATE TABLE IF NOT EXISTS daily_summary_claims (
-                        user_id Utf8 NOT NULL,
-                        day_key Utf8 NOT NULL,
-                        created_at Utf8 NOT NULL,
-                        PRIMARY KEY (user_id, day_key)
-                    );
-                    """)
-                _run_schema_step(pool, "ai_usage_events", """
-                    CREATE TABLE IF NOT EXISTS ai_usage_events (
-                        event_id Utf8 NOT NULL,
-                        user_id Utf8 NOT NULL,
-                        feature Utf8 NOT NULL,
-                        request_key Utf8 NOT NULL,
-                        created_at Utf8 NOT NULL,
-                        PRIMARY KEY (event_id)
-                    );
-                    """)
-                _schema_ready = True
-        
+        _run_schema_step(pool, "user_state", 
+            """
+            CREATE TABLE IF NOT EXISTS user_state (
+                user_id Utf8 NOT NULL,
+                state_json Utf8 NOT NULL,
+                updated_at Timestamp,
+                PRIMARY KEY (user_id)
+            );
+            """
+        )
+        _run_schema_step(pool, "analytics_events", 
+            """
+            CREATE TABLE IF NOT EXISTS analytics_events (
+                event_id Utf8 NOT NULL,
+                user_id Utf8 NOT NULL,
+                event_name Utf8 NOT NULL,
+                created_at Timestamp,
+                metadata_json Utf8,
+                PRIMARY KEY (event_id)
+            );
+            """
+        )
+        _run_schema_step(pool, "user_profiles", """
+            CREATE TABLE IF NOT EXISTS user_profiles (
+                user_id Utf8 NOT NULL, username Utf8, first_name Utf8, last_name Utf8,
+                timezone Utf8, created_at Utf8 NOT NULL, last_seen Utf8 NOT NULL,
+                PRIMARY KEY (user_id)
+            );
+            """)
+        _run_schema_step(pool, "premium_purchases", 
+            """
+            CREATE TABLE IF NOT EXISTS premium_purchases (
+                purchase_id Utf8 NOT NULL,
+                user_id Utf8 NOT NULL,
+                product_id Utf8 NOT NULL,
+                duration_days Uint32 NOT NULL,
+                purchased_at Utf8 NOT NULL,
+                status Utf8 NOT NULL,
+                PRIMARY KEY (purchase_id)
+            );
+            """
+        )
+        _run_schema_step(pool, "premium_trials", 
+            """
+            CREATE TABLE IF NOT EXISTS premium_trials (
+                user_id Utf8 NOT NULL,
+                started_at Utf8 NOT NULL,
+                expires_at Utf8 NOT NULL,
+                PRIMARY KEY (user_id)
+            );
+            """
+        )
+        _run_schema_step(pool, "ai_analyses", 
+            """
+            CREATE TABLE IF NOT EXISTS ai_analyses (
+                user_id Utf8 NOT NULL,
+                entry_id Utf8 NOT NULL,
+                analysis_text Utf8 NOT NULL,
+                input_tokens Uint64 NOT NULL,
+                output_tokens Uint64 NOT NULL,
+                created_at Utf8 NOT NULL,
+                PRIMARY KEY (user_id, entry_id)
+            );
+            """
+        )
+        _run_schema_step(pool, "user_consents", """
+            CREATE TABLE IF NOT EXISTS user_consents (
+                user_id Utf8 NOT NULL,
+                ai_processing Bool NOT NULL,
+                ai_history_storage Bool NOT NULL,
+                consent_version Utf8 NOT NULL,
+                updated_at Utf8 NOT NULL,
+                PRIMARY KEY (user_id)
+            );
+            """)
+        _run_schema_step(pool, "daily_summary_claims", """
+            CREATE TABLE IF NOT EXISTS daily_summary_claims (
+                user_id Utf8 NOT NULL,
+                day_key Utf8 NOT NULL,
+                created_at Utf8 NOT NULL,
+                PRIMARY KEY (user_id, day_key)
+            );
+            """)
+        _run_schema_step(pool, "ai_usage_events", """
+            CREATE TABLE IF NOT EXISTS ai_usage_events (
+                event_id Utf8 NOT NULL,
+                user_id Utf8 NOT NULL,
+                feature Utf8 NOT NULL,
+                request_key Utf8 NOT NULL,
+                created_at Utf8 NOT NULL,
+                PRIMARY KEY (event_id)
+            );
+            """)
         _schema_ready = True
+    
 
 CONSENT_VERSION = "2026-11-14-v1"
 
