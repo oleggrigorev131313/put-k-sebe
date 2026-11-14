@@ -31,6 +31,7 @@ _driver = None
 _pool = None
 _db_lock = RLock()
 _schema_ready = False
+_schema_failure = None
 
 
 def _db():
@@ -50,10 +51,16 @@ def _db():
 
 
 def _run_schema_step(pool, table_name, statement):
+    global _schema_failure
     print("PUT_K_SEBE_SCHEMA step_start table=%s" % table_name, flush=True)
     try:
         pool.execute_with_retries(statement)
     except Exception as exc:
+        _schema_failure = {
+            "table": table_name,
+            "exception_type": type(exc).__name__,
+            "error": str(exc)[:1200],
+        }
         print("PUT_K_SEBE_SCHEMA step_failed table=%s exception_type=%s error=%r" %
               (table_name, type(exc).__name__, exc), flush=True)
         LOG.exception("Schema initialization failed table=%s", table_name)
@@ -62,12 +69,13 @@ def _run_schema_step(pool, table_name, statement):
 
 
 def _ensure_schema():
-    global _schema_ready
+    global _schema_ready, _schema_failure
     if _schema_ready:
         return
     with _db_lock:
         if _schema_ready:
             return
+        _schema_failure = None
         pool = _db()
         _run_schema_step(pool, "user_state", 
             """
@@ -1227,7 +1235,9 @@ def handler(event, context):
                 LOG.exception("Health check failed stage=schema_initialization")
                 return _json_response(503, {
                     "ok": False, "stage": "schema_initialization",
-                    "exception_type": type(exc).__name__
+                    "exception_type": type(exc).__name__,
+                    "failed_step": (_schema_failure or {}).get("table"),
+                    "diagnostic": (_schema_failure or {}).get("error", str(exc))[:1200]
                 })
 
         if path == "/v1/webhooks/tribute" and method == "POST":
