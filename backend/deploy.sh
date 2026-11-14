@@ -4,7 +4,10 @@ set -Eeuo pipefail
 CLOUD_ID="b1g4vj1h1a2ebmrl0geu"
 FOLDER_ID="b1gf2t5b7torui7nm4be"
 SERVICE_ACCOUNT_NAME="put-k-sebe-backend"
+EXPECTED_BACKEND_SA_ID="ajerjr8ohhto6gbm9gpo"
 GATEWAY_SA_NAME="put-k-sebe-gateway"
+EXPECTED_GATEWAY_SA_ID="ajeemr892tdl9ca1birn"
+NETWORK_ID="enpcs1k734ovqk3vhce0"
 DB_NAME="put-k-sebe-db"
 SECRET_NAME="put-k-sebe-telegram-bot"
 ADMIN_SECRET_NAME="put-k-sebe-admin-password"
@@ -44,26 +47,24 @@ if [[ "$CURRENT_CLOUD" != "$CLOUD_ID" ]]; then yc config set cloud-id "$CLOUD_ID
 if [[ "$CURRENT_FOLDER" != "$FOLDER_ID" ]]; then yc config set folder-id "$FOLDER_ID"; fi
 
 echo "[1/8] Получаю сервисный аккаунт и базу данных..."
-# Prefer the service account already attached to the live function.
-# This avoids assuming a service-account name that may differ in the existing cloud.
-EXISTING_FUNCTION_JSON="$(yc serverless function get "$FUNCTION_NAME" --format json 2>/dev/null || true)"
-EXISTING_SA_ID="$(printf '%s' "$EXISTING_FUNCTION_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin) if sys.stdin.readable() else {}; print(d.get("service_account_id",""))' 2>/dev/null || true)"
-if [[ -n "$EXISTING_SA_ID" ]]; then
-  SA_JSON="$(yc iam service-account get "$EXISTING_SA_ID" --format json)" || fail "Не найден сервисный аккаунт текущей Cloud Function: $EXISTING_SA_ID"
-  SA_ID="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
-  SA_FOLDER_ID="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("folder_id",""))')"
-  [[ "$SA_FOLDER_ID" == "$FOLDER_ID" ]] || fail "Сервисный аккаунт текущей функции находится в другой папке: $SA_FOLDER_ID"
-else
-  SA_JSON="$(yc iam service-account get "$SERVICE_ACCOUNT_NAME" --format json 2>/dev/null || true)"
-  [[ -n "$SA_JSON" ]] || fail "Не найден сервисный аккаунт $SERVICE_ACCOUNT_NAME и у текущей Cloud Function нет привязанного service_account_id"
-  SA_ID="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
-fi
+# Pin the two existing service accounts by ID. Never silently create replacements.
+SA_JSON="$(yc iam service-account get "$EXPECTED_BACKEND_SA_ID" --format json)" || fail "Не найден backend service account $EXPECTED_BACKEND_SA_ID"
+SA_ID="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+SA_NAME="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("name",""))')"
+SA_FOLDER_ID="$(printf '%s' "$SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("folder_id",""))')"
+[[ "$SA_ID" == "$EXPECTED_BACKEND_SA_ID" && "$SA_NAME" == "$SERVICE_ACCOUNT_NAME" ]] || fail "Backend service account не совпадает с ожидаемым: $SA_ID ($SA_NAME)"
+[[ "$SA_FOLDER_ID" == "$FOLDER_ID" ]] || fail "Backend service account находится в другой папке: $SA_FOLDER_ID"
 
-GATEWAY_SA_JSON="$(yc iam service-account get "$GATEWAY_SA_NAME" --format json 2>/dev/null || true)"
-if [[ -z "$GATEWAY_SA_JSON" ]]; then
-  GATEWAY_SA_JSON="$(yc iam service-account create --name "$GATEWAY_SA_NAME" --description "API Gateway invoker for Put-k-sebe" --format json)" || fail "Не удалось создать сервисный аккаунт API Gateway"
-fi
+GATEWAY_SA_JSON="$(yc iam service-account get "$EXPECTED_GATEWAY_SA_ID" --format json)" || fail "Не найден gateway service account $EXPECTED_GATEWAY_SA_ID"
 GATEWAY_SA_ID="$(printf '%s' "$GATEWAY_SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+GATEWAY_SA_NAME_ACTUAL="$(printf '%s' "$GATEWAY_SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("name",""))')"
+GATEWAY_SA_FOLDER_ID="$(printf '%s' "$GATEWAY_SA_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("folder_id",""))')"
+[[ "$GATEWAY_SA_ID" == "$EXPECTED_GATEWAY_SA_ID" && "$GATEWAY_SA_NAME_ACTUAL" == "$GATEWAY_SA_NAME" ]] || fail "Gateway service account не совпадает с ожидаемым: $GATEWAY_SA_ID ($GATEWAY_SA_NAME_ACTUAL)"
+[[ "$GATEWAY_SA_FOLDER_ID" == "$FOLDER_ID" ]] || fail "Gateway service account находится в другой папке: $GATEWAY_SA_FOLDER_ID"
+
+NETWORK_JSON="$(yc vpc network get "$NETWORK_ID" --format json)" || fail "Не найдена облачная сеть $NETWORK_ID"
+NETWORK_FOLDER_ID="$(printf '%s' "$NETWORK_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("folder_id",""))')"
+[[ "$NETWORK_FOLDER_ID" == "$FOLDER_ID" ]] || fail "Облачная сеть $NETWORK_ID находится в другой папке: $NETWORK_FOLDER_ID"
 
 DB_JSON="$(yc ydb database get "$DB_NAME" --format json)" || fail "Не найдена база $DB_NAME"
 DB_STATUS="$(printf '%s' "$DB_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')"
@@ -88,8 +89,9 @@ DB_BINDINGS="$(yc ydb database list-access-bindings --id "$DB_ID" --format json)
 HAS_YDB_EDITOR="$(printf '%s' "$DB_BINDINGS" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("access_bindings",d.get("accessBindings",[])); print("yes" if any(x.get("role_id",x.get("roleId"))=="ydb.editor" and (x.get("subject") or {}).get("id")==sys.argv[1] for x in a) else "no")' "$SA_ID")"
 [[ "$HAS_YDB_EDITOR" == "yes" ]] || fail "У backend service account $SA_ID отсутствует подтверждённая роль ydb.editor на базе $DB_NAME"
 
-echo "    Backend SA: $SA_ID"
-echo "    Gateway SA: $GATEWAY_SA_ID"
+echo "    Backend SA: $SA_ID ($SA_NAME)"
+echo "    Gateway SA: $GATEWAY_SA_ID ($GATEWAY_SA_NAME_ACTUAL)"
+echo "    Сеть Cloud Function: $NETWORK_ID"
 echo "    База: $DB_NAME ($DB_STATUS)"
 
 echo "[2/8] Скачиваю исходники из GitHub (без git clone)..."
@@ -228,6 +230,7 @@ yc serverless function version create \
   --package-bucket-name "$BUCKET_NAME" \
   --package-object-name "$OBJECT_KEY" \
   --service-account-id "$SA_ID" \
+  --network-id "$NETWORK_ID" \
   --environment "YDB_ENDPOINT=$YDB_ENDPOINT,YDB_DATABASE=$YDB_DATABASE" \
   --secret "environment-variable=BOT_TOKEN,id=$SECRET_ID,version-id=$VERSION_ID,key=bot_token" \
   --secret "environment-variable=ADMIN_PASSWORD,id=$ADMIN_SECRET_ID,version-id=$ADMIN_VERSION_ID,key=admin_password" \
