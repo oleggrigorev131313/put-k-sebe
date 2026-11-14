@@ -927,21 +927,6 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
         return _json_response(422, {"error":"no_meaningful_entries",
             "message":"В сегодняшних записях пока недостаточно понятного контекста для сводки."})
     todays = meaningful_entries
-    if True:
-        cached = _db().execute_with_retries(
-            """
-            DECLARE $user_id AS Utf8;
-            DECLARE $entry_id AS Utf8;
-            SELECT analysis_text, input_tokens, output_tokens, created_at
-            FROM ai_analyses WHERE user_id = $user_id AND entry_id = $entry_id;
-            """,
-            parameters={"$user_id": user_id, "$entry_id": cache_key},
-        )
-        for result_set in cached:
-            for row in result_set.rows:
-                return _json_response(200, {"ok": True, "cached": True, "summary": str(row.analysis_text),
-                    "usage": {"input_tokens": int(row.input_tokens), "output_tokens": int(row.output_tokens)},
-                    "created_at": str(row.created_at)})
     snippets = []
     for i, entry in enumerate(todays[-30:], 1):
         fields = [("Ситуация","situation"),("Эмоция","emotion"),("Интенсивность","intensity"),
