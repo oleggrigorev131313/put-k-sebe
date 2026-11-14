@@ -874,10 +874,8 @@ def _save_ai_result(user_id, cache_key, text_value, usage, created):
 def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
     from datetime import datetime, timezone
     import urllib.error
-    # The first daily review is available on every tier. Re-running it is a Premium feature.
-    premium = _premium_status(user_id) if force else None
-    if force and not premium.get("active"):
-        return _json_response(403, {"error":"premium_required", "message":"Повторный обзор доступен в Premium."})
+    # Daily summaries are available on every tier, exactly once per local calendar day.
+    # The force argument is intentionally ignored: Premium never bypasses the daily lock.
     user_tz = _safe_user_timezone(timezone_name)
     now = datetime.now(timezone.utc)
     day_key = now.astimezone(user_tz).date().isoformat()
@@ -929,7 +927,7 @@ def _deepseek_daily_summary(user_id, timezone_name="UTC", force=False):
         return _json_response(422, {"error":"no_meaningful_entries",
             "message":"В сегодняшних записях пока недостаточно понятного контекста для сводки."})
     todays = meaningful_entries
-    if not force:
+    if True:
         cached = _db().execute_with_retries(
             """
             DECLARE $user_id AS Utf8;
