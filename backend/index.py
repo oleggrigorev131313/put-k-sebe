@@ -32,6 +32,7 @@ _pool = None
 _db_lock = RLock()
 _schema_ready = False
 _consent_schema_ready = False
+_tables_ready = set()
 
 
 def _db():
@@ -79,25 +80,87 @@ def _run_schema_query(pool, table_name, query):
             time.sleep(delay)
 
 
+def _ensure_table(table_name, ddl):
+    if table_name in _tables_ready:
+        return
+    with _db_lock:
+        if table_name in _tables_ready:
+            return
+        _run_schema_query(_db(), table_name, ddl)
+        _tables_ready.add(table_name)
+
+
 def _ensure_consent_schema():
     global _consent_schema_ready
     if _consent_schema_ready:
         return
-    with _db_lock:
-        if _consent_schema_ready:
-            return
-        pool = _db()
-        _run_schema_query(pool, "user_consents", """
-            CREATE TABLE IF NOT EXISTS user_consents (
-                user_id Utf8 NOT NULL,
-                ai_processing Bool NOT NULL,
-                ai_history_storage Bool NOT NULL,
-                consent_version Utf8 NOT NULL,
-                updated_at Utf8 NOT NULL,
-                PRIMARY KEY (user_id)
-            );
-            """)
-        _consent_schema_ready = True
+    _ensure_table("user_consents", """
+        CREATE TABLE IF NOT EXISTS user_consents (
+            user_id Utf8 NOT NULL,
+            ai_processing Bool NOT NULL,
+            ai_history_storage Bool NOT NULL,
+            consent_version Utf8 NOT NULL,
+            updated_at Utf8 NOT NULL,
+            PRIMARY KEY (user_id)
+        );
+        """)
+    _consent_schema_ready = True
+
+
+def _ensure_user_state_schema():
+    _ensure_table("user_state", """
+        CREATE TABLE IF NOT EXISTS user_state (
+            user_id Utf8 NOT NULL,
+            state_json Utf8 NOT NULL,
+            updated_at Timestamp,
+            PRIMARY KEY (user_id)
+        );
+        """)
+
+
+def _ensure_profile_schema():
+    _ensure_table("user_profiles", """
+        CREATE TABLE IF NOT EXISTS user_profiles (
+            user_id Utf8 NOT NULL, username Utf8, first_name Utf8, last_name Utf8,
+            timezone Utf8, created_at Utf8 NOT NULL, last_seen Utf8 NOT NULL,
+            PRIMARY KEY (user_id)
+        );
+        """)
+
+
+def _ensure_analytics_schema():
+    _ensure_table("analytics_events", """
+        CREATE TABLE IF NOT EXISTS analytics_events (
+            event_id Utf8 NOT NULL,
+            user_id Utf8 NOT NULL,
+            event_name Utf8 NOT NULL,
+            created_at Timestamp,
+            metadata_json Utf8,
+            PRIMARY KEY (event_id)
+        );
+        """)
+
+
+def _ensure_premium_schema():
+    _ensure_table("premium_purchases", """
+        CREATE TABLE IF NOT EXISTS premium_purchases (
+            purchase_id Utf8 NOT NULL,
+            user_id Utf8 NOT NULL,
+            product_id Utf8 NOT NULL,
+            duration_days Uint32 NOT NULL,
+            purchased_at Utf8 NOT NULL,
+            status Utf8 NOT NULL,
+            PRIMARY KEY (purchase_id)
+        );
+        """)
+    _ensure_table("premium_trials", """
+        CREATE TABLE IF NOT EXISTS premium_trials (
+            user_id Utf8 NOT NULL,
+            started_at Utf8 NOT NULL,
+            expires_at Utf8 NOT NULL,
+            PRIMARY KEY (user_id)
+        );
+        """)
 
 
 def _ensure_schema():
@@ -1299,7 +1362,7 @@ def handler(event, context):
             return _json_response(200, {"ok": True, "consents": saved})
         if path == "/v1/profile" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_schema()
+            _ensure_profile_schema()
             try:
                 payload = json.loads(body or "{}")
                 _upsert_profile(user_id,payload.get("user") or {},str(payload.get("timezone") or "UTC"))
@@ -1309,12 +1372,12 @@ def handler(event, context):
 
         if path == "/v1/premium" and method == "GET":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_schema()
+            _ensure_premium_schema()
             return _json_response(200, _premium_status(user_id))
 
         if path == "/v1/trial" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            _ensure_schema()
+            _ensure_premium_schema()
             return _start_trial(user_id)
         if path == "/v1/ai/test" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
@@ -1393,7 +1456,7 @@ def handler(event, context):
                     "daily_summary_created", "ai_analysis_created",
                 }
                 if event_name not in allowed: raise ValueError("Invalid event")
-                _ensure_schema()
+                _ensure_analytics_schema()
                 metadata=payload.get("metadata") if isinstance(payload.get("metadata"),dict) else {}
                 _record_event(user_id,event_name,metadata)
                 return _json_response(202, {"ok": True})
@@ -1520,7 +1583,7 @@ def handler(event, context):
         user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
 
         if method == "GET":
-            _ensure_schema()
+            _ensure_user_state_schema()
             state = _read_state(user_id)
             # No persistent usage event is recorded until the user has submitted consented state.
             return _json_response(
@@ -1537,7 +1600,8 @@ def handler(event, context):
             except (json.JSONDecodeError, ValueError, TypeError) as exc:
                 return _json_response(400, {"error": str(exc)})
 
-            _ensure_schema()
+            _ensure_user_state_schema()
+            _ensure_analytics_schema()
             previous = _read_state(user_id)
             _write_state(user_id, state)
 
@@ -1550,7 +1614,8 @@ def handler(event, context):
             return _json_response(200, {"ok": True, "saved": True})
 
         if method == "DELETE":
-            _ensure_schema()
+            _ensure_user_state_schema()
+            _ensure_analytics_schema()
             _db().execute_with_retries(
                 """
                 DECLARE $user_id AS Utf8;
