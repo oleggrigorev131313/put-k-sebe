@@ -573,7 +573,7 @@ check_endpoint() {
     echo "Проверка $label не пройдена ($endpoint), HTTP $http_code:"
     cat "$output" 2>/dev/null || echo "Ответ сервера отсутствует."
     echo
-    fail "API не считается развёрнутым: $label недоступен. HTTP $http_code; смотри Cloud Function logs."
+    fail "API не считается развёрнутым: $label недоступен. HTTP $http_code. Причина выведена выше; Cloud Logging для диагностики не требуется."
   fi
   echo "    $label: OK"
 }
