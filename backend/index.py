@@ -297,7 +297,6 @@ def _telegram_user(init_data):
         raise ValueError("Telegram authentication is not configured")
     if not init_data or len(init_data) > 10_000:
         raise ValueError("Missing Telegram init data")
-
     pairs = parse_qsl(init_data, keep_blank_values=True, strict_parsing=False)
     values = {}
     for key, value in pairs:
@@ -597,8 +596,7 @@ def _handle_tribute_webhook(raw_body, signature):
                 WHERE purchase_id = $purchase_id;
                 """,
                 parameters={"$purchase_id": purchase_id},
-            )
-            return _json_response(200, {"ok": True})
+            )            return _json_response(200, {"ok": True})
 
         return _json_response(200, {"ok": True, "ignored": True})
     except (json.JSONDecodeError, ValueError, TypeError) as exc:
@@ -897,8 +895,7 @@ def _get_previous_daily_summary(user_id, timezone_name="UTC"):
     for result_set in rows:
         for row in result_set.rows:
             return _json_response(200, {"ok":True, "day":day_key,
-                "summary":str(row.analysis_text), "created_at":str(row.created_at)})
-    return _json_response(404, {"error":"previous_summary_not_found",
+                "summary":str(row.analysis_text), "created_at":str(row.created_at)})    return _json_response(404, {"error":"previous_summary_not_found",
         "message":"Сохранённая сводка за предыдущий день не найдена."})
 
 
@@ -1178,9 +1175,41 @@ def handler(event, context):
         if method == "OPTIONS":
             return _json_response(204, {"ok": True})
 
+        # Liveness must not depend on YDB: this endpoint only proves that
+        # the function package started and the HTTP handler is reachable.
         if path == "/health" and method == "GET":
-            _ensure_schema()
-            return _json_response(200, {"ok": True, "service": "put-k-sebe-api"})
+            return _json_response(200, {
+                "ok": True, "service": "put-k-sebe-api", "checks": {"handler": "ok"}
+            })
+
+        # Isolate connectivity/query failures from schema initialization.
+        if path == "/health/db" and method == "GET":
+            try:
+                _db().execute_with_retries("SELECT 1 AS health_check;")
+                return _json_response(200, {
+                    "ok": True, "checks": {"handler": "ok", "ydb": "ok"}
+                })
+            except Exception as exc:
+                LOG.exception("Health check failed stage=ydb_connect_or_query")
+                return _json_response(503, {
+                    "ok": False, "stage": "ydb_connect_or_query",
+                    "exception_type": type(exc).__name__
+                })
+
+        # Schema initialization is tested separately so a failure here cannot
+        # make the basic liveness endpoint appear dead.
+        if path == "/health/schema" and method == "GET":
+            try:
+                _ensure_schema()
+                return _json_response(200, {
+                    "ok": True, "checks": {"handler": "ok", "ydb": "ok", "schema": "ok"}
+                })
+            except Exception as exc:
+                LOG.exception("Health check failed stage=schema_initialization")
+                return _json_response(503, {
+                    "ok": False, "stage": "schema_initialization",
+                    "exception_type": type(exc).__name__
+                })
 
         if path == "/v1/webhooks/tribute" and method == "POST":
             return _handle_tribute_webhook(
@@ -1197,8 +1226,7 @@ def handler(event, context):
                 processing = payload.get("ai_processing")
                 history = payload.get("ai_history_storage")
                 if not isinstance(processing, bool) or not isinstance(history, bool) or (history and not processing):
-                    raise ValueError("invalid_consent_values")
-            except (json.JSONDecodeError, ValueError, TypeError) as exc:
+                    raise ValueError("invalid_consent_values")            except (json.JSONDecodeError, ValueError, TypeError) as exc:
                 return _json_response(400, {"error": str(exc)})
             previous = _get_user_consents(user_id)
             saved = _save_user_consents(user_id, processing, history)
