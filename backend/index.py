@@ -1276,6 +1276,49 @@ def handler(event, context):
             except (json.JSONDecodeError, ValueError, TypeError) as exc:
                 return _json_response(400, {"error": str(exc)})
 
+        if path == "/v1/admin/users" and method == "GET":
+            if not ADMIN_PASSWORD or not hmac.compare_digest(headers.get("x-admin-password", ""), ADMIN_PASSWORD):
+                return _json_response(401, {"error": "unauthorized"})
+            _ensure_schema()
+            result = _db().execute_with_retries("SELECT user_id, username, first_name, last_name, timezone, created_at, last_seen FROM user_profiles ORDER BY last_seen DESC LIMIT 2000;")
+            users = []
+            for rs in result:
+                for row in rs.rows:
+                    uid=str(row.user_id); state=_read_state(uid) or {}
+                    try: premium=_premium_status(uid)
+                    except Exception: premium={"active":False,"source":None,"trial_used":False}
+                    users.append({"telegram_id":uid,"username":str(row.username or ""),
+                        "first_name":str(row.first_name or ""),"last_name":str(row.last_name or ""),
+                        "timezone":str(row.timezone or "UTC"),"created_at":str(row.created_at),
+                        "last_seen":str(row.last_seen),"entries":len(state.get("entries") or []),
+                        "practices_completed":len(state.get("practiceHistory") or []),
+                        "patterns":len(state.get("patterns") or []),
+                        "personal_practices":len(state.get("personalPractices") or []),"premium":premium})
+            return _json_response(200,{"ok":True,"users":users})
+
+        if path == "/v1/admin/user" and method == "GET":
+            if not ADMIN_PASSWORD or not hmac.compare_digest(headers.get("x-admin-password", ""), ADMIN_PASSWORD):
+                return _json_response(401, {"error": "unauthorized"})
+            _ensure_schema()
+            query=event.get("queryStringParameters") or {}
+            target_id=str(query.get("user_id") or "").strip()
+            if not target_id.isdigit(): return _json_response(400,{"error":"invalid_user_id"})
+            state=_read_state(target_id) or {}
+            analytics_id=hmac.new(ANALYTICS_SECRET.encode("utf-8"),("put-k-sebe-analytics:"+target_id).encode("utf-8"),hashlib.sha256).hexdigest()
+            result=_db().execute_with_retries("""
+                DECLARE $user_id AS Utf8;
+                SELECT event_name,created_at,metadata_json FROM analytics_events
+                WHERE user_id=$user_id ORDER BY created_at DESC LIMIT 500;
+            """,parameters={"$user_id":analytics_id})
+            events=[]
+            for rs in result:
+                for row in rs.rows:
+                    events.append({"event":str(row.event_name),"created_at":row.created_at.isoformat() if hasattr(row.created_at,"isoformat") else str(row.created_at),"metadata":json.loads(str(row.metadata_json or "{}"))})
+            consents=_get_user_consents(target_id)
+            if not consents.get("ai_history_storage"):
+                state=dict(state); state["entries"]=[dict(x,analysis=None) for x in (state.get("entries") or [])]; state["chat"]=[]
+            return _json_response(200,{"ok":True,"telegram_id":target_id,"state":state,"consents":consents,"events":events,"premium":_premium_status(target_id)})
+
         if path == "/v1/admin/analytics" and method == "GET":
             if not ADMIN_PASSWORD or not hmac.compare_digest(
                 headers.get("x-admin-password", ""), ADMIN_PASSWORD
