@@ -556,9 +556,11 @@ check_endpoint() {
   fi
   echo "    $label: OK"
 }
-check_endpoint "/health" "Backend + YDB + schema"
+# Check the narrowest dependency first so a failed deployment identifies
+# whether the problem is connectivity or schema initialization.
 check_endpoint "/health/db" "YDB connection"
 check_endpoint "/health/schema" "YDB schema"
+check_endpoint "/health" "Backend + YDB + schema"
 echo "=============================================="
 echo "РАЗВЁРТЫВАНИЕ BACKEND ЗАВЕРШЕНО"
 echo "API_BASE=$API_URL"
