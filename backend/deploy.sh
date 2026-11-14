@@ -363,7 +363,7 @@ x-yc-apigateway:
   cors:
     origin: '*'
     methods: [GET, PUT, DELETE, POST, OPTIONS]
-    allowedHeaders: [Content-Type, X-Telegram-Init-Data, X-User-Timezone, X-Admin-Password, trbt-signature]
+    allowedHeaders: [Content-Type, X-Telegram-Init-Data, X-User-Timezone, X-Admin-Password, trbt-signature, X-Telegram-Bot-Api-Secret-Token]
     maxAge: 3600
 paths:
   /health:
@@ -398,6 +398,17 @@ paths:
           description: YDB schema initialization passed
         "503":
           description: YDB schema initialization failed
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /v1/webhooks/telegram:
+    post:
+      operationId: telegramBotWebhook
+      responses:
+        "200":
+          description: Telegram bot update accepted
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
@@ -693,6 +704,8 @@ echo "РАЗВЁРТЫВАНИЕ BACKEND ЗАВЕРШЕНО"
 echo "Проверка успеха: GET /health/schema, data-plane по всем 9 таблицам, включая user_consents и user_state."
 echo "API_BASE=$API_URL"
 echo "TRIBUTE_WEBHOOK_URL=$API_URL/v1/webhooks/tribute"
+echo "TELEGRAM_WEBHOOK_URL=$API_URL/v1/webhooks/telegram"
+echo "setWebhook этот скрипт не вызывает. Команда — в backend/README.md. Токен не печатайте."
 echo "PREMIUM_STATUS_URL=$API_URL/v1/premium"
 echo "GATEWAY_ID=$GATEWAY_ID"
 echo "FUNCTION_ID=$FUNCTION_ID"

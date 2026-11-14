@@ -65,6 +65,121 @@ yc serverless function version set-tag --id <PREVIOUS_VERSION_ID> --tag '$latest
 - YDB_ENDPOINT — endpoint без database path.
 - YDB_DATABASE — полный путь базы из endpoint.
 - BOT_TOKEN, ADMIN_PASSWORD, TRIBUTE_API_KEY, DEEPSEEK_API_KEY — значения из Lockbox, передаваемые Cloud Functions как secret. Обработчик запросов сам секреты Lockbox не читает и DDL не выполняет.
+- TELEGRAM_WEBHOOK_SECRET — необязательный. Если переменная не задана, секрет webhook выводится из BOT_TOKEN (см. ниже). `deploy.sh` её не создаёт и не передаёт, новый Lockbox-секрет не нужен.
+
+## Команда /start в чате бота
+
+Обновления бота раньше не приходили в backend: BOT_TOKEN используется только для проверки initData Mini App. Обработчик добавлен в ту же Cloud Function `put-k-sebe-api`. `deploy.sh` добавляет путь существующего API Gateway, не создавая новую функцию или шлюз:
+
+`POST /v1/webhooks/telegram`
+
+На `/start` и `/start <payload>` функция вызывает `sendPhoto` (без `parse_mode`) с картинкой `https://oleggrigorev131313.github.io/put-k-sebe/assets/bot/welcome.jpg` и кнопкой «Открыть дневник» (`web_app`, URL Mini App `https://oleggrigorev131313.github.io/put-k-sebe/`). Запись в YDB при этом не выполняется. Ошибка отправки логируется без секретов, Telegram всё равно получает HTTP 200. Чужой запрос без секрета получает 401 и боту ничего не шлёт.
+
+Проверка секрета: заголовок `X-Telegram-Bot-Api-Secret-Token`. Ожидаемое значение — переменная `TELEGRAM_WEBHOOK_SECRET`, если она задана. Иначе это hex HMAC-SHA256 от `BOT_TOKEN` с меткой `put-k-sebe-telegram-webhook-v1` (64 символа `0-9a-f`, формат Telegram `secret_token`).
+
+Картинка публикуется GitHub Pages с ветки `main`. Сначала влейте PR, дождитесь Pages, затем разверните backend скриптом **этой** ревизии: спецификация шлюза вшита в `deploy.sh`, флаг `--ref` подменяет только код функции.
+
+После вливания, в Cloud Shell. Спека шлюза вшита в запускаемый скрипт, поэтому скачайте `deploy.sh` уже из `main`:
+
+```bash
+curl -fsSL -o /tmp/put-k-sebe-deploy.sh \
+  "https://raw.githubusercontent.com/oleggrigorev131313/put-k-sebe/main/backend/deploy.sh"
+bash /tmp/put-k-sebe-deploy.sh --yes --ref main
+```
+
+Из уже обновлённого клона репозитория то же самое: `bash backend/deploy.sh --yes --ref main`.
+
+До вливания запускайте скрипт из ветки PR и укажите ту же ветку в `--ref`. Иначе шлюз останется без пути `/v1/webhooks/telegram`.
+
+Один раз после деплоя укажите webhook. Токен только в переменной окружения этой сессии. Не включайте трассировку шелла, не коммитьте токен и не присылайте его в чат.
+
+```bash
+export BOT_TOKEN='<BOT_TOKEN>'
+python3 - <<'PY'
+import hashlib, hmac, json, os, urllib.request
+token = os.environ["BOT_TOKEN"]
+secret = hmac.new(
+    token.encode("utf-8"),
+    b"put-k-sebe-telegram-webhook-v1",
+    hashlib.sha256,
+).hexdigest()
+body = json.dumps({
+    "url": "https://d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net/v1/webhooks/telegram",
+    "secret_token": secret,
+    "allowed_updates": ["message"],
+    "drop_pending_updates": False,
+}).encode("utf-8")
+request = urllib.request.Request(
+    "https://api.telegram.org/bot" + token + "/setWebhook",
+    data=body,
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+with urllib.request.urlopen(request, timeout=30) as response:
+    print(response.read().decode("utf-8"))
+PY
+unset BOT_TOKEN
+```
+
+В ответе достаточно `{"ok":true,...}`. Проверка без секрета:
+
+```bash
+export BOT_TOKEN='<BOT_TOKEN>'
+python3 - <<'PY'
+import json, os, urllib.request
+token = os.environ["BOT_TOKEN"]
+request = urllib.request.Request("https://api.telegram.org/bot" + token + "/getWebhookInfo")
+with urllib.request.urlopen(request, timeout=30) as response:
+    info = json.loads(response.read().decode("utf-8"))
+result = info.get("result") or {}
+print(json.dumps({
+    "ok": info.get("ok"),
+    "url": result.get("url"),
+    "pending_update_count": result.get("pending_update_count"),
+    "last_error_message": result.get("last_error_message"),
+}, ensure_ascii=False))
+PY
+unset BOT_TOKEN
+```
+
+`url` должен быть `https://d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net/v1/webhooks/telegram`.
+
+Локальная проверка сборки ответа без сети и без токена: `python3 backend/test_telegram_start.py`.
+
+### Откат
+
+Откат версии функции возвращает API, которым пользуется Mini App, к предыдущей версии. Путь `/v1/webhooks/telegram` в шлюзе при этом остаётся и получает 404 от старого кода, пока шлюз не обновлён скриптом без этого пути. Id печатает `deploy.sh` как `PREVIOUS_VERSION_ID`:
+
+```bash
+yc serverless function version set-tag --id <PREVIOUS_VERSION_ID> --tag '$latest'
+```
+
+Спека шлюза берётся из того `deploy.sh`, который вы запускаете, а не из `--ref`. Чтобы убрать путь, выполните скрипт коммита до этого изменения:
+
+```bash
+curl -fsSL -o /tmp/put-k-sebe-deploy-prev.sh \
+  "https://raw.githubusercontent.com/oleggrigorev131313/put-k-sebe/<GIT_REF_BEFORE>/backend/deploy.sh"
+bash /tmp/put-k-sebe-deploy-prev.sh --yes --ref <GIT_REF_BEFORE>
+```
+
+И снимите webhook, иначе Telegram будет повторять доставку:
+
+```bash
+export BOT_TOKEN='<BOT_TOKEN>'
+python3 - <<'PY'
+import os, urllib.request
+token = os.environ["BOT_TOKEN"]
+request = urllib.request.Request(
+    "https://api.telegram.org/bot" + token + "/deleteWebhook",
+    data=b"{}",
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+with urllib.request.urlopen(request, timeout=30) as response:
+    print(response.read().decode("utf-8"))
+PY
+unset BOT_TOKEN
+```
 
 Запросы считают, что таблицы уже есть. Если таблицы нет, ответ `503` со `stage` вида `table_missing:<имя>`. Таймер ежедневной сводки тоже не создаёт таблицы: раз в минуту читает только список часовых поясов и выходит, если ни у кого сейчас не 23:59.
 
