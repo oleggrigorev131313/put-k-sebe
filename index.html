@@ -290,15 +290,16 @@ h2{font-size:21px;letter-spacing:-.45px;font-weight:650}
 .theme-scroll::-webkit-scrollbar{display:none}
 .home-themes{min-width:0;max-width:100%}
 .theme-hint{margin:0;color:#626b63;font-size:14px;line-height:1.45}
-.theme-tile{flex:0 0 158px;width:158px;max-width:158px;scroll-snap-align:start;scroll-snap-stop:normal;align-self:flex-start;display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:11px 10px;border-radius:17px;border:1px solid #e4ded4;background:rgba(255,253,248,.9);box-shadow:0 7px 20px rgba(35,45,39,.035);color:var(--ink)}
+.theme-tile{flex:0 0 auto;min-width:158px;max-width:280px;width:158px;scroll-snap-align:start;scroll-snap-stop:normal;align-self:flex-start;display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:11px 10px;border-radius:17px;border:1px solid #e4ded4;background:rgba(255,253,248,.9);box-shadow:0 7px 20px rgba(35,45,39,.035);color:var(--ink);height:132px;box-sizing:border-box}
 .theme-mark{width:30px;height:30px;border-radius:11px;background:#e9ece4;color:#4a6258;display:grid;place-items:center;margin-bottom:7px;flex:none}
 .theme-mark .ico{width:18px;height:18px}
-.theme-content{min-width:0;width:100%}
-.theme-content b{font-size:12px;display:block;line-height:1.25}
-.theme-content small{display:block;font-size:10px;color:#6e756d;margin-top:3px;line-height:1.25}
-.theme-count{font-size:17px;font-weight:700;margin-top:6px;color:#34473f;line-height:1}
-.belief-lines{margin:4px 0 0;display:flex;flex-direction:column;gap:10px;font-size:15px;line-height:1.45;color:var(--ink)}
-.belief-lines strong{font-weight:800;color:#31443d}
+.theme-content{min-width:0;width:100%;flex:1;display:flex;flex-direction:column;min-height:0}
+.theme-content b{font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;line-height:1.25;max-height:2.5em;min-height:2.5em}
+.theme-content small{display:block;font-size:10px;color:#6e756d;margin-top:3px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.theme-count{font-size:17px;font-weight:700;margin-top:auto;color:#34473f;line-height:1;flex:none}
+.belief-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:center;padding:12px 4px 4px}
+.belief-stats strong{font-size:36px;letter-spacing:-1px;font-weight:800;line-height:1;display:block;color:var(--ink)}
+.belief-stats span{font-size:12px;color:var(--muted);display:block;line-height:1.35;margin-top:8px}
 .path-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
 .path-stat{background:rgba(255,253,248,.9);border:1px solid #e4ded4;border-radius:19px;padding:15px 13px;box-shadow:0 7px 20px rgba(35,45,39,.035)}
 .path-stat strong{font-size:27px;letter-spacing:-1px;display:block}
@@ -338,7 +339,7 @@ body[data-page="subscription"],body[data-page="subscription"] .shell{overflow-x:
 @media(max-width:370px){
  main{padding-left:16px;padding-right:16px}
  .theme-scroll{gap:8px}
- .theme-tile{flex:0 0 152px;width:152px;max-width:152px;padding:10px 9px}
+ .theme-tile{min-width:152px;height:128px;padding:10px 9px}
  .theme-content b{font-size:11px}
  .path-stat{padding:13px 8px}
  .wordmark{font-size:20px;letter-spacing:.3em}
@@ -772,14 +773,23 @@ function activityDays(list){
 var THEME_DEFS=window.THEME_DEFS||[];
 function themeMatches(entry,theme){return window.themeMatches?window.themeMatches(entry,theme):false;}
 function themeReport(){return window.repeatingThemes?window.repeatingThemes(state.entries||[]):{ready:false,themes:[]};}
+function themeTileWidth(name){
+ var n=String(name||"").length;
+ if(n>24)return 280;
+ if(n>18)return 248;
+ if(n>14)return 212;
+ if(n>10)return 182;
+ return 158;
+}
+function themeTileStyle(name){var w=themeTileWidth(name);return ' style="flex:0 0 '+w+'px;width:'+w+'px"';}
 function themeCard(theme){
  var label=theme.count+" "+plural(theme.count,"наблюдение","наблюдения","наблюдений");
- return '<button type="button" class="theme-tile" data-theme-filter="'+esc(theme.name)+'"><span class="theme-mark">'+ico(theme.glyph)+'</span><span class="theme-content"><b>'+esc(theme.name)+'</b><small>'+label+'</small></span><span class="theme-count">'+theme.count+'</span></button>';
+ return '<button type="button" class="theme-tile"'+themeTileStyle(theme.name)+' data-theme-filter="'+esc(theme.name)+'"><span class="theme-mark">'+ico(theme.glyph)+'</span><span class="theme-content"><b>'+esc(theme.name)+'</b><small>'+label+'</small></span><span class="theme-count">'+theme.count+'</span></button>';
 }
 function patternCarouselCards(){
  return (state.patterns||[]).filter(function(pattern){return pattern.status!=="rejected"&&linkedCount(pattern)>0;}).map(function(pattern){
   var count=linkedCount(pattern);
-  return '<button type="button" class="theme-tile" data-open-pattern="'+esc(pattern.id)+'"><span class="theme-mark">'+ico(patternGlyph(pattern))+'</span><span class="theme-content"><b>'+esc(pattern.name)+'</b><small>'+count+" "+plural(count,"связанная запись","связанные записи","связанных записей")+'</small></span><span class="theme-count">'+count+'</span></button>';
+  return '<button type="button" class="theme-tile"'+themeTileStyle(pattern.name)+' data-open-pattern="'+esc(pattern.id)+'"><span class="theme-mark">'+ico(patternGlyph(pattern))+'</span><span class="theme-content"><b>'+esc(pattern.name)+'</b><small>'+count+" "+plural(count,"связанная запись","связанные записи","связанных записей")+'</small></span><span class="theme-count">'+count+'</span></button>';
  }).join("");
 }
 function insightThemeCards(){
@@ -911,7 +921,8 @@ function activityChart(period){
  var labelsWeek=["7д","6д","5д","4д","3д","2д","сег"],labelsYear=["12м","11м","10м","9м","8м","7м","6м","5м","4м","3м","2м","1м"];
  var labelEvery=total>14?Math.ceil(total/6):total>7?Math.ceil(total/5):1;
  var pick=activityPointPick&&activityPointPick.period===period?activityPointPick.index:-1;
- var dots=counts.map(function(v,i){var show=i===0||i===total-1||i%labelEvery===0;var lbl=period==="year"?labelsYear[i]:period==="month"?String(i+1):(labelsWeek[i]||"");var lx=x(i),ly=y(v);var mark='<circle cx="'+lx+'" cy="'+ly+'" r="4.5" fill="#fff" stroke="#31443d" stroke-width="2.4" pointer-events="none"/>';var hit='<circle data-activity-point="'+i+'" cx="'+lx+'" cy="'+ly+'" r="12" fill="transparent" style="cursor:pointer"/><title>'+v+" "+plural(v,"балл","балла","баллов")+'</title>';var val=pick===i?'<text x="'+(lx+10)+'" y="'+(ly-8)+'" font-size="11" font-weight="700" fill="#31443d" pointer-events="none">'+v+'</text>':"";return hit+mark+val+(show?'<text x="'+lx+'" y="'+(H-10)+'" font-size="11" text-anchor="middle" fill="#8a857c" pointer-events="none">'+esc(lbl)+'</text>':"");}).join("");
+ function activityBadge(lx,ly,v){var label=v+" "+plural(v,"балл","балла","баллов"),tw=Math.max(54,label.length*7.4+18),th=24,bx=lx-tw/2,by=ly-th-11,edgeL=left,edgeR=W-right; if(bx<edgeL)bx=edgeL;if(bx+tw>edgeR)bx=edgeR-tw;if(by<top+2)by=ly+13;return '<g pointer-events="none"><rect x="'+bx+'" y="'+by+'" width="'+tw+'" height="'+th+'" rx="12" fill="#31443d"/><text x="'+(bx+tw/2)+'" y="'+(by+15)+'" text-anchor="middle" font-size="12" font-weight="700" fill="#f7f3eb">'+esc(label)+'</text></g>';}
+ var dots=counts.map(function(v,i){var show=i===0||i===total-1||i%labelEvery===0;var lbl=period==="year"?labelsYear[i]:period==="month"?String(i+1):(labelsWeek[i]||"");var lx=x(i),ly=y(v);var mark='<circle cx="'+lx+'" cy="'+ly+'" r="4.5" fill="#fff" stroke="#31443d" stroke-width="2.4" pointer-events="none"/>';var hit='<circle data-activity-point="'+i+'" cx="'+lx+'" cy="'+ly+'" r="12" fill="transparent" style="cursor:pointer"/><title>'+v+" "+plural(v,"балл","балла","баллов")+'</title>';var val=pick===i?activityBadge(lx,ly,v):"";return hit+mark+val+(show?'<text x="'+lx+'" y="'+(H-10)+'" font-size="11" text-anchor="middle" fill="#8a857c" pointer-events="none">'+esc(lbl)+'</text>':"");}).join("");
  return '<p class="chart-note" style="margin:0 0 8px">Всего за период: <strong>'+sum+'</strong> '+plural(sum,"балл","балла","баллов")+' активности</p><div class="chart"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Активность за период">'+grids+'<polyline points="'+line+'" fill="none" stroke="#31443d" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" pointer-events="none"/>'+dots+'</svg></div>';
 }
 function confidenceSummary(period){
@@ -922,7 +933,7 @@ function confidenceSummary(period){
  var avg=function(a){return a.length?Math.round(a.reduce(function(x,y){return x+y;},0)/a.length):null;};
  var b=avg(before),a=avg(after);
  if(b==null&&a==null)return '<p class="chart-note" style="margin:0">За выбранный период пока нет оценок уверенности. Они появляются в записи на шаге «насколько веришь этой мысли».</p>';
- return '<div class="belief-lines"><p>В среднем <strong>до разбора</strong> уверенность в мыслях <strong>'+(b==null?"—":b+"%")+'</strong>.</p><p><strong>После разбора</strong> <strong>'+(a==null?"—":a+"%")+'</strong>.</p></div>';
+ return '<div class="belief-stats"><div><strong>'+(b==null?"—":b+"%")+'</strong><span>в среднем до разбора</span></div><div><strong>'+(a==null?"—":a+"%")+'</strong><span>в среднем после разбора</span></div></div>';
 }
 function progress(){
  var period=normalizeProgressPeriod(progressPeriod);
