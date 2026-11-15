@@ -7,7 +7,8 @@
 <meta name="color-scheme" content="light">
 <meta name="description" content="ПЕРЕСМОТР — пространство для осознанного взгляда на себя, свои мысли и жизнь.">
 <title>ПЕРЕСМОТР</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect fill='%23f3eee6' width='64' height='64'/%3E%3Ccircle cx='24' cy='32' r='12' fill='none' stroke='%2331443d' stroke-width='3'/%3E%3Ccircle cx='40' cy='32' r='12' fill='none' stroke='%2331443d' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="icon" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/logo-mark.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,560;7..72,650&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -26,109 +27,116 @@
   --cream:#f6f1e8;
   --sage:#d7e0d4;
   --shadow:0 10px 28px rgba(62,52,36,.06);
-  --radius:22px;
+  --radius:26px;
   --font:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   --serif:"Literata","Iowan Old Style",Palatino,Georgia,serif;
   color-scheme:light;
 }
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%}
-body{font-family:var(--font);color:var(--ink);background:var(--bg);-webkit-text-size-adjust:100%}
+body{font-family:var(--font);font-size:17px;color:var(--ink);background:var(--bg);-webkit-text-size-adjust:100%}
 button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer}
 button,a{-webkit-tap-highlight-color:transparent}
-.shell{width:min(100%,480px);min-height:100vh;margin:0 auto;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top);background:var(--bg)}
-body.has-tabs .shell{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
-main{flex:1;display:flex;flex-direction:column;padding:6px 20px 28px}
+.shell{position:relative;width:min(100%,480px);min-height:100vh;margin:0 auto;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top);background:var(--bg)}
+body.has-tabs .shell{padding-bottom:calc(112px + env(safe-area-inset-bottom))}
+main{flex:1;display:flex;flex-direction:column;padding:8px 22px 32px}
 body[data-page="welcome"] main{padding:0}
 .cta{justify-content:space-between;padding-left:18px;padding-right:18px}
 .cta-label{display:inline-flex;align-items:center;gap:10px}
-.topbar{min-height:54px;display:flex;align-items:center;justify-content:center;position:relative;padding:8px 16px 0}
+.topbar{min-height:58px;display:flex;align-items:center;justify-content:center;position:relative;padding:10px 18px 0}
 .topbar[hidden]{display:none}
-.brand-mini{display:flex;align-items:center;gap:8px;font-family:var(--serif);font-weight:650;letter-spacing:.2em;font-size:12px}
-.logo{display:block;color:var(--pine)}
-.avatar,.round{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;box-shadow:var(--shadow);position:absolute;right:16px;top:10px;padding:0}
-.avatar{font-weight:700;font-size:14px}
-.round .ico{width:18px;height:18px}
-h1,.h1{font-size:30px;line-height:1.15;letter-spacing:-.6px;font-weight:750;margin:0}
-h2{font-size:18px;margin:0}
-.lead{color:var(--soft);font-size:15px;line-height:1.5;margin:8px 0 0}
+.topbar.slim{min-height:0;height:0;padding:0;overflow:visible}
+.topbar.slim .round{top:4px}
+body.has-float-info .page-head{padding-right:56px}
+.brand-mini{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:.22em;font-size:15px}
+.logo-mark{display:block;height:auto}
+.brand-mini .logo-mark{width:34px}
+.avatar,.round{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;box-shadow:var(--shadow);position:absolute;right:16px;top:8px;padding:0}
+.round.left{left:16px;right:auto}
+.round.static{position:static;flex:none}
+.avatar svg,.round .ico{width:22px;height:22px}
+h1,.h1{font-size:32px;line-height:1.12;letter-spacing:-.7px;font-weight:800;margin:0}
+h2{font-size:22px;margin:0;font-weight:800}
+.lead{color:var(--soft);font-size:17px;line-height:1.45;margin:10px 0 0}
 .page-head{margin:8px 0 16px}
-.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
-.btn{border:0;border-radius:999px;padding:15px 20px;font-size:15px;font-weight:700;background:var(--pine);color:var(--cream);display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;text-align:center;line-height:1.2}
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 18px}
+.btn{border:0;border-radius:999px;min-height:60px;padding:16px 22px;font-size:17px;font-weight:750;background:var(--pine);color:var(--cream);display:inline-flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;text-align:center;line-height:1.2}
 .btn:active{transform:scale(.985)}
 .btn:disabled{opacity:.48;cursor:not-allowed;transform:none}
 .btn.full{width:100%}
 .btn.soft{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
 .btn.light{background:var(--cream);color:var(--pine)}
 .btn.outline{background:transparent;color:var(--ink);border:1px solid var(--line);box-shadow:none}
-.btn .ico{width:18px;height:18px}
-.textbtn{border:0;background:none;padding:8px 4px;color:var(--ink);font-weight:650;font-size:14px}
+.btn .ico{width:22px;height:22px}
+.textbtn{border:0;background:none;padding:10px 4px;color:var(--ink);font-weight:700;font-size:16px}
 .stack{display:flex;flex-direction:column;gap:12px}
-.welcome{position:relative;flex:1;display:flex;flex-direction:column;padding:18px 4px calc(12px + env(safe-area-inset-bottom));overflow:hidden}
-.welcome-mid{position:relative;z-index:1;text-align:center;padding-top:7vh}
-.welcome .logo{margin:0 auto;color:var(--pine)}
-.wordmark{font-family:var(--serif);font-weight:650;font-size:30px;letter-spacing:.16em;margin:18px 0 8px}
-.slogan{margin:0;font-size:11px;letter-spacing:.26em;font-weight:700;color:#7e877f}
-.welcome-copy{max-width:280px;margin:22px auto 0;color:#5e675f;font-size:15.5px;line-height:1.5}
-.pager{display:flex;gap:7px;justify-content:center;margin:22px 0 0}
-.pager i{width:7px;height:7px;border-radius:50%;background:#ddd6cb;display:block}
+.welcome{position:relative;flex:1;display:flex;flex-direction:column;padding:12px 28px calc(18px + env(safe-area-inset-bottom));overflow:hidden}
+.welcome-mid{position:relative;z-index:1;text-align:center;padding-top:6vh}
+.welcome-logo{width:min(220px,62vw);margin:0 auto}
+.wordmark{font-weight:500;font-size:26px;letter-spacing:.38em;margin:22px 0 12px;padding-left:.38em}
+.slogan{margin:0;font-size:13px;letter-spacing:.34em;font-weight:600;color:#6f7774;padding-left:.34em}
+.welcome-copy{max-width:320px;margin:26px auto 0;color:#5e675f;font-size:18px;line-height:1.45}
+.pager{display:flex;gap:8px;justify-content:center;margin:26px 0 0}
+.pager i{width:9px;height:9px;border-radius:50%;background:#ddd6cb;display:block}
 .pager i.on{background:var(--pine)}
-.welcome-actions{position:relative;z-index:1;margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:12px;padding-top:28px}
-.mountains{position:absolute;left:-20px;right:-20px;bottom:0;height:48%;z-index:0;pointer-events:none}
+.welcome-actions{position:relative;z-index:1;margin-top:auto;width:100%;display:flex;flex-direction:column;align-items:stretch;gap:14px;padding:28px 6px 4px}
+.mountains{position:absolute;left:-6%;right:-6%;bottom:0;height:68%;z-index:0;pointer-events:none}
 .mountains svg{width:100%;height:100%;display:block}
 .consent{flex:1;display:flex;flex-direction:column;padding-bottom:calc(8px + env(safe-area-inset-bottom))}
-.consent .h1{font-size:28px;max-width:280px;margin-top:8px}
-.info-card{display:flex;gap:12px;align-items:flex-start}
-.info-ico{width:42px;height:42px;border-radius:14px;background:#f3f0e8;color:var(--pine);display:grid;place-items:center;flex:none}
-.info-ico .ico{width:20px;height:20px}
-.info-card b{display:block;font-size:15px;margin-bottom:3px}
-.info-card p{margin:0;color:var(--muted);font-size:13px;line-height:1.45}
+.consent .h1{font-size:34px;max-width:320px;margin-top:8px}
+.info-card{display:flex;gap:14px;align-items:flex-start}
+.info-ico{width:52px;height:52px;border-radius:16px;background:#f3f0e8;color:var(--pine);display:grid;place-items:center;flex:none}
+.info-ico .ico{width:26px;height:26px}
+.info-card b{display:block;font-size:17px;margin-bottom:4px}
+.info-card p{margin:0;color:var(--muted);font-size:15px;line-height:1.45}
 .consent-actions{margin-top:auto;padding-top:28px;display:flex;flex-direction:column;align-items:center;gap:12px}
-.fine{color:var(--muted);font-size:12px;line-height:1.45;text-align:center;margin:0}
-.greet{font-size:32px;letter-spacing:-.8px}
-.cta{min-height:58px;font-size:16px;box-shadow:0 10px 22px rgba(49,68,61,.16)}
-.section-label{font-size:18px;font-weight:750;margin:22px 2px 12px}
-.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.stat{min-height:118px;display:flex;flex-direction:column;align-items:flex-start;gap:6px}
-.stat strong,.stats3 strong{font-size:30px;letter-spacing:-.8px;font-weight:750;line-height:1}
-.stat span,.stats3 span{color:var(--muted);font-size:12.5px}
-.stat-ico{width:34px;height:34px;border-radius:12px;background:#f1f3ee;color:var(--pine);display:grid;place-items:center}
-.stat-ico .ico{width:18px;height:18px}
-.link-card{width:100%;display:flex;align-items:center;gap:12px;text-align:left;border:0;margin-top:12px}
-.link-card b{display:block;font-size:15px}
-.link-card small{display:block;color:var(--muted);font-size:12.5px;line-height:1.4;margin-top:3px}
+.fine{color:var(--muted);font-size:14px;line-height:1.45;text-align:center;margin:0}
+.greet{font-size:34px;letter-spacing:-.8px}
+.cta{min-height:64px;font-size:18px;box-shadow:0 12px 24px rgba(49,68,61,.16)}
+.section-label{font-size:22px;font-weight:800;margin:26px 2px 14px}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.stat{min-height:138px;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.stat strong,.stats3 strong{font-size:36px;letter-spacing:-1px;font-weight:800;line-height:1}
+.stat span,.stats3 span{color:var(--muted);font-size:14px}
+.stat-ico{width:46px;height:46px;border-radius:16px;background:#f1f3ee;color:var(--pine);display:grid;place-items:center}
+.stat-ico .ico{width:24px;height:24px}
+.link-card{width:100%;display:flex;align-items:center;gap:14px;text-align:left;border:0;margin-top:14px}
+.link-card b{display:block;font-size:17px}
+.link-card small{display:block;color:var(--muted);font-size:15px;line-height:1.4;margin-top:4px}
 .link-card .grow{flex:1;min-width:0}
-.chevron{color:#b7b1a6;font-size:22px;line-height:1;flex:none}
-.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}
+.chevron{color:#b7b1a6;flex:none;display:grid;place-items:center}
+.chevron .ico{width:22px;height:22px}
+.chips{display:flex;gap:10px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
-.chip{flex:none;border:0;background:var(--card);color:#6f736c;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700;box-shadow:var(--shadow)}
+.chip{flex:none;border:0;background:var(--card);color:#6f736c;border-radius:999px;padding:12px 18px;font-size:15px;font-weight:750;box-shadow:var(--shadow)}
 .chip.active{background:var(--pine);color:var(--cream)}
 .entry-card{width:100%;text-align:left;border:0;margin:0 0 12px;display:block}
-.entry-top{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:12px;font-weight:650}
-.entry-card h3{font-size:16px;line-height:1.35;margin:8px 0 8px;font-weight:750}
-.look-label{font-size:12px;color:var(--muted);margin-bottom:3px}
-.entry-card p,.look-text{margin:0;color:#5c6560;font-size:13.5px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.entry-top{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:14px;font-weight:700}
+.entry-card h3{font-size:19px;line-height:1.3;margin:10px 0 8px;font-weight:800}
+.look-label{font-size:14px;color:var(--muted);margin-bottom:4px}
+.entry-card p,.look-text{margin:0;color:#5c6560;font-size:16px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .empty{text-align:center;color:var(--muted);padding:22px 12px}
 .empty b{display:block;color:var(--ink);margin-bottom:6px}
-.step-label{margin:2px 0 0;color:var(--muted);font-size:13px;font-weight:650}
-.stepdots{display:flex;align-items:center;gap:7px;margin:10px 0 18px}
-.stepdots i{width:8px;height:8px;border-radius:50%;background:#ddd6cc;display:block}
+.step-label{margin:4px 0 0;color:var(--muted);font-size:16px;font-weight:700}
+.stepdots{display:flex;align-items:center;margin:16px 2px 22px}
+.stepdots i{width:14px;height:14px;border-radius:50%;background:#e4ddd4;flex:none;box-shadow:0 0 0 4px var(--bg)}
 .stepdots i.on{background:var(--pine)}
-.stepdots i.now{box-shadow:0 0 0 4px rgba(49,68,61,.12)}
-.question{font-size:28px;letter-spacing:-.5px;margin:0}
+.stepdots b{flex:1;height:3px;background:#e4ddd4;margin:0 2px;border-radius:3px}
+.stepdots b.on{background:var(--pine)}
+.question{font-size:32px;letter-spacing:-.6px;margin:0;font-weight:800}
 .field-card{padding:8px}
 .field-card.solo{padding:6px 8px}
-.field-card.solo .area{border:0;background:transparent;box-shadow:none;min-height:148px}
-.wizard-actions .btn{min-width:158px;padding:14px 22px}
-.field{margin:12px 0}
-.field label,.label{display:block;font-size:13px;font-weight:750;margin-bottom:7px}
-.input,.area,.select{width:100%;border:1px solid var(--line);background:#fff;border-radius:16px;padding:13px 14px;font-size:16px;outline:none;caret-color:var(--pine)}
-.area{min-height:132px;resize:vertical;line-height:1.45}
+.field-card.solo .area{border:0;background:transparent;box-shadow:none;min-height:168px}
+.wizard-actions .btn{min-width:168px;min-height:56px;padding:14px 26px}
+.field{margin:14px 0}
+.field label,.label{display:block;font-size:15px;font-weight:800;margin-bottom:8px}
+.input,.area,.select{width:100%;border:1px solid var(--line);background:#fff;border-radius:18px;padding:16px;font-size:17px;outline:none;caret-color:var(--pine)}
+.area{min-height:150px;resize:vertical;line-height:1.45}
 .input:focus,.area:focus,.select:focus{border-color:#8aa094;box-shadow:0 0 0 3px rgba(49,68,61,.12)}
 .area::placeholder,.input::placeholder{color:#b0aaa0}
-.hintbox{display:flex;gap:10px;align-items:flex-start;background:#f7f4ee;border-radius:16px;padding:12px 14px;color:#8d887f;font-size:12.5px;line-height:1.45;margin-top:12px}
-.hintbox .ico{width:16px;height:16px;flex:none;margin-top:1px;color:#8d948c}
+.hintbox{display:flex;gap:12px;align-items:flex-start;background:#f7f4ee;border-radius:18px;padding:14px 16px;color:#8d887f;font-size:15px;line-height:1.45;margin-top:14px}
+.hintbox .ico{width:20px;height:20px;flex:none;margin-top:1px;color:#8d948c}
 .wizard-actions{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:18px}
 .wizard-actions .textbtn{margin-right:auto}
 .range{display:flex;align-items:center;gap:12px}
@@ -145,52 +153,54 @@ h2{font-size:18px;margin:0}
 .custom-row{display:flex;gap:8px}
 .custom-row .input{min-width:0}
 .custom-row .btn{padding:12px 14px;white-space:nowrap}
-.seg{display:flex;background:#ebe6dc;border-radius:999px;padding:4px;gap:4px}
-.seg button{flex:1;border:0;background:transparent;border-radius:999px;padding:9px 8px;font-size:13px;font-weight:750;color:#7d8178}
+.seg{display:flex;background:#ebe6dc;border-radius:999px;padding:5px;gap:4px}
+.seg button{flex:1;border:0;background:transparent;border-radius:999px;min-height:48px;padding:12px 8px;font-size:15px;font-weight:800;color:#7d8178}
 .seg button.active{background:var(--pine);color:var(--cream)}
-.row{width:100%;display:flex;align-items:center;gap:12px;text-align:left;border:0;margin-top:10px}
-.row-ico{width:38px;height:38px;border-radius:14px;background:#f1f3ee;color:var(--pine);display:grid;place-items:center;flex:none}
+.row{width:100%;display:flex;align-items:center;gap:14px;text-align:left;border:0;margin-top:12px}
+.row-ico{width:48px;height:48px;border-radius:16px;background:#f1f3ee;color:var(--pine);display:grid;place-items:center;flex:none}
 .row-ico.done{background:#e5f0e6;color:#3e6b4e}
-.row-ico .ico{width:18px;height:18px}
-.row b{display:block;font-size:15px;line-height:1.3}
-.row small{display:block;color:var(--muted);font-size:12.5px;margin-top:3px}
+.row-ico .ico{width:24px;height:24px}
+.row b{display:block;font-size:17px;line-height:1.3}
+.row small{display:block;color:var(--muted);font-size:14px;margin-top:4px}
 .row .grow{flex:1;min-width:0}
 .stats3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;padding:18px 10px}
 .stats3 strong{display:block}
-.chart-card h2{font-size:16px;margin-bottom:8px}
-.chart{width:100%;height:190px}
+.chart-card h2{font-size:20px;margin-bottom:10px}
+.chart{width:100%;height:230px}
 .chart svg{width:100%;height:100%;display:block}
-.chart-note{color:var(--muted);font-size:12px;line-height:1.45;margin:8px 0 0}
-.premium{flex:1;display:flex;flex-direction:column;color:#f4f1ea;padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+.chart-note{color:var(--muted);font-size:15px;line-height:1.45;margin:10px 0 0}
+.premium{position:relative;flex:1;display:flex;flex-direction:column;color:#f4f1ea;padding-bottom:calc(12px + env(safe-area-inset-bottom))}
 body[data-page="subscription"]{background:#1b2c2a}
-body[data-page="subscription"] .shell{background:radial-gradient(120% 70% at 100% 0%,rgba(90,122,112,.45),transparent 46%),linear-gradient(180deg,#243633 0%,#1c2e2c 48%,#172624 100%)}
+body[data-page="subscription"] .shell{background:radial-gradient(80% 42% at 118% -8%,rgba(244,241,234,.42),transparent 46%),radial-gradient(55% 36% at 100% 8%,rgba(150,176,166,.28),transparent 42%),linear-gradient(165deg,#314844 0%,#1d332f 42%,#152422 100%)}
+.premium-glow{position:absolute;right:-120px;top:-140px;width:340px;height:340px;border-radius:50%;border:46px solid rgba(244,241,234,.08);pointer-events:none}
 body[data-page="subscription"] .round{background:rgba(255,255,255,.1);border-color:transparent;color:#f4f1ea;box-shadow:none}
-.premium h1{font-family:var(--serif);font-weight:650;font-size:40px;letter-spacing:-.5px;margin-top:12px}
-.premium .lead{color:rgba(244,241,234,.78);max-width:280px}
-.check-list{list-style:none;margin:26px 0 0;padding:0;display:flex;flex-direction:column;gap:16px}
-.check-list li{display:flex;gap:10px;align-items:flex-start;font-size:15.5px;line-height:1.35}
-.check-bullet{width:22px;height:22px;border-radius:50%;border:1.5px solid rgba(244,241,234,.85);display:grid;place-items:center;flex:none;margin-top:1px}
-.check-bullet .ico{width:13px;height:13px}
+.premium h1{font-family:var(--font);font-weight:650;font-size:48px;letter-spacing:-.6px;margin-top:8px}
+.premium .lead{color:rgba(244,241,234,.82);max-width:320px;font-size:18px}
+.check-list{list-style:none;margin:28px 0 0;padding:0;display:flex;flex-direction:column;gap:18px}
+.check-list li{display:flex;gap:12px;align-items:flex-start;font-size:18px;line-height:1.35}
+.check-bullet{width:28px;height:28px;border-radius:50%;border:1.6px solid rgba(244,241,234,.9);display:grid;place-items:center;flex:none;margin-top:0}
+.check-bullet .ico{width:16px;height:16px}
+.price-note{color:rgba(244,241,234,.78);font-size:15px;line-height:1.45;margin:14px 0 0}
 .premium-screen{min-height:calc(100vh - env(safe-area-inset-top) - 86px);display:flex;flex-direction:column}
-.premium-screen .btn{margin-top:auto}
+.premium-buy{margin-top:auto;padding-top:18px}
 .premium-plans{display:flex;flex-direction:column;gap:12px;padding:22px 0 12px}
 .plan{display:block;background:rgba(255,255,255,.06);border-radius:18px;padding:14px 16px;color:inherit;text-decoration:none}
-.plan b{display:block;font-size:15px}
-.plan span{display:block;color:rgba(244,241,234,.72);font-size:12.5px;margin-top:4px;line-height:1.4}
-.tabbar{position:fixed;z-index:20;left:50%;bottom:0;transform:translateX(-50%);width:min(100%,480px);display:none;grid-template-columns:repeat(5,1fr);gap:0;padding:8px 6px calc(8px + env(safe-area-inset-bottom));background:rgba(247,243,236,.94);backdrop-filter:blur(16px);border-top:1px solid rgba(226,220,210,.95)}
+.plan b{display:block;font-size:17px}
+.plan span{display:block;color:rgba(244,241,234,.72);font-size:14px;margin-top:4px;line-height:1.4}
+.tabbar{position:fixed;z-index:20;left:50%;bottom:0;transform:translateX(-50%);width:min(100%,480px);display:none;grid-template-columns:repeat(5,1fr);gap:0;padding:10px 4px calc(10px + env(safe-area-inset-bottom));background:rgba(247,243,236,.94);backdrop-filter:blur(16px);border-top:1px solid rgba(226,220,210,.95)}
 body.has-tabs .tabbar{display:grid}
-.tabbar button{border:0;background:none;color:#a39e95;font-size:10px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:3px;padding:2px 0}
+.tabbar button{border:0;background:none;color:#a39e95;font-size:12px;font-weight:750;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px 0}
 .tabbar button.active{color:var(--pine)}
-.tabbar .ico{width:22px;height:22px}
+.tabbar .ico{width:26px;height:26px}
 .modalbg{position:fixed;inset:0;z-index:40;background:rgba(28,32,30,.38);display:flex;align-items:flex-end;justify-content:center;padding:0}
 .modal{background:var(--bg);width:min(100%,480px);max-height:min(88vh,780px);overflow:auto;border-radius:24px 24px 0 0;padding:12px 18px calc(18px + env(safe-area-inset-bottom))}
-.modal h2{font-size:22px;letter-spacing:-.4px;margin:0 0 8px}
-.modal p{font-size:14px;line-height:1.5;color:var(--soft)}
+.modal h2{font-size:26px;letter-spacing:-.4px;margin:0 0 8px}
+.modal p{font-size:16px;line-height:1.5;color:var(--soft)}
 .modalhead{display:flex;justify-content:flex-end;margin-bottom:4px}
 .modalhead .round{position:static}
-.toast{position:fixed;z-index:70;left:50%;bottom:calc(92px + env(safe-area-inset-bottom));transform:translate(-50%,10px);opacity:0;pointer-events:none;background:var(--pine);color:var(--cream);padding:12px 16px;border-radius:999px;font-size:13px;max-width:calc(100% - 32px);text-align:center;transition:.2s}
+.toast{position:fixed;z-index:70;left:50%;bottom:calc(108px + env(safe-area-inset-bottom));transform:translate(-50%,10px);opacity:0;pointer-events:none;background:var(--pine);color:var(--cream);padding:14px 18px;border-radius:999px;font-size:15px;max-width:calc(100% - 32px);text-align:center;transition:.2s}
 .toast.show{opacity:1;transform:translate(-50%,0)}
-.analysis-text{font-size:14px;line-height:1.6;color:var(--ink)}
+.analysis-text{font-size:16px;line-height:1.55;color:var(--ink)}
 .analysis-text p{margin:0 0 10px;color:var(--ink)}
 .analysis-text h3{font-size:15px;margin:12px 0 6px}
 .analysis-text ul{margin:6px 0 10px;padding-left:18px}
@@ -199,11 +209,12 @@ body.has-tabs .tabbar{display:grid}
 .analysis-dots:after{content:"";display:inline-block;width:1.2em;text-align:left;animation:dots 1.4s steps(4,end) infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes dots{0%{content:""}25%{content:"."}50%{content:".."}75%,100%{content:"..."}}
-.note{background:#f6f3ed;border-radius:16px;padding:12px 14px;color:var(--muted);font-size:12.5px;line-height:1.5}
+.note{background:#f6f3ed;border-radius:18px;padding:14px 16px;color:var(--muted);font-size:15px;line-height:1.5}
 .ai-suggestion{margin-top:12px}
 .pattern-record-row{width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:12px 0;border:0;border-bottom:1px solid var(--line);background:transparent}
 .pattern-record-date{font-size:12px;color:var(--muted)}
-.muted{color:var(--muted);font-size:13px;line-height:1.45}
+.muted{color:var(--muted);font-size:15px;line-height:1.45}
+.page-head.with-tool{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .status-line{font-size:13px;color:#3e6b4e;font-weight:700}
 .ico{display:block}
 @media(min-width:700px){
@@ -547,17 +558,18 @@ function ico(name){
   infinity:'<path d="M8 12c1.8-3 4-4.2 5.8-2.2C15.4 11.6 16.6 13 18 12c-1.4-1-2.6-.4-4.2 1.2C12 15.2 9.8 16.4 8 13.4 6.6 11.2 5.2 10 4 10c1.2 0 2.6 1.2 4 2z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>',
   layers:'<path d="m4 9 8-4 8 4-8 4-8-4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m4 13 8 4 8-4M4 17l8 4 8-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>',
   compare:'<circle cx="9" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="15" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/>',
-  arrow:'<path d="M5 12h12M13 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+  arrow:'<path d="M5 12h12M13 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+  chev:'<path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
  };
  return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">'+(paths[name]||"")+'</svg>';
 }
 function logo(size){
- var h=Math.round(size*0.62);
- return '<svg class="logo" width="'+size+'" height="'+h+'" viewBox="0 0 86 52" fill="none" aria-hidden="true"><path d="M28 10c-8.6 0-15 6.6-15 16s6.4 16 15 16c6.2 0 10.6-2.7 14-8 3.4 5.3 7.8 8 14 8 8.6 0 15-6.6 15-16s-6.4-16-15-16c-6.2 0-10.6 2.7-14 8-3.4-5.3-7.8-8-14-8z" stroke="currentColor" stroke-width="2.5"/></svg>';
+ return '<img class="logo-mark" src="assets/logo-mark.png" width="'+size+'" alt="" style="width:'+size+'px">';
 }
 function mountains(){
- return '<div class="mountains" aria-hidden="true"><svg viewBox="0 0 400 340" preserveAspectRatio="xMidYMax slice"><defs><linearGradient id="mist" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3eee6" stop-opacity="0"/><stop offset=".35" stop-color="#f3eee6" stop-opacity=".12"/><stop offset="1" stop-color="#f3eee6" stop-opacity=".9"/></linearGradient></defs><path d="M0 176 C55 150 90 118 140 132 C185 144 205 86 255 104 C310 124 325 78 368 98 C386 106 394 96 400 100 L400 340 L0 340 Z" fill="#d7e0d6"/><path d="M0 214 C70 186 115 206 168 178 C220 150 245 188 300 168 C345 152 365 182 400 166 L400 340 L0 340 Z" fill="#c3d0c4"/><path d="M0 246 C80 228 130 258 196 228 C255 202 290 236 350 218 C375 210 390 224 400 218 L400 340 L0 340 Z" fill="#8ea396" opacity=".72"/><path d="M0 286 C90 270 160 292 240 274 C310 258 350 276 400 268 L400 340 L0 340 Z" fill="#6e867a" opacity=".22"/><rect width="400" height="340" fill="url(#mist)"/></svg></div>';
+ return '<div class="mountains" aria-hidden="true"><svg viewBox="0 0 400 480" preserveAspectRatio="xMidYMax slice"><defs><linearGradient id="mist" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3eee6" stop-opacity="0"/><stop offset=".22" stop-color="#f3eee6" stop-opacity=".08"/><stop offset="1" stop-color="#f3eee6" stop-opacity=".78"/></linearGradient><linearGradient id="farM" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dde4dc"/><stop offset="1" stop-color="#c5d0c6"/></linearGradient><filter id="haze"><feGaussianBlur stdDeviation="1.1"/></filter></defs><path filter="url(#haze)" d="M0 168 C36 150 58 92 96 118 C132 142 154 70 198 98 C246 128 268 64 318 102 C352 128 372 96 400 112 L400 480 L0 480 Z" fill="url(#farM)"/><path d="M0 230 C42 196 86 150 132 176 C172 198 196 142 242 164 C292 188 314 132 358 162 C380 176 392 154 400 162 L400 480 L0 480 Z" fill="#c5d2c6" opacity=".92"/><path d="M0 292 C58 250 104 214 156 242 C204 268 228 214 276 236 C324 258 346 210 400 232 L400 480 L0 480 Z" fill="#9aab9c" opacity=".8"/><path d="M0 352 C70 322 130 348 196 322 C258 298 300 336 360 318 C380 310 392 322 400 316 L400 480 L0 480 Z" fill="#73887a" opacity=".32"/><rect width="400" height="480" fill="url(#mist)"/></svg></div>';
 }
+function chev(){return '<span class="chevron">'+ico("chev")+'</span>';}
 function go(p,replace){
  if(p==="onboarding"||p==="privacy")p=entered()?"home":"welcome";
  if(p!==page&&!replace){pageHistory.push(page);if(pageHistory.length>30)pageHistory.shift();}
@@ -580,12 +592,27 @@ function paintChrome(){
  var meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute("content",bg);
  if(tg){try{tg.setHeaderColor(bg);tg.setBackgroundColor(bg);}catch(e){}}
  var back=wizard||page==="summary"||page==="subscription";
+ var floatInfo=page==="patterns"||page==="progress"||page==="library"||(page==="journal"&&!wizard);
+ bar.classList.toggle("slim", floatInfo);
+ document.body.classList.toggle("has-float-info", floatInfo);
  if(page==="welcome"){bar.hidden=true;bar.innerHTML="";return;}
  bar.hidden=false;
- if(page==="consent"){bar.innerHTML='<div class="brand-mini">'+logo(22)+'<span>ПЕРЕСМОТР</span></div>';return;}
- if(page==="home"){bar.innerHTML='<div class="brand-mini">'+logo(22)+'<span>ПЕРЕСМОТР</span></div><button class="avatar" id="settings" type="button" aria-label="Профиль">'+initial()+'</button>';document.getElementById("settings").onclick=settings;return;}
- if(back){bar.innerHTML='<button class="round" id="app-back" type="button" aria-label="Назад">'+ico("back")+'</button>';document.getElementById("app-back").onclick=goBack;return;}
- bar.hidden=true;bar.innerHTML="";
+ if(page==="consent"){bar.innerHTML='<div class="brand-mini">'+logo(34)+'<span>ПЕРЕСМОТР</span></div>';return;}
+ if(page==="home"){bar.innerHTML='<div class="brand-mini">'+logo(34)+'<span>ПЕРЕСМОТР</span></div><button class="avatar" id="settings" type="button" aria-label="Профиль">'+initial()+'</button>';document.getElementById("settings").onclick=settings;return;}
+ if(back){bar.innerHTML='<button class="round left" id="app-back" type="button" aria-label="Назад">'+ico("back")+'</button><button class="round" id="app-info" type="button" aria-label="Пояснение">'+ico("info")+'</button>';document.getElementById("app-back").onclick=goBack;document.getElementById("app-info").onclick=explain;return;}
+ bar.innerHTML='<button class="round" id="app-info" type="button" aria-label="Пояснение">'+ico("info")+'</button>';
+ document.getElementById("app-info").onclick=explain;
+}
+function explain(){
+ var copy={
+  journal:step<6?"Запись идёт в шесть шагов: ситуация, эмоция, мысль, факты, более точный взгляд и небольшой шаг.":"Здесь хранятся твои записи. Фильтры — это эмоции, которые уже встречаются в дневнике.",
+  patterns:"Паттерн — повторяющийся сценарий, который ты сам подтверждаешь. Это не диагноз.",
+  library:"«Мой план» — персональные шаги. «Все практики» — короткие базовые упражнения.",
+  progress:"Неделя, месяц и год считаются по твоим записям и выполненным практикам. График показывает, насколько ты верил мысли до разбора.",
+  summary:"Итоги дня собираются один раз в сутки. Направления берутся из твоих паттернов и практик.",
+  subscription:"392 ₽ в месяц — это оплата года сразу, 4 704 ₽. Месяц отдельно стоит 490 ₽. Разбор записи открывается в Premium, итоги дня остаются на любом тарифе."
+ };
+ modal('<h2>Пояснение</h2><p>'+(copy[page]||"ПЕРЕСМОТР помогает замечать мысли и выбирать следующий небольшой шаг.")+'</p>');
 }
 function goBack(){
  if(page==="journal"&&step<6){if(step>0){step--;render();}else{step=6;render();}window.scrollTo(0,0);return;}
@@ -624,10 +651,10 @@ function home(){
  return '<section class="page-head"><h1 class="greet">'+hello+'</h1><p class="lead">Хороший момент, чтобы остановиться и посмотреть на происходящее чуть глубже.</p></section>'+
  '<button class="btn primary full cta" type="button" data-act="new"><span class="cta-label">'+ico("pencil")+'Записать мысль</span>'+ico("arrow")+'</button>'+
  '<h2 class="section-label">Твой путь</h2><div class="stat-grid"><div class="card stat"><span class="stat-ico">'+ico("doc")+'</span><strong>'+n+'</strong><span>'+plural(n,"запись","записи","записей")+'</span></div><div class="card stat"><span class="stat-ico">'+ico("cal")+'</span><strong>'+days+'</strong><span>'+plural(days,"день активности","дня активности","дней активности")+'</span></div></div>'+
- '<button class="card link-card" type="button" data-act="open-summary"><span class="stat-ico">'+ico("sun")+'</span><span class="grow"><b>Итоги дня</b><small>'+summaryText+'</small></span><span class="chevron">›</span></button>';
+ '<button class="card link-card" type="button" data-act="open-summary"><span class="stat-ico">'+ico("sun")+'</span><span class="grow"><b>Итоги дня</b><small>'+summaryText+'</small></span>'+chev()+'</button>';
 }
 function welcome(){
- return '<section class="welcome">'+mountains()+'<div class="welcome-mid">'+logo(92)+'<h1 class="wordmark">ПЕРЕСМОТР</h1><p class="slogan">УВИДЕТЬ ГЛУБЖЕ</p><p class="welcome-copy">Пространство для осознанного взгляда на себя, свои мысли и жизнь.</p><div class="pager"><i class="on"></i><i></i></div></div><div class="welcome-actions"><button class="btn primary full" type="button" data-act="start">Начать</button><button class="textbtn" type="button" data-act="have-account">У меня уже есть аккаунт</button></div></section>';
+ return '<section class="welcome">'+mountains()+'<div class="welcome-mid"><img class="logo-mark welcome-logo" src="assets/logo-mark.png" alt=""><h1 class="wordmark">ПЕРЕСМОТР</h1><p class="slogan">УВИДЕТЬ ГЛУБЖЕ</p><p class="welcome-copy">Пространство для осознанного взгляда на себя, свои мысли и жизнь.</p><div class="pager"><i class="on"></i><i></i></div></div><div class="welcome-actions"><button class="btn primary full" type="button" data-act="start">Начать</button><button class="textbtn" type="button" data-act="have-account">У меня уже есть аккаунт</button></div></section>';
 }
 function consent(){
  return '<section class="consent"><h1 class="h1">Несколько важных моментов</h1><div class="stack" style="margin-top:18px">'+
@@ -665,7 +692,7 @@ var stepHints=["Опиши событие без оценок себя и дру
 function field(label,key,ph){return '<div class="field"><label>'+label+'</label><textarea class="area" data-field="'+key+'" placeholder="'+ph+'">'+esc(draft[key])+'</textarea></div>';}
 function range(label,key,max,suffix){return '<div class="field"><label>'+label+'</label><div class="range"><input type="range" min="0" max="'+max+'" value="'+draft[key]+'" data-range="'+key+'"><strong id="v-'+key+'">'+draft[key]+(suffix||"")+'</strong></div></div>';}
 function wizard(){
- var dots="";for(var i=0;i<6;i++)dots+='<i class="'+(i<step?"on":i===step?"on now":"")+'"></i>';
+ var dots="";for(var i=0;i<6;i++){dots+='<i class="'+(i<=step?"on":"")+'"></i>';if(i<5)dots+='<b class="'+(i<step?"on":"")+'"></b>';}
  var bodies=[
   '<div class="field"><textarea class="area" data-field="situation" placeholder="Например: отправил предложение клиенту, но не получил ответ.">'+esc(draft.situation)+'</textarea></div>',
   '<div class="field"><label>Какие эмоции ты испытывал?</label><p class="muted">'+(selectedEmotions().length?esc(selectedEmotions().join(" · ")):"Выбери одну или несколько.")+'</p><div class="emotion-groups">'+Object.keys(emotionGroups).map(function(group){var chosen=emotionGroups[group].filter(function(x){return selectedEmotions().indexOf(x)>=0;}).length,open=!!expandedEmotionGroups[group];return '<div class="emotion-group"><button type="button" class="emotion-group-head" data-emotion-group="'+esc(group)+'"><span>'+esc(group)+'</span><span>'+(chosen?'<i class="emotion-group-count">'+chosen+'</i>':"")+(open?"−":"+")+'</span></button>'+(open?'<div class="emotion-group-body"><div class="choice-chips">'+emotionGroups[group].map(function(x){return '<button type="button" class="chip '+(selectedEmotions().indexOf(x)>=0?"active":"")+'" data-emotion="'+esc(x)+'">'+esc(x)+'</button>';}).join("")+'</div></div>':"")+'</div>';}).join("")+'</div><div class="custom-emotion"><label for="custom-emotion-input">Не нашёл нужное состояние?</label><div class="custom-row"><input class="input" id="custom-emotion-input" placeholder="Напиши своё состояние"><button type="button" class="btn soft" data-add-custom-emotion>Добавить</button></div></div></div>'+range("Общая интенсивность эмоций","intensity",10,"/10"),
@@ -683,7 +710,7 @@ function patterns(){
  var all=state.patterns||[],visible=all.filter(function(p){return showRejected||p.status!=="rejected";}),rejected=all.filter(function(p){return p.status==="rejected";}).length;
  var cards=visible.length?visible.map(function(p){
   var count=linkedCount(p),extra=p.status==="suggested"?" · гипотеза":p.status==="rejected"?" · отклонена":"";
-  return '<button class="card row" type="button" data-open-pattern="'+esc(p.id)+'"><span class="row-ico">'+ico(patternGlyph(p))+'</span><span class="grow"><b>'+esc(p.name)+'</b><small>Связанных записей: '+count+extra+'</small></span><span class="chevron">›</span></button>';
+  return '<button class="card row" type="button" data-open-pattern="'+esc(p.id)+'"><span class="row-ico">'+ico(patternGlyph(p))+'</span><span class="grow"><b>'+esc(p.name)+'</b><small>Связанных записей: '+count+extra+'</small></span>'+chev()+'</button>';
  }).join(""):'<div class="card empty"><b>Пока нет паттернов</b><span>Добавь повторяющийся сценарий сам или прими гипотезу после разбора записи.</span></div>';
  var toggle=rejected?'<button class="textbtn" type="button" data-act="toggle-rejected">'+(showRejected?"Скрыть отклонённые":"Показать отклонённые ("+rejected+")")+'</button>':"";
  return '<div class="page-head"><h1>Мои паттерны</h1><p class="lead">Повторяющиеся сценарии мышления и поведения.</p></div><button class="btn soft full" type="button" data-act="add-pattern">+ Добавить паттерн</button><div class="stack" style="margin-top:12px">'+cards+'</div>'+toggle;
@@ -705,33 +732,33 @@ function library(){
  if(libraryTab==="plan"){
   body=personal.length?personal.map(function(p){
    var done=p.status==="completed";
-   return '<button class="card row" type="button" data-personal-practice="'+esc(p.id)+'"><span class="row-ico '+(done?"done":"")+'">'+(done?ico("check"):ico("layers"))+'</span><span class="grow"><b>'+esc(p.title)+'</b><small>'+esc(practiceMeta(p)||"В плане")+'</small></span><span class="chevron">›</span></button>';
+   return '<button class="card row" type="button" data-personal-practice="'+esc(p.id)+'"><span class="row-ico '+(done?"done":"")+'">'+(done?ico("check"):ico("layers"))+'</span><span class="grow"><b>'+esc(p.title)+'</b><small>'+esc(practiceMeta(p)||"В плане")+'</small></span>'+chev()+'</button>';
   }).join(""):'<div class="card empty"><b>В плане пока пусто</b><span>Персональный шаг может появиться после разбора записи или итогов дня. Базовые упражнения — во вкладке «Все практики».</span></div>';
  }else{
   body=practices.map(function(p,i){
    var done=(state.practiceHistory||[]).some(function(x){return x.practiceId===i&&dayKey(x.completedAt)===localDayKey();});
-   return '<button class="card row" type="button" data-practice="'+i+'"><span class="row-ico '+(done?"done":"")+'">'+(done?ico("check"):ico("layers"))+'</span><span class="grow"><b>'+esc(p.title)+(done?" · выполнено":"")+'</b><small>'+esc(p.time)+'</small></span><span class="chevron">›</span></button>';
+   return '<button class="card row" type="button" data-practice="'+i+'"><span class="row-ico '+(done?"done":"")+'">'+(done?ico("check"):ico(p.icon))+'</span><span class="grow"><b>'+esc(p.title)+(done?" · выполнено":"")+'</b><small>'+esc(p.time)+'</small></span>'+chev()+'</button>';
   }).join("");
  }
  return '<div class="page-head"><h1>Практики</h1><p class="lead">Небольшие упражнения, которые помогают работать с мыслями и эмоциями.</p></div>'+seg+'<div style="margin-top:6px">'+body+'</div>';
 }
-function normalizeProgressPeriod(value){if(value==="month")return "month";if(value==="quarter"||value==="year")return "quarter";return "week";}
-function periodDays(){return progressPeriod==="month"?30:progressPeriod==="quarter"?90:7;}
+function normalizeProgressPeriod(value){if(value==="month")return "month";if(value==="year"||value==="quarter")return "year";return "week";}
+function periodDays(){return progressPeriod==="month"?30:progressPeriod==="year"?365:7;}
 function periodStart(){var d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-(periodDays()-1));return d;}
 function inPeriod(value){var d=new Date(value);return !isNaN(d.getTime())&&d>=periodStart()&&d<=new Date();}
 function confidenceChart(){
  var items=(state.entries||[]).filter(function(e){return inPeriod(e.date)&&e.before!=null&&e.before!==""&&!isNaN(Number(e.before));}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
  if(!items.length)return '<p class="chart-note">Оценок уверенности за этот период пока нет. Они появляются на шаге «насколько веришь этой мысли».</p>';
- var W=320,H=168,left=36,right=10,top=12,bottom=28,iw=W-left-right,ih=H-top-bottom;
+ var W=340,H=210,left=42,right=28,top=16,bottom=36,iw=W-left-right,ih=H-top-bottom;
  function x(i){return items.length===1?left+iw/2:left+i*(iw/(items.length-1));}
  function y(v){return top+ih*(1-Math.max(0,Math.min(100,Number(v)))/100);}
  var line=items.map(function(e,i){return x(i)+","+y(e.before);}).join(" ");
  var area=items.length===1?"":("M"+x(0)+" "+y(items[0].before)+" L"+items.map(function(e,i){return x(i)+" "+y(e.before);}).join(" L")+" L"+x(items.length-1)+" "+(top+ih)+" L"+x(0)+" "+(top+ih)+" Z");
- var grids=[100,75,50,25].map(function(v){var yy=y(v);return '<line x1="'+left+'" y1="'+yy+'" x2="'+(W-right)+'" y2="'+yy+'" stroke="#ece7df"/><text x="4" y="'+(yy+3)+'" font-size="9" fill="#9a958c">'+v+'</text>';}).join("");
+ var grids=[100,75,50,25,0].map(function(v){var yy=y(v);return '<line x1="'+left+'" y1="'+yy+'" x2="'+(W-right)+'" y2="'+yy+'" stroke="#e6e0d6"/><text x="2" y="'+(yy+4)+'" font-size="11" fill="#8a857c">'+v+'</text>';}).join("");
  var labelEvery=items.length>8?Math.ceil(items.length/4):1;
  var dots=items.map(function(e,i){
   var show=i===0||i===items.length-1||i%labelEvery===0;
-  return '<circle cx="'+x(i)+'" cy="'+y(e.before)+'" r="3.5" fill="#fff" stroke="#31443d" stroke-width="2"/>'+(show?'<text x="'+x(i)+'" y="'+(H-8)+'" font-size="8" text-anchor="middle" fill="#9a958c">'+esc(dateLabel(e.date))+'</text>':"");
+  return '<circle cx="'+x(i)+'" cy="'+y(e.before)+'" r="4.5" fill="#fff" stroke="#31443d" stroke-width="2.4"/>'+(show?'<text x="'+x(i)+'" y="'+(H-10)+'" font-size="11" text-anchor="middle" fill="#8a857c">'+esc(dateLabel(e.date))+'</text>':"");
  }).join("");
  return '<div class="chart"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Уверенность в мыслях за период"><defs><linearGradient id="confArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b7c9b4" stop-opacity=".9"/><stop offset="1" stop-color="#b7c9b4" stop-opacity=".05"/></linearGradient></defs>'+grids+(area?'<path d="'+area+'" fill="url(#confArea)"/>':"")+'<polyline points="'+line+'" fill="none" stroke="#31443d" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>'+dots+'</svg></div>';
 }
@@ -748,7 +775,7 @@ function progress(){
  var avgLine="";
  if(avg(before)!=null||avg(after)!=null)avgLine='<p class="chart-note">В среднем до разбора '+(avg(before)==null?"—":avg(before)+"%")+' · после '+(avg(after)==null?"—":avg(after)+"%")+'.</p>';
  var historyBtn=(state.practiceHistory||[]).length?'<button class="textbtn" type="button" id="show-practice-history">История выполненных практик</button>':"";
- return '<div class="page-head"><h1>Прогресс</h1><p class="lead">Твоя история изменений.</p></div><div class="seg"><button type="button" data-progress-period="week" class="'+(progressPeriod==="week"?"active":"")+'">Неделя</button><button type="button" data-progress-period="month" class="'+(progressPeriod==="month"?"active":"")+'">Месяц</button><button type="button" data-progress-period="quarter" class="'+(progressPeriod==="quarter"?"active":"")+'">3 месяца</button></div>'+
+ return '<div class="page-head"><h1>Прогресс</h1><p class="lead">Твоя история изменений.</p></div><div class="seg"><button type="button" data-progress-period="week" class="'+(progressPeriod==="week"?"active":"")+'">Неделя</button><button type="button" data-progress-period="month" class="'+(progressPeriod==="month"?"active":"")+'">Месяц</button><button type="button" data-progress-period="year" class="'+(progressPeriod==="year"?"active":"")+'">Год</button></div>'+
  '<div class="card stats3" style="margin-top:14px"><div><strong>'+entries.length+'</strong><span>'+plural(entries.length,"запись","записи","записей")+'</span></div><div><strong>'+practicesDone.length+'</strong><span>'+plural(practicesDone.length,"практика","практики","практик")+'</span></div><div><strong>'+Object.keys(days).length+'</strong><span>'+plural(Object.keys(days).length,"день активности","дня активности","дней активности")+'</span></div></div>'+
  '<section class="card chart-card" style="margin-top:12px"><h2>Уверенность в мыслях</h2>'+confidenceChart()+avgLine+'</section>'+historyBtn+'<p class="chart-note">Цифры считаются по твоим записям и практикам. Это не оценка состояния и не диагноз.</p>';
 }
@@ -795,7 +822,7 @@ function directionCards(view){
  if(view.mode!=="previous"){
   var pattern=topPattern();
   if(pattern){
-   html+='<button class="card row" type="button" data-open-pattern="'+esc(pattern.id)+'"><span class="row-ico">'+ico(patternGlyph(pattern))+'</span><span class="grow"><b>Повторяющийся паттерн</b><small>'+esc(pattern.name)+'</small></span><span class="chevron">›</span></button>';
+   html+='<button class="card row" type="button" data-open-pattern="'+esc(pattern.id)+'"><span class="row-ico">'+ico(patternGlyph(pattern))+'</span><span class="grow"><b>Повторяющийся паттерн</b><small>'+esc(pattern.name)+'</small></span>'+chev()+'</button>';
   }
  }
  (view.practices||[]).forEach(function(item,index){
@@ -803,7 +830,7 @@ function directionCards(view){
  });
  if(view.mode!=="previous"&&!(view.practices||[]).length){
   var active=(state.personalPractices||[]).filter(function(p){return p.status==="active"||p.status==="skipped";})[0];
-  if(active)html+='<button class="card row" type="button" data-go="library"><span class="row-ico">'+ico("layers")+'</span><span class="grow"><b>В плане</b><small>'+esc(active.title)+'</small></span><span class="chevron">›</span></button>';
+  if(active)html+='<button class="card row" type="button" data-go="library"><span class="row-ico">'+ico("layers")+'</span><span class="grow"><b>В плане</b><small>'+esc(active.title)+'</small></span>'+chev()+'</button>';
  }
  return html;
 }
@@ -815,7 +842,7 @@ function subscription(){
  var usage=premium.active?('Сегодня использовано '+(aiUsage.used||0)+' из '+(aiUsage.limit||5)+' разборов записей.'):'Разбор отдельной записи — в Premium. Итоги дня по-прежнему один раз в сутки на любом тарифе.';
  var trial=premium.trial_used?"":'<button class="textbtn" type="button" data-act="start-trial" style="color:#f4f1ea">7 дней бесплатно, без карты</button>';
  var plans=PLANS.map(function(plan){return '<a class="plan" href="'+plan.href+'" target="_blank" rel="noopener"><b>'+plan.title+'</b><span>'+plan.text+'</span></a>';}).join("");
- return '<section class="premium"><div class="premium-screen"><h1>Premium</h1><p class="lead">Персональный аналитик и расширенные возможности.</p>'+status+'<ul class="check-list"><li><span class="check-bullet">'+ico("check")+'</span>Анализ записей и истории</li><li><span class="check-bullet">'+ico("check")+'</span>Выявление повторяющихся паттернов</li><li><span class="check-bullet">'+ico("check")+'</span>Персональные рекомендации</li><li><span class="check-bullet">'+ico("check")+'</span>До 5 разборов записей в день</li></ul><a class="btn light full" href="#plans">От 490 ₽ / месяц →</a></div><div class="premium-plans" id="plans">'+trial+plans+'<p class="fine">'+usage+' Оплата проходит на Tribute. Автопродления нет. Дневник, паттерны, практики и одна сводка в сутки остаются и на бесплатном тарифе.</p></div></section>';
+ return '<section class="premium"><div class="premium-glow" aria-hidden="true"></div><div class="premium-screen"><h1>Premium</h1><p class="lead">Персональный аналитик и расширенные возможности.</p>'+status+'<ul class="check-list"><li><span class="check-bullet">'+ico("check")+'</span>Анализ записей и истории</li><li><span class="check-bullet">'+ico("check")+'</span>Выявление повторяющихся паттернов</li><li><span class="check-bullet">'+ico("check")+'</span>Персональные рекомендации</li><li><span class="check-bullet">'+ico("check")+'</span>До 5 разборов записей в день</li></ul><div class="premium-buy"><a class="btn light full" href="#plans">От 392 ₽ / месяц →</a><p class="price-note">Это цена месяца при оплате года сразу: 4 704 ₽ за год. Месяц отдельно — 490 ₽.</p></div></div><div class="premium-plans" id="plans">'+trial+plans+'<p class="fine">'+usage+' Оплата проходит на Tribute. Суммы списания те же: 490 ₽, 1 323 ₽ и 4 704 ₽. Автопродления нет.</p></div></section>';
 }
 var practices=[
  {icon:"layers",title:"Поймать автоматическую мысль",time:"5–7 минут",text:"Вспомни конкретную ситуацию. Запиши, что произошло, какие слова возникли в голове и какую эмоцию ты почувствовал. Не пытайся пока менять мысль — сначала просто заметь её."},
