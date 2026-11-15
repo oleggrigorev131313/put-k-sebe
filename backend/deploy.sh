@@ -13,6 +13,7 @@ SECRET_NAME="put-k-sebe-telegram-bot"
 ADMIN_SECRET_NAME="put-k-sebe-admin-password"
 TRIBUTE_SECRET_NAME="put-k-sebe-tribute-api-key"
 DEEPSEEK_SECRET_NAME="put-k-sebe-deepseek-api-key"
+IMEADS_SECRET_NAME="put-k-sebe-imeads-secret-key"
 FUNCTION_NAME="put-k-sebe-api"
 EXPECTED_FUNCTION_ID="d4etj8737dl7lmfb36d0"
 GATEWAY_NAME="put-k-sebe-gateway"
@@ -234,6 +235,20 @@ DEEPSEEK_VERSION_ID="$(printf '%s' "$DEEPSEEK_SECRET_INFO" | python3 -c 'import 
 if ! yc lockbox secret list-access-bindings "$DEEPSEEK_SECRET_ID" 2>/dev/null | grep -q "$SA_ID"; then
   yc lockbox secret add-access-binding --id "$DEEPSEEK_SECRET_ID" --role lockbox.payloadViewer --service-account-id "$SA_ID"
 fi
+
+IMEADS_SECRET_ID="$(printf '%s' "$DEEPSEEK_SECRETS_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d if isinstance(d,list) else d.get("secrets",[]); print(next((x["id"] for x in a if x.get("name")=="put-k-sebe-imeads-secret-key"), ""))')"
+IMEADS_SECRET_ARGS=()
+if [[ -n "$IMEADS_SECRET_ID" ]]; then
+  IMEADS_SECRET_INFO="$(yc lockbox secret get "$IMEADS_SECRET_ID" --format json)"
+  IMEADS_VERSION_ID="$(printf '%s' "$IMEADS_SECRET_INFO" | python3 -c 'import json,sys; print(json.load(sys.stdin)["current_version"]["id"])')"
+  if ! yc lockbox secret list-access-bindings "$IMEADS_SECRET_ID" 2>/dev/null | grep -q "$SA_ID"; then
+    yc lockbox secret add-access-binding --id "$IMEADS_SECRET_ID" --role lockbox.payloadViewer --service-account-id "$SA_ID"
+  fi
+  IMEADS_SECRET_ARGS=(--secret "environment-variable=IMEADS_SECRET_KEY,id=$IMEADS_SECRET_ID,version-id=$IMEADS_VERSION_ID,key=secret_key")
+  echo "    Lockbox secret IMEADS подключён."
+else
+  echo "    IMEADS: secret $IMEADS_SECRET_NAME не найден — postback отключён (можно добавить позже)."
+fi
 echo "    API-ключ DeepSeek подключён через Lockbox."
 
 echo "[5/8] Создаю приватный бакет для ZIP-файла функции..."
@@ -330,6 +345,7 @@ VERSION_JSON="$(yc serverless function version create \
   --secret "environment-variable=ADMIN_PASSWORD,id=$ADMIN_SECRET_ID,version-id=$ADMIN_VERSION_ID,key=admin_password" \
   --secret "environment-variable=TRIBUTE_API_KEY,id=$TRIBUTE_SECRET_ID,version-id=$TRIBUTE_VERSION_ID,key=api_key" \
   --secret "environment-variable=DEEPSEEK_API_KEY,id=$DEEPSEEK_SECRET_ID,version-id=$DEEPSEEK_VERSION_ID,key=api_key" \
+  "${IMEADS_SECRET_ARGS[@]}" \
   --description "Put-k-sebe API deployment" \
   --format json)" || {
   echo "yc serverless function version create завершился с ошибкой. Сообщение yc выведено выше." >&2
