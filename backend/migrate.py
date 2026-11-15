@@ -25,6 +25,7 @@ TABLES = (
     "user_consents",
     "daily_summary_claims",
     "ai_usage_events",
+    "imeads_attribution",
 )
 
 # Same columns and primary keys as the application reads and writes.
@@ -110,6 +111,15 @@ DDL = {
             request_key Utf8 NOT NULL,
             created_at Utf8 NOT NULL,
             PRIMARY KEY (event_id)
+        );
+    """,
+    "imeads_attribution": """
+        CREATE TABLE imeads_attribution (
+            user_id Utf8 NOT NULL,
+            click_id Utf8 NOT NULL,
+            captured_at Utf8 NOT NULL,
+            sent_json Utf8 NOT NULL,
+            PRIMARY KEY (user_id)
         );
     """,
 }

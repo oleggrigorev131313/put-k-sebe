@@ -553,9 +553,11 @@ function trackEvent(name,metadata){
 function registerAdminProfile(){
  if(!API_BASE||!tg||!tg.initData)return;
  var u=tg.initDataUnsafe&&tg.initDataUnsafe.user||{};
+ var sp=(tg.initDataUnsafe&&(tg.initDataUnsafe.start_param||tg.initDataUnsafe.startapp||""))||"";
  fetch(API_BASE+"/v1/profile",{method:"POST",headers:apiHeaders(),body:JSON.stringify({
   user:{username:u.username||"",first_name:u.first_name||"",last_name:u.last_name||""},
-  timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"
+  timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC",
+  start_param:sp
  })}).catch(function(){});
 }
 function trackInitialSession(){

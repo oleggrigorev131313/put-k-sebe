@@ -26,6 +26,9 @@ TRIBUTE_API_KEY = os.environ.get("TRIBUTE_API_KEY", "")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_MODEL = "deepseek-flash"
 TRIBUTE_PRODUCTS = {"177388": 30, "177544": 90, "177545": 365}
+TRIBUTE_PRODUCT_AMOUNT_RUB = {"177388": 490, "177544": 1323, "177545": 4704}
+IMEADS_SECRET_KEY = os.environ.get("IMEADS_SECRET_KEY", "").strip()
+IMEADS_POSTBACK_URL = "https://ad.api.imem.me/postback"
 
 _driver = None
 _pool = None
@@ -40,6 +43,7 @@ TABLES = (
     "ai_analyses",
     "daily_summary_claims",
     "ai_usage_events",
+    "imeads_attribution",
 )
 
 _MISSING_TABLE_MARKERS = (
@@ -165,6 +169,181 @@ def _delete_ai_history(user_id):
                 entry.pop("analysis", None)
         state["chat"] = []
         _write_state(user_id, state)
+
+def _parse_imeads_click_id(raw):
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if not value:
+        return None
+    lowered = value.casefold()
+    for prefix in ("imeads__", "imeads_"):
+        if not lowered.startswith(prefix):
+            continue
+        click_id = value[len(prefix) :].strip()
+        if not click_id or len(click_id) > 128 or " " in click_id or "\t" in click_id:
+            continue
+        if prefix == "imeads_" and lowered.startswith("imeads__"):
+            continue
+        return click_id
+    return None
+
+
+def _imeads_read(user_id):
+    result = _execute(
+        """
+        DECLARE $user_id AS Utf8;
+        SELECT click_id, sent_json FROM imeads_attribution WHERE user_id = $user_id;
+        """,
+        parameters={"$user_id": user_id},
+        table="imeads_attribution",
+    )
+    for result_set in result:
+        for row in result_set.rows:
+            try:
+                flags = json.loads(str(row.sent_json or "{}"))
+                if not isinstance(flags, dict):
+                    flags = {}
+            except (json.JSONDecodeError, TypeError, ValueError):
+                flags = {}
+            return {"click_id": str(row.click_id), "flags": flags}
+    return None
+
+
+def _imeads_persist_flags(user_id, click_id, captured_at, flags):
+    _execute(
+        """
+        DECLARE $user_id AS Utf8;
+        DECLARE $click_id AS Utf8;
+        DECLARE $captured AS Utf8;
+        DECLARE $sent AS Utf8;
+        UPSERT INTO imeads_attribution (user_id, click_id, captured_at, sent_json)
+        VALUES ($user_id, $click_id, $captured, $sent);
+        """,
+        parameters={
+            "$user_id": user_id,
+            "$click_id": click_id,
+            "$captured": captured_at,
+            "$sent": json.dumps(flags, ensure_ascii=False, separators=(",", ":")),
+        },
+        table="imeads_attribution",
+    )
+
+
+def _imeads_fire_postback(click_id, event, value=None, currency=None):
+    if not IMEADS_SECRET_KEY or not click_id:
+        return
+    import urllib.parse
+    import urllib.request
+
+    params = {"key": IMEADS_SECRET_KEY, "click_id": click_id, "event": event}
+    if value is not None:
+        params["value"] = str(int(value))
+    if currency:
+        params["currency"] = str(currency)[:8]
+    url = IMEADS_POSTBACK_URL + "?" + urllib.parse.urlencode(params)
+    try:
+        urllib.request.urlopen(urllib.request.Request(url, method="GET"), timeout=3)
+    except Exception:
+        pass
+
+
+def _imeads_send_once(user_id, event, value=None, currency=None):
+    if not IMEADS_SECRET_KEY:
+        return
+    try:
+        row = _imeads_read(user_id)
+    except TableMissing:
+        return
+    if not row or not row.get("click_id"):
+        return
+    flag_key = event if value is None else f"{event}:{int(value)}:{currency or ''}"
+    flags = dict(row.get("flags") or {})
+    if flags.get(flag_key):
+        return
+    _imeads_fire_postback(row["click_id"], event, value, currency)
+    flags[flag_key] = True
+    try:
+        attrib = _execute(
+            """
+            DECLARE $user_id AS Utf8;
+            SELECT click_id, captured_at FROM imeads_attribution WHERE user_id = $user_id;
+            """,
+            parameters={"$user_id": user_id},
+            table="imeads_attribution",
+        )
+        captured = None
+        click_id = row["click_id"]
+        for rs in attrib:
+            for att in rs.rows:
+                captured = str(att.captured_at)
+                click_id = str(att.click_id)
+        if not captured:
+            from datetime import datetime, timezone
+
+            captured = datetime.now(timezone.utc).isoformat()
+        _imeads_persist_flags(user_id, click_id, captured, flags)
+    except TableMissing:
+        return
+    except Exception:
+        pass
+
+
+def _imeads_capture_click_id(user_id, raw):
+    click_id = _parse_imeads_click_id(raw)
+    if not click_id:
+        return None
+    try:
+        existing = _imeads_read(user_id)
+    except TableMissing:
+        return None
+    if existing:
+        return existing["click_id"]
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    flags = {"new_user": True}
+    try:
+        _execute(
+            """
+            DECLARE $user_id AS Utf8;
+            DECLARE $click_id AS Utf8;
+            DECLARE $captured AS Utf8;
+            DECLARE $sent AS Utf8;
+            INSERT INTO imeads_attribution (user_id, click_id, captured_at, sent_json)
+            VALUES ($user_id, $click_id, $captured, $sent);
+            """,
+            parameters={
+                "$user_id": user_id,
+                "$click_id": click_id,
+                "$captured": now,
+                "$sent": json.dumps(flags, ensure_ascii=False, separators=(",", ":")),
+            },
+            table="imeads_attribution",
+        )
+    except Exception:
+        existing = _imeads_read(user_id)
+        if existing:
+            return existing["click_id"]
+        return None
+    _imeads_fire_postback(click_id, "new_user")
+    return click_id
+
+
+def _imeads_check_signup(user_id):
+    try:
+        consents = _get_user_consents(user_id)
+        if not consents.get("ai_processing") or not consents.get("updated_at"):
+            return
+        state = _read_state(user_id) or {}
+        if not (state.get("entries") or []):
+            return
+        _imeads_send_once(user_id, "signup")
+    except TableMissing:
+        return
+    except Exception:
+        pass
+
 
 def _upsert_profile(user_id, profile, timezone_name="UTC"):
     from datetime import datetime, timezone
@@ -540,6 +719,12 @@ def _handle_tribute_webhook(raw_body, signature):
                     "$purchased_at": purchased_at,
                 },
             )
+            amount = TRIBUTE_PRODUCT_AMOUNT_RUB.get(product_id)
+            if amount:
+                try:
+                    _imeads_send_once(user_id, "purchase", amount, "RUB")
+                except Exception:
+                    pass
             return _json_response(200, {"ok": True})
 
         if name == "digital_product_refunded":
@@ -1566,6 +1751,16 @@ def _handle_telegram_webhook(headers, body):
         if isinstance(chat_id, bool) or not isinstance(chat_id, int):
             LOG.error("Telegram /start ignored: chat id missing")
             return _webhook_response({"ok": True})
+        from_user = message.get("from") if isinstance(message.get("from"), dict) else {}
+        uid = from_user.get("id")
+        text = message.get("text") if isinstance(message.get("text"), str) else ""
+        parts = text.strip().split(None, 1)
+        payload = parts[1] if len(parts) > 1 else ""
+        if isinstance(uid, int) and payload:
+            try:
+                _imeads_capture_click_id(str(uid), payload)
+            except Exception:
+                pass
         LOG.info("Telegram /start inline reply")
         return _webhook_response(_start_webhook_method(chat_id))
     except Exception as exc:
@@ -1684,12 +1879,23 @@ def handler(event, context):
             saved = _save_user_consents(user_id, processing, history)
             if previous["ai_history_storage"] and not history:
                 _delete_ai_history(user_id)
+            if processing:
+                try:
+                    _imeads_check_signup(user_id)
+                except Exception:
+                    pass
             return _json_response(200, {"ok": True, "consents": saved})
         if path == "/v1/profile" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             try:
                 payload = json.loads(body or "{}")
                 _upsert_profile(user_id,payload.get("user") or {},str(payload.get("timezone") or "UTC"))
+                start_param = payload.get("start_param") or payload.get("startParam")
+                if start_param:
+                    try:
+                        _imeads_capture_click_id(user_id, start_param)
+                    except Exception:
+                        pass
                 return _json_response(200,{"ok":True})
             except (json.JSONDecodeError,TypeError,ValueError):
                 return _json_response(400,{"error":"invalid_profile"})
@@ -1759,6 +1965,29 @@ def handler(event, context):
                 return _json_response(400, {"error": "invalid_request"})
             timezone_name = str(payload.get("timezone") or "UTC")
             return _deepseek_analyze_entry(user_id, entry_id, timezone_name)
+
+        if path == "/v1/admin/imeads/test" and method == "POST":
+            if not ADMIN_PASSWORD or not hmac.compare_digest(headers.get("x-admin-password", ""), ADMIN_PASSWORD):
+                return _json_response(401, {"error": "unauthorized"})
+            if not IMEADS_SECRET_KEY:
+                return _json_response(503, {"error": "imeads_not_configured"})
+            try:
+                payload = json.loads(body or "{}")
+            except json.JSONDecodeError:
+                payload = {}
+            click_id = _parse_imeads_click_id(payload.get("click_id") or payload.get("start_param"))
+            target_id = str(payload.get("user_id") or "").strip()
+            if not click_id and target_id.isdigit():
+                try:
+                    row = _imeads_read(target_id)
+                    if row:
+                        click_id = row["click_id"]
+                except TableMissing:
+                    return _json_response(503, {"error": "imeads_table_missing"})
+            if not click_id:
+                return _json_response(400, {"error": "click_id_required"})
+            _imeads_fire_postback(click_id, "test")
+            return _json_response(200, {"ok": True, "sent": "test"})
 
         if path == "/v1/events" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
@@ -1921,6 +2150,10 @@ def handler(event, context):
             if previous is None or not previous.get("onboarding"):
                 if state.get("onboarding") and not state["onboarding"].get("skipped"):
                     _record_event(user_id, "onboarding_completed")
+            try:
+                _imeads_check_signup(user_id)
+            except Exception:
+                pass
 
             return _json_response(200, {"ok": True, "saved": True})
 
