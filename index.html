@@ -220,6 +220,104 @@ body.has-tabs .tabbar{display:grid}
   .shell{min-height:100vh;box-shadow:0 0 0 1px rgba(255,255,255,.4)}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* PERESMOTR editorial visual system */
+:root{
+ --bg:#f5f1e9;--bg-2:#ece6dc;--card:#fbf9f4;--ink:#202a29;
+ --muted:#858b83;--soft:#59645e;--line:#e1dbd0;
+ --pine:#263b36;--pine-2:#1f302c;--cream:#f5f1e8;--sage:#d1dbd0;
+ --shadow:0 12px 32px rgba(37,48,43,.055);--radius:24px;
+ --font:"Onest",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+body{background:var(--bg);font-size:16px}
+.shell{width:min(100%,520px);background:linear-gradient(180deg,#f7f4ed 0%,#f1ede5 100%)}
+main{padding:12px 22px 34px}
+h1,.h1{font-size:34px;letter-spacing:-1.1px;line-height:1.08;font-weight:700}
+h2{font-size:21px;letter-spacing:-.45px;font-weight:650}
+.lead{font-size:16px;line-height:1.55;color:#727b73}
+.card{background:rgba(255,253,248,.9);border:1px solid rgba(219,213,202,.8);border-radius:24px;box-shadow:var(--shadow);padding:20px}
+.page-head{margin:12px 0 20px}
+.section-label{font-size:20px;margin:26px 2px 12px}
+.btn{min-height:54px;border-radius:17px;font-size:15px;padding:14px 20px;font-weight:650}
+.btn.primary{background:linear-gradient(135deg,#405650,#263b36);box-shadow:0 9px 22px rgba(38,59,54,.13)}
+.btn.soft{background:#eae6dd;color:var(--pine);box-shadow:none}
+.topbar{min-height:64px;padding:10px 18px 0}
+.brand-mini{font-size:12px;letter-spacing:.28em;font-weight:600}
+.brand-mini .logo-mark{width:30px}
+.avatar,.round{width:42px;height:42px;border:1px solid #e2dcd1;box-shadow:0 4px 14px rgba(35,45,39,.05)}
+.tabbar{width:min(100%,520px);background:rgba(247,244,237,.94);border-top:1px solid #e3ddd2;padding:9px 8px calc(9px + env(safe-area-inset-bottom))}
+.tabbar button{font-size:10px;gap:4px;color:#92988f}
+.tabbar button.active{color:var(--pine)}
+.tabbar .ico{width:23px;height:23px}
+.welcome{background:linear-gradient(180deg,#f5f1e9 0%,#e8e5dc 100%);padding:18px 26px calc(22px + env(safe-area-inset-bottom))}
+.welcome-mid{padding-top:4vh}
+.welcome-logo{width:min(194px,54vw)}
+.wordmark{font-size:24px;letter-spacing:.38em;color:#202a29}
+.slogan{font-size:11px;letter-spacing:.34em;color:#69736d}
+.welcome-copy{font-size:16px;color:#68736c;line-height:1.55}
+.mountains{height:62%;opacity:.9}
+.welcome-actions{padding:20px 4px 8px}
+.consent .h1{font-size:30px}
+.info-card{padding:16px;border-radius:20px}
+.info-ico{background:#eeece3;color:var(--pine)}
+.info-card b{font-size:15px}
+.info-card p{font-size:13px;color:#778078}
+.consent-actions .fine{font-size:12px}
+.home-intro{padding:20px;border-radius:28px;background:radial-gradient(ellipse at 100% 0%,rgba(206,215,202,.55),transparent 58%),linear-gradient(135deg,#fdfbf6,#edece3);border:1px solid #e3ddd2;box-shadow:var(--shadow)}
+.eyebrow{font-size:10px;letter-spacing:.19em;color:#879087;font-weight:700;display:block}
+.greet{font-size:30px;margin:8px 0 0}
+.home-intro .lead{margin:9px 0 18px;max-width:390px}
+.home-intro .cta{width:100%;min-height:56px}
+.home-today,.home-themes,.home-path,.home-insights{margin-top:24px}
+.section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:0 1px 12px}
+.section-heading h2{margin:5px 0 0;font-size:20px}
+.date-stamp{font-size:12px;color:#8b928a;padding-bottom:3px}
+.daily-card{display:flex;align-items:center;gap:14px;width:100%;padding:17px;border:1px solid #e4ded4;border-radius:22px;background:linear-gradient(130deg,#fcfaf5,#eeece3);box-shadow:var(--shadow);text-align:left;color:var(--ink)}
+.daily-symbol{width:48px;height:48px;border-radius:17px;background:#e5e9df;color:var(--pine);display:grid;place-items:center;flex:none}
+.daily-symbol .ico{width:25px;height:25px}
+.daily-copy{flex:1;min-width:0}
+.daily-copy small,.latest-kicker{display:block;font-size:9px;letter-spacing:.15em;color:#879087;font-weight:700;margin-bottom:5px}
+.daily-copy b{display:block;font-size:17px}
+.daily-copy em{display:block;font-style:normal;color:#7b837a;font-size:12px;line-height:1.4;margin-top:3px}
+.theme-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.theme-tile{min-width:0;display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:13px 11px;border-radius:19px;border:1px solid #e4ded4;background:rgba(255,253,248,.9);box-shadow:0 7px 20px rgba(35,45,39,.035);color:var(--ink)}
+.theme-mark{width:34px;height:34px;border-radius:12px;background:#e9ece4;color:#4a6258;display:grid;place-items:center;margin-bottom:10px}
+.theme-mark .ico{width:20px;height:20px}
+.theme-content b{font-size:13px;display:block;line-height:1.25}
+.theme-content small{display:block;font-size:10px;color:#899087;margin-top:4px}
+.theme-count{font-size:21px;font-weight:700;margin-top:8px;color:#34473f}
+.path-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.path-stat{background:rgba(255,253,248,.9);border:1px solid #e4ded4;border-radius:19px;padding:15px 13px;box-shadow:0 7px 20px rgba(35,45,39,.035)}
+.path-stat strong{font-size:27px;letter-spacing:-1px;display:block}
+.path-stat span{font-size:11px;color:#838b82;display:block;line-height:1.3;margin-top:5px}
+.latest-entry{width:100%;position:relative;display:flex;flex-direction:column;gap:6px;text-align:left;padding:17px 46px 17px 18px;border:1px solid #e4ded4;border-radius:21px;background:linear-gradient(130deg,#fbf9f3,#eeece3);color:var(--ink);box-shadow:var(--shadow)}
+.latest-entry b{font-size:16px;line-height:1.3}
+.latest-entry small{font-size:12px;color:#7c857c;line-height:1.45}
+.latest-arrow{position:absolute;right:16px;top:50%;transform:translateY(-50%);color:#758078}
+.empty-latest{padding-right:18px}
+.insight-row{display:flex;align-items:center;gap:12px;width:100%;padding:13px 12px;margin-top:9px;text-align:left;border:1px solid #e5dfd5;border-radius:19px;background:rgba(255,253,248,.9);color:var(--ink)}
+.insight-icon{width:42px;height:42px;border-radius:14px;background:#e9ece4;color:#465a52;display:grid;place-items:center;flex:none}
+.insight-row>span:nth-child(2){flex:1;min-width:0}
+.insight-row small{display:block;font-size:9px;letter-spacing:.12em;color:#8a9289;font-weight:700;margin-bottom:4px}
+.insight-row b{font-size:14px;display:block;line-height:1.3}
+.insight-row em{font-size:11px;color:#8a9289;font-style:normal;display:block;margin-top:3px}
+.entry-card{padding:18px 19px;border:1px solid #e4ded4;border-radius:22px;background:rgba(255,253,248,.92)}
+.entry-card h3{font-size:17px;letter-spacing:-.25px}
+.chip{background:#ebe7de;box-shadow:none;font-size:12px;padding:9px 13px;color:#747e75}
+.chip.active{background:var(--pine);color:#f7f3eb}
+.field-card{border:1px solid #e3ddd3}
+.input,.area,.select{border-color:#e1dbd0;border-radius:17px;background:#fffdfa}
+.hintbox{background:#eeece5;color:#778078}
+.row{border:1px solid #e4ded4;margin-top:10px;border-radius:20px;padding:15px;background:rgba(255,253,248,.9)}
+.row-ico{background:#e8ebe3;color:#4d6257}
+.chart-card{border:1px solid #e4ded4}
+.seg{background:#e9e5dc}
+.seg button{font-size:13px;min-height:42px}
+.note{background:#efede6}
+.modal{background:#f5f1e9}
+@media(min-width:700px){body{background:#e7e0d4}.shell{box-shadow:0 0 0 1px rgba(255,255,255,.5)}}
+@media(max-width:370px){main{padding-left:16px;padding-right:16px}.theme-grid{gap:6px}.theme-tile{padding:11px 9px}.theme-content b{font-size:12px}.path-stat{padding:13px 10px}}
+
 </style>
 </head>
 <body>
@@ -641,15 +739,34 @@ function activityDays(list){
  (state.practiceHistory||[]).forEach(function(p){var k=dayKey(p.completedAt);if(k)days[k]=1;});
  return Object.keys(days).length;
 }
+function insightThemeCards(){
+ var entries=(state.entries||[]).slice();
+ var defs=[
+  {name:"Тревога",terms:["тревог","страх","беспоко"],glyph:"wave"},
+  {name:"Самооценка",terms:["лучше меня","ничтож","неудач","самооцен","сравни"],glyph:"sun"},
+  {name:"Отношения",terms:["отнош","молч","ответ","интерес"],glyph:"nodes"}
+ ];
+ return defs.map(function(t){
+  var count=entries.filter(function(e){var s=String((e.thought||"")+" "+(e.situation||"")+" "+(e.balanced||"")).toLowerCase();return t.terms.some(function(term){return s.indexOf(term)>=0;});}).length;
+  var label=count?count+" наблюдения":"Пока без записей";
+  return '<button type="button" class="theme-tile" data-theme-filter="'+esc(t.name)+'"><span class="theme-mark">'+ico(t.glyph)+'</span><span class="theme-content"><b>'+t.name+'</b><small>'+label+'</small></span><span class="theme-count">'+count+'</span></button>';
+ }).join("");
+}
 function home(){
- var n=state.entries.length,days=activityDays();
- var gate=summaryButtonState();
- var summaryText=gate.done?"Краткий разбор за сегодня уже готов.":"Краткий обзор, ключевые темы и возможный шаг.";
- var hello=first?("Привет, "+esc(first)+" 👋"):"Привет 👋";
- return '<section class="page-head"><h1 class="greet">'+hello+'</h1><p class="lead">Хороший момент, чтобы остановиться и посмотреть на происходящее чуть глубже.</p></section>'+
- '<button class="btn primary full cta" type="button" data-act="new"><span class="cta-label">'+ico("pencil")+'Записать мысль</span>'+ico("arrow")+'</button>'+
- '<h2 class="section-label">Твой путь</h2><div class="stat-grid"><div class="card stat"><span class="stat-ico">'+ico("doc")+'</span><strong>'+n+'</strong><span>'+plural(n,"запись","записи","записей")+'</span></div><div class="card stat"><span class="stat-ico">'+ico("cal")+'</span><strong>'+days+'</strong><span>'+plural(days,"день активности","дня активности","дней активности")+'</span></div></div>'+
- '<button class="card link-card" type="button" data-act="open-summary"><span class="stat-ico">'+ico("sun")+'</span><span class="grow"><b>Итоги дня</b><small>'+summaryText+'</small></span>'+chev()+'</button>';
+ var n=state.entries.length,days=activityDays(),gate=summaryButtonState();
+ var summaryText=gate.done?"Разбор за сегодня готов.":"Краткий обзор ключевых тем и возможного следующего шага.";
+ var hello=first?("Привет, "+esc(first)):"Добро пожаловать";
+ var latest=(state.entries||[]).slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);})[0];
+ var latestCard=latest?'<button class="latest-entry" type="button" data-entry="'+esc(latest.id)+'"><span class="latest-kicker">ПОСЛЕДНЕЕ НАБЛЮДЕНИЕ</span><b>'+esc(latest.thought||"Новая запись")+'</b><small>'+esc(latest.balanced||"Продолжи исследовать эту мысль")+'</small><span class="latest-arrow">'+ico("arrow")+'</span></button>':'<div class="latest-entry empty-latest"><span class="latest-kicker">ТВОЁ ПЕРВОЕ НАБЛЮДЕНИЕ</span><b>Здесь начинается более внимательный взгляд на себя.</b><small>Запиши ситуацию, мысль или чувство — без необходимости сразу что-то менять.</small></div>';
+ var pattern=topPattern();
+ var patternCard=pattern?'<button class="insight-row" type="button" data-open-pattern="'+esc(pattern.id)+'"><span class="insight-icon">'+ico(patternGlyph(pattern))+'</span><span><small>ВОЗМОЖНЫЙ ПОВТОРЯЮЩИЙСЯ СЦЕНАРИЙ</small><b>'+esc(pattern.name)+'</b><em>'+linkedCount(pattern)+' связанных записей</em></span>'+chev()+'</button>':'';
+ var active=(state.personalPractices||[]).filter(function(p){return p.status==="active"||p.status==="skipped";})[0];
+ var practiceCard=active?'<button class="insight-row" type="button" data-personal-practice="'+esc(active.id)+'"><span class="insight-icon">'+ico("layers")+'</span><span><small>НЕБОЛЬШОЙ ШАГ</small><b>'+esc(active.title)+'</b><em>'+esc(active.duration||"Персональная практика")+'</em></span>'+chev()+'</button>':'';
+ return '<section class="home-intro"><div class="eyebrow">ПРОСТРАНСТВО ОСОЗНАННОСТИ</div><h1 class="greet">'+hello+'</h1><p class="lead">Не нужно менять всю жизнь за один день. Достаточно чуть лучше понять себя и сделать следующий небольшой шаг.</p><button class="btn primary cta" type="button" data-act="new"><span class="cta-label">'+ico("pencil")+'Записать мысль</span>'+ico("arrow")+'</button></section>'+
+ '<section class="home-today"><div class="section-heading"><div><span class="eyebrow">СЕГОДНЯ</span><h2>Твой внутренний фокус</h2></div><span class="date-stamp">'+new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"short"})+'</span></div><button class="daily-card" type="button" data-act="open-summary"><span class="daily-symbol">'+ico("sun")+'</span><span class="daily-copy"><small>ЕЖЕДНЕВНЫЙ ОБЗОР · НЕЙРОСЕТИ</small><b>Итоги дня</b><em>'+summaryText+'</em></span>'+chev()+'</button></section>'+
+ '<section class="home-themes"><div class="section-heading"><div><span class="eyebrow">ЧТО ПОВТОРЯЕТСЯ</span><h2>Темы твоих наблюдений</h2></div><button class="textbtn" type="button" data-go="journal">Все записи</button></div><div class="theme-grid">'+insightThemeCards()+'</div></section>'+
+ '<section class="home-path"><div class="section-heading"><div><span class="eyebrow">ТВОЯ ДИНАМИКА</span><h2>Путь в цифрах</h2></div><button class="textbtn" type="button" data-go="progress">Подробнее</button></div><div class="path-stats"><div class="path-stat"><strong>'+n+'</strong><span>'+plural(n,"запись","записи","записей")+'</span></div><div class="path-stat"><strong>'+days+'</strong><span>'+plural(days,"день активности","дня активности","дней активности")+'</span></div><div class="path-stat"><strong>'+((state.practiceHistory||[]).length)+'</strong><span>практик выполнено</span></div></div></section>'+
+ '<section class="home-insights"><div class="section-heading"><div><span class="eyebrow">СЛЕДУЮЩИЙ ШАГ</span><h2>Что можно заметить</h2></div></div>'+latestCard+patternCard+practiceCard+'</section>';
 }
 function welcome(){
  return '<section class="welcome">'+mountains()+'<div class="welcome-mid"><img class="logo-mark welcome-logo" src="assets/logo-mark.png" alt=""><h1 class="wordmark">ПЕРЕСМОТР</h1><p class="slogan">УВИДЕТЬ ГЛУБЖЕ</p><p class="welcome-copy">Пространство для осознанного взгляда на себя, свои мысли и жизнь.</p><div class="pager"><i class="on"></i><i></i></div></div><div class="welcome-actions"><button class="btn primary full" type="button" data-act="start">Начать</button><button class="textbtn" type="button" data-act="have-account">У меня уже есть аккаунт</button></div></section>';
