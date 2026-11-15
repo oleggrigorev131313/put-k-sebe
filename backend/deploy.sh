@@ -624,6 +624,17 @@ paths:
         function_id: "$FUNCTION_ID"
         service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
+  /v1/admin/imeads/test:
+    post:
+      operationId: postAdminImeadsTest
+      responses:
+        "200":
+          description: Send iMe Ads test postback
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
   /v1/state:
     get:
       operationId: getState
