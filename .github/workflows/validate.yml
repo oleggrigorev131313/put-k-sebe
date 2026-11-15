@@ -42,8 +42,11 @@ jobs:
           Path("/tmp/put-k-sebe-inline.js").write_text("\n".join(scripts), encoding="utf-8")
           PY
           node --check /tmp/put-k-sebe-inline.js
+          node --check assets/theme-match.js
       - name: Check redesign structure
         run: python tests/frontend_redesign_check.py
+      - name: Check theme matching
+        run: node tests/theme_match.test.js
       - name: Simulate daily summary notifications
         run: |
           python -m py_compile backend/test_daily_summary_notify.py

@@ -11,6 +11,7 @@
 <link rel="apple-touch-icon" href="assets/logo-mark.png">
 <link rel="stylesheet" href="assets/fonts/fonts.css">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="assets/theme-match.js"></script>
 <style>
 :root{
   --bg:#f3eee6;
@@ -280,8 +281,11 @@ h2{font-size:21px;letter-spacing:-.45px;font-weight:650}
 .daily-copy small,.latest-kicker{display:block;font-size:9px;letter-spacing:.15em;color:#6f766f;font-weight:700;margin-bottom:5px}
 .daily-copy b{display:block;font-size:17px}
 .daily-copy em{display:block;font-style:normal;color:#626b63;font-size:12px;line-height:1.4;margin-top:3px}
-.theme-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
-.theme-tile{min-width:0;display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:13px 11px;border-radius:19px;border:1px solid #e4ded4;background:rgba(255,253,248,.9);box-shadow:0 7px 20px rgba(35,45,39,.035);color:var(--ink)}
+.theme-scroll{display:flex;gap:10px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scroll-padding-inline:2px;scrollbar-width:none;-ms-overflow-style:none;max-width:100%;min-width:0;padding:2px 2px 8px}
+.theme-scroll::-webkit-scrollbar{display:none}
+.home-themes{min-width:0;max-width:100%}
+.theme-hint{margin:0;color:#626b63;font-size:14px;line-height:1.45}
+.theme-tile{flex:0 0 72%;scroll-snap-align:start;scroll-snap-stop:always;min-width:0;display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:14px 13px;border-radius:19px;border:1px solid #e4ded4;background:rgba(255,253,248,.9);box-shadow:0 7px 20px rgba(35,45,39,.035);color:var(--ink)}
 .theme-mark{width:34px;height:34px;border-radius:12px;background:#e9ece4;color:#4a6258;display:grid;place-items:center;margin-bottom:10px}
 .theme-mark .ico{width:20px;height:20px}
 .theme-content{min-width:0;max-width:100%}
@@ -326,8 +330,8 @@ body[data-page="subscription"],body[data-page="subscription"] .shell{overflow-x:
 @media(min-width:700px){body{background:#e7e0d4}.shell{box-shadow:0 0 0 1px rgba(255,255,255,.5)}}
 @media(max-width:370px){
  main{padding-left:16px;padding-right:16px}
- .theme-grid{gap:6px}
- .theme-tile{padding:11px 8px}
+ .theme-scroll{gap:8px}
+ .theme-tile{flex-basis:78%;padding:12px 11px}
  .theme-content b{font-size:12px}
  .path-stat{padding:13px 8px}
  .wordmark{font-size:20px;letter-spacing:.3em}
@@ -360,7 +364,7 @@ var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.
 var defaults={entries:[],patterns:[],completed:[],practiceHistory:[],personalPractices:[],onboarding:null,chat:[],dailySummaryMeta:null,meta:null};
 var state=load();
 var page=entered()?"home":"welcome";
-var step=6,draft=blank(),journalFilter="all",libraryTab="plan",showRejected=false;
+var step=6,draft=blank(),editingId=null,journalFilter="all",libraryTab="plan",showRejected=false;
 var progressPeriod=normalizeProgressPeriod(state.progressPeriod!=null?state.progressPeriod:"week");
 var pageHistory=[],cloudReady=false,cloudSyncTimer=null,cloudRetryTimer=null,cloudRetryAttempt=0,cloudInitInFlight=false,cloudLastToast="",cloudErrorShown=false,cloudStatus="paused",cloudErrorText="";
 var premiumStatus={active:false,trial_used:false},premiumLoading=false,aiUsage={limit:5,used:0,remaining:5,loading:false};
@@ -730,7 +734,7 @@ function explain(){
  modal('<h2>Пояснение</h2><p>'+(copy[page]||"ПЕРЕСМОТР помогает замечать мысли и выбирать следующий небольшой шаг.")+'</p>');
 }
 function goBack(){
- if(page==="journal"&&step<6){if(step>0){step--;render();}else{step=6;render();}window.scrollTo(0,0);return;}
+ if(page==="journal"&&step<6){if(step>0){step--;render();}else{step=6;editingId=null;render();}window.scrollTo(0,0);return;}
  var previous=pageHistory.pop()||"home";
  if(previous==="onboarding"||previous==="privacy")previous=entered()?"home":"welcome";
  page=previous;render();window.scrollTo(0,0);
@@ -758,20 +762,24 @@ function activityDays(list){
  (state.practiceHistory||[]).forEach(function(p){var k=dayKey(p.completedAt);if(k)days[k]=1;});
  return Object.keys(days).length;
 }
-var THEME_DEFS=[
- {name:"Тревога",terms:["тревог","страх","беспоко"],glyph:"wave"},
- {name:"Самооценка",terms:["лучше меня","ничтож","неудач","самооцен","сравни"],glyph:"sun"},
- {name:"Отношения",terms:["отнош","молч","ответ","интерес"],glyph:"nodes"}
-];
-function themeHaystack(e){return String((e.thought||"")+" "+(e.situation||"")+" "+(e.balanced||"")).toLowerCase();}
-function themeMatches(e,terms){var s=themeHaystack(e);return terms.some(function(term){return s.indexOf(term)>=0;});}
-function insightThemeCards(){
- var entries=(state.entries||[]).slice();
- return THEME_DEFS.map(function(t){
-  var count=entries.filter(function(e){return themeMatches(e,t.terms);}).length;
-  var label=count?count+" "+plural(count,"наблюдение","наблюдения","наблюдений"):"Пока без записей";
-  return '<button type="button" class="theme-tile" data-theme-filter="'+esc(t.name)+'"><span class="theme-mark">'+ico(t.glyph)+'</span><span class="theme-content"><b>'+t.name+'</b><small>'+label+'</small></span><span class="theme-count">'+count+'</span></button>';
+var THEME_DEFS=window.THEME_DEFS||[];
+function themeMatches(entry,theme){return window.themeMatches?window.themeMatches(entry,theme):false;}
+function themeReport(){return window.repeatingThemes?window.repeatingThemes(state.entries||[]):{ready:false,themes:[]};}
+function themeCard(theme){
+ var label=theme.count+" "+plural(theme.count,"наблюдение","наблюдения","наблюдений");
+ return '<button type="button" class="theme-tile" data-theme-filter="'+esc(theme.name)+'"><span class="theme-mark">'+ico(theme.glyph)+'</span><span class="theme-content"><b>'+esc(theme.name)+'</b><small>'+label+'</small></span><span class="theme-count">'+theme.count+'</span></button>';
+}
+function patternCarouselCards(){
+ return (state.patterns||[]).filter(function(pattern){return pattern.status!=="rejected"&&linkedCount(pattern)>0;}).map(function(pattern){
+  var count=linkedCount(pattern);
+  return '<button type="button" class="theme-tile" data-open-pattern="'+esc(pattern.id)+'"><span class="theme-mark">'+ico(patternGlyph(pattern))+'</span><span class="theme-content"><b>'+esc(pattern.name)+'</b><small>'+count+" "+plural(count,"связанная запись","связанные записи","связанных записей")+'</small></span><span class="theme-count">'+count+'</span></button>';
  }).join("");
+}
+function insightThemeCards(){
+ var report=themeReport();
+ if(!report.ready)return '<p class="theme-hint">После нескольких записей здесь появятся твои повторяющиеся темы.</p>';
+ var cards=report.themes.map(themeCard).join("")+patternCarouselCards();
+ return '<div class="section-heading"><div><span class="eyebrow">ЧТО ПОВТОРЯЕТСЯ</span><h2>Темы твоих наблюдений</h2></div><button class="textbtn" type="button" data-go="journal">Все записи</button></div><div class="theme-scroll" aria-label="Повторяющиеся темы">'+cards+'</div>';
 }
 function home(){
  var n=state.entries.length,days=activityDays(),gate=summaryButtonState();
@@ -786,7 +794,7 @@ function home(){
  var practiceCard=active?'<button class="insight-row" type="button" data-personal-practice="'+esc(active.id)+'"><span class="insight-icon">'+ico("layers")+'</span><span><small>НЕБОЛЬШОЙ ШАГ</small><b>'+esc(active.title)+'</b><em>'+esc(active.duration||"Персональная практика")+'</em></span>'+chev()+'</button>':'';
  return '<section class="home-intro"><div class="eyebrow">ПРОСТРАНСТВО ОСОЗНАННОСТИ</div><h1 class="greet">'+hello+'</h1><p class="lead">Не нужно менять всю жизнь за один день. Достаточно чуть лучше понять себя и сделать следующий небольшой шаг.</p><button class="btn primary cta" type="button" data-act="new"><span class="cta-label">'+ico("pencil")+'Записать мысль</span>'+ico("arrow")+'</button></section>'+
  '<section class="home-today"><div class="section-heading"><div><span class="eyebrow">СЕГОДНЯ</span><h2>Твой внутренний фокус</h2></div><span class="date-stamp">'+new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"short"})+'</span></div><button class="daily-card" type="button" data-act="open-summary"><span class="daily-symbol">'+ico("sun")+'</span><span class="daily-copy"><small>ЕЖЕДНЕВНЫЙ ОБЗОР · НЕЙРОСЕТИ</small><b>Итоги дня</b><em>'+summaryText+'</em></span>'+chev()+'</button></section>'+
- '<section class="home-themes"><div class="section-heading"><div><span class="eyebrow">ЧТО ПОВТОРЯЕТСЯ</span><h2>Темы твоих наблюдений</h2></div><button class="textbtn" type="button" data-go="journal">Все записи</button></div><div class="theme-grid">'+insightThemeCards()+'</div></section>'+
+ '<section class="home-themes">'+insightThemeCards()+'</section>'+
  '<section class="home-path"><div class="section-heading"><div><span class="eyebrow">ТВОЯ ДИНАМИКА</span><h2>Путь в цифрах</h2></div><button class="textbtn" type="button" data-go="progress">Подробнее</button></div><div class="path-stats"><div class="path-stat"><strong>'+n+'</strong><span>'+plural(n,"запись","записи","записей")+'</span></div><div class="path-stat"><strong>'+days+'</strong><span>'+plural(days,"день активности","дня активности","дней активности")+'</span></div><div class="path-stat"><strong>'+((state.practiceHistory||[]).length)+'</strong><span>'+plural((state.practiceHistory||[]).length,"практика выполнена","практики выполнены","практик выполнено")+'</span></div></div></section>'+
  '<section class="home-insights"><div class="section-heading"><div><span class="eyebrow">СЛЕДУЮЩИЙ ШАГ</span><h2>Что можно заметить</h2></div></div>'+latestCard+patternCard+practiceCard+'</section>';
 }
@@ -839,7 +847,7 @@ function wizard(){
   field("Какой небольшой шаг ты можешь сделать?","action","Действие на 10–15 минут.")+'<div class="field"><label>С каким паттерном это связано?</label><select class="select" id="patternSelect"><option value="" '+(!draft.pattern?"selected":"")+'>Пока не определил — можно выбрать позже</option>'+state.patterns.filter(function(p){return p.status!=="rejected";}).map(function(p){return '<option value="'+esc(p.id)+'" '+(draft.pattern===p.id?"selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select><button type="button" class="btn soft full" style="margin-top:10px" data-act="add-pattern-in-entry">＋ Создать новый паттерн</button></div>'
  ];
  var note=step===0?"Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее.":"Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее и выбрать следующий посильный шаг.";
- return '<div class="page-head"><h1>Новая запись</h1><p class="step-label">Шаг '+(step+1)+' из 6</p><div class="stepdots">'+dots+'</div></div><h2 class="question">'+stepTitles[step]+'</h2><p class="lead">'+stepHints[step]+'</p><section class="card field-card'+(step===0?" solo":"")+'" style="margin-top:14px">'+bodies[step]+'</section><div class="hintbox">'+ico("info")+'<span>'+note+'</span></div><div class="wizard-actions">'+(step?'<button class="textbtn" type="button" data-act="prev">Назад</button>':"")+'<button class="btn primary" type="button" data-act="'+(step===5?"save":"next")+'">'+(step===5?"Сохранить":"Далее →")+'</button></div><button class="textbtn" type="button" data-act="cancel">Отменить</button>';
+ return '<div class="page-head"><h1>'+(editingId?"Изменить запись":"Новая запись")+'</h1><p class="step-label">Шаг '+(step+1)+' из 6</p><div class="stepdots">'+dots+'</div></div><h2 class="question">'+stepTitles[step]+'</h2><p class="lead">'+stepHints[step]+'</p><section class="card field-card'+(step===0?" solo":"")+'" style="margin-top:14px">'+bodies[step]+'</section><div class="hintbox">'+ico("info")+'<span>'+note+'</span></div><div class="wizard-actions">'+(step?'<button class="textbtn" type="button" data-act="prev">Назад</button>':"")+'<button class="btn primary" type="button" data-act="'+(step===5?"save":"next")+'">'+(step===5?"Сохранить":"Далее →")+'</button></div><button class="textbtn" type="button" data-act="cancel">Отменить</button>';
 }
 function linkedCount(p){return state.entries.filter(function(e){return e.pattern===p.id||(e.patterns||[]).indexOf(p.id)>=0;}).length;}
 function patternGlyph(p){var icons=["infinity","layers","compare"],n=0,s=String(p&&p.name||"");for(var i=0;i<s.length;i++)n+=s.charCodeAt(i);return icons[n%icons.length];}
@@ -1013,7 +1021,7 @@ function bind(){
  var historyBtn=document.getElementById("show-practice-history");if(historyBtn)historyBtn.onclick=function(){showPracticeHistory("");};
  var daily=document.getElementById("daily-summary");if(daily)daily.onclick=function(){runDailySummary(daily);};
  var prev=document.getElementById("daily-summary-previous");if(prev)prev.onclick=function(){openPreviousDailySummary(prev);};
- app.querySelectorAll("[data-theme-filter]").forEach(function(b){b.onclick=function(){var target=b.dataset.themeFilter||"";var def=THEME_DEFS.filter(function(t){return t.name===target;})[0];var terms=def?def.terms:[];var found=(state.entries||[]).slice().sort(function(a,c){return new Date(c.date)-new Date(a.date);}).find(function(e){return themeMatches(e,terms);});if(found){entryDetail(found.id);}else{journalFilter="all";step=6;go("journal");}};});
+ app.querySelectorAll("[data-theme-filter]").forEach(function(b){b.onclick=function(){var target=b.dataset.themeFilter||"";var def=THEME_DEFS.filter(function(t){return t.name===target;})[0];var found=(state.entries||[]).slice().sort(function(a,c){return new Date(c.date)-new Date(a.date);}).find(function(e){return def&&themeMatches(e,def);});if(found){entryDetail(found.id);}else{journalFilter="all";step=6;editingId=null;go("journal");}};});
 }
 function act(a){
  if(a==="start"){go("consent");return;}
@@ -1052,22 +1060,68 @@ function act(a){
   }).catch(function(e){toast(e.message||"Не удалось сохранить согласия. Попробуй ещё раз.");render();});
   return;
  }
- if(a==="new"){draft=blank();step=0;if(page!=="journal")go("journal");else render();return;}
+ if(a==="new"){editingId=null;draft=blank();step=0;if(page!=="journal")go("journal");else render();return;}
  if(a==="next"||a==="save"){
   var checks=[!!String(draft.situation||"").trim(),selectedEmotions().length>0,!!String(draft.thought||"").trim(),!!(String(draft.forText||"").trim()||String(draft.against||"").trim()),!!String(draft.balanced||"").trim(),!!String(draft.action||"").trim()];
   var prompts=["Опиши ситуацию, чтобы продолжить.","Выбери хотя бы одну эмоцию.","Запиши автоматическую мысль.","Добавь хотя бы один факт за или против этой мысли.","Сформулируй более точный взгляд.","Укажи один небольшой следующий шаг."];
   if(a==="next"){if(!checks[step]){toast(prompts[step]);return;}if(step<5)step++;render();return;}
   var missing=!checks[0]||!checks[1]||!checks[2]||!checks[3]||!checks[4]||!checks[5];
   if(missing){toast("Заполни обязательные поля — можно вернуться к нужному шагу.");return;}
-  draft.emotions=selectedEmotions().slice();draft.emotion=draft.emotions.join(", ");draft.date=new Date().toISOString();draft.id=Date.now().toString();
-  state.entries.unshift(Object.assign({},draft));save();trackEvent("diary_entry_created");step=6;
+  draft.emotions=selectedEmotions().slice();draft.emotion=draft.emotions.join(", ");
+  if(editingId){saveEditedEntry();return;}
+  draft.date=new Date().toISOString();draft.id=Date.now().toString();
+  state.entries.unshift(Object.assign({},draft));save();trackEvent("diary_entry_created");step=6;editingId=null;
   toast(cloudReady?"Запись сохранена. Отправляю в облако…":"Запись сохранена на устройстве.");
   go("journal");return;
  }
  if(a==="prev"){if(step>0)step--;render();return;}
- if(a==="cancel"){step=6;if(page!=="journal")go("journal");else render();return;}
+ if(a==="cancel"){step=6;editingId=null;if(page!=="journal")go("journal");else render();return;}
  if(a==="add-pattern-in-entry"){openPatternForm(true);return;}
  if(a==="add-pattern"){openPatternForm(false);return;}
+}
+function entrySubstance(entry){
+ return [entry.situation,entry.thought,entry.forText,entry.against,entry.balanced,entry.action,(entry.emotions||[]).join("|"),entry.intensity,entry.before,entry.after,entry.emotionAfter].join("\n");
+}
+function beginEdit(id){
+ var entry=state.entries.find(function(item){return String(item.id)===String(id);});
+ if(!entry)return;
+ draft=blank();
+ draft.situation=entry.situation||"";
+ draft.thought=entry.thought||"";
+ draft.forText=entry.forText||"";
+ draft.against=entry.against||"";
+ draft.balanced=entry.balanced||"";
+ draft.action=entry.action||"";
+ draft.intensity=entry.intensity!=null?entry.intensity:6;
+ draft.before=entry.before!=null?entry.before:80;
+ draft.after=entry.after!=null?entry.after:50;
+ draft.emotionAfter=entry.emotionAfter!=null?entry.emotionAfter:5;
+ draft.emotions=emotionsOf(entry).slice();
+ draft.emotion=draft.emotions[0]||"";
+ draft.pattern=entry.pattern||(Array.isArray(entry.patterns)&&entry.patterns[0])||"";
+ editingId=String(entry.id);
+ step=0;
+ closeModal();
+ if(page!=="journal")go("journal");else render();
+}
+function saveEditedEntry(){
+ var index=state.entries.findIndex(function(item){return String(item.id)===String(editingId);});
+ var prev=index>=0?state.entries[index]:null;
+ if(!prev){editingId=null;toast("Запись для правки не найдена.");return;}
+ var next=Object.assign({},prev,{
+  situation:draft.situation,thought:draft.thought,forText:draft.forText,against:draft.against,balanced:draft.balanced,action:draft.action,
+  emotions:draft.emotions.slice(),emotion:draft.emotions.join(", "),intensity:draft.intensity,before:draft.before,after:draft.after,emotionAfter:draft.emotionAfter,
+  pattern:draft.pattern||"",id:prev.id,date:prev.date
+ });
+ var links=Array.isArray(prev.patterns)?prev.patterns.slice():[];
+ if(next.pattern&&links.indexOf(next.pattern)<0)links.push(next.pattern);
+ next.patterns=links;
+ if(prev.analysis&&entrySubstance(prev)!==entrySubstance(next))next.analysisStale=true;
+ state.entries[index]=next;
+ editingId=null;step=6;
+ save();
+ toast(cloudReady?"Запись обновлена. Отправляю в облако…":"Запись обновлена на устройстве.");
+ go("journal");
 }
 function openPatternForm(fromEntry){
  modal('<h2>'+(fromEntry?"Паттерн к этой записи":"Новый паттерн")+'</h2><p>Короткая формулировка повторяющегося сценария. Это наблюдение, не ярлык.</p><div class="field"><label>Название</label><input class="input" id="pn" placeholder="Например: я должен всё сделать идеально"></div><div class="field"><label>Когда появляется?</label><textarea class="area" id="pd" placeholder="Необязательно"></textarea></div><button class="btn primary full" type="button" id="psave">Сохранить</button>');
@@ -1148,8 +1202,10 @@ function entryDetail(id){
  var e=state.entries.find(function(x){return String(x.id)===String(id);});if(!e)return;
  var selected=e.pattern||(Array.isArray(e.patterns)&&e.patterns[0])||"";
  var options='<option value="">Не привязывать к паттерну</option>'+state.patterns.map(function(p){return '<option value="'+esc(p.id)+'" '+(selected===p.id?"selected":"")+'>'+esc(p.name)+'</option>';}).join("");
- modal('<div class="look-label">'+esc(dateLabel(e.date))+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация.</b> '+esc(e.situation)+'</p><p><b>Эмоция.</b> '+esc(e.emotion)+' · '+esc(e.intensity)+'/10</p><p><b>Факты за.</b> '+esc(e.forText)+'</p><p><b>Факты против.</b> '+esc(e.against)+'</p><p><b>Новый взгляд.</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг.</b> '+esc(e.action)+'</p><div class="field"><label>Связать запись с паттерном</label><select class="select" id="entry-pattern">'+options+'</select><button class="btn soft full" type="button" id="save-entry-pattern" style="margin-top:8px">Сохранить связь</button></div><div id="ai-result" class="note" style="display:none"></div>'+(e.analysis&&premiumStatus.active?'<div class="note" style="margin-top:10px">'+renderAnalysis(e.analysis,id)+'</div>':(premiumStatus.active?'<button class="btn primary full" type="button" id="analyze">Разобрать запись</button>':'<button class="btn soft full" type="button" id="premium-analysis">Разбор записи — в Premium</button>'))+'<button class="btn outline full" type="button" id="del" style="margin-top:10px">Удалить запись</button>');
+ var stale=e.analysis&&e.analysisStale?'<p class="muted">Разбор мог устареть: текст записи изменился.</p>':'';
+ modal('<div class="look-label">'+esc(dateLabel(e.date))+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация.</b> '+esc(e.situation)+'</p><p><b>Эмоция.</b> '+esc(e.emotion)+' · '+esc(e.intensity)+'/10</p><p><b>Факты за.</b> '+esc(e.forText)+'</p><p><b>Факты против.</b> '+esc(e.against)+'</p><p><b>Новый взгляд.</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг.</b> '+esc(e.action)+'</p><div class="field"><label>Связать запись с паттерном</label><select class="select" id="entry-pattern">'+options+'</select><button class="btn soft full" type="button" id="save-entry-pattern" style="margin-top:8px">Сохранить связь</button></div><button class="btn soft full" type="button" id="edit-entry" style="margin-top:8px">Изменить запись</button><div id="ai-result" class="note" style="display:none"></div>'+stale+(e.analysis&&premiumStatus.active?'<div class="note" style="margin-top:10px">'+renderAnalysis(e.analysis,id)+'</div>':(premiumStatus.active?'<button class="btn primary full" type="button" id="analyze">Разобрать запись</button>':'<button class="btn soft full" type="button" id="premium-analysis">Разбор записи — в Premium</button>'))+'<button class="btn outline full" type="button" id="del" style="margin-top:10px">Удалить запись</button>');
  document.getElementById("save-entry-pattern").onclick=function(){var pid=document.getElementById("entry-pattern").value;if(pid)linkEntryToPattern(id,pid);else{e.pattern="";e.patterns=[];}save();toast(pid?"Связь с паттерном сохранена.":"Связь с паттерном удалена.");closeModal();render();entryDetail(id);};
+ document.getElementById("edit-entry").onclick=function(){beginEdit(id);};
  var ab=document.getElementById("analyze");if(ab)ab.onclick=function(){analyzeEntry(id,ab);};
  var premiumButton=document.getElementById("premium-analysis");if(premiumButton)premiumButton.onclick=function(){closeModal();go("subscription");};
  var addMicro=document.querySelector("[data-add-micro]");if(addMicro)addMicro.onclick=function(){addMicroPractice(id);};
