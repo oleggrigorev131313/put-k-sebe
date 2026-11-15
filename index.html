@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f3eee6">
+<meta name="theme-color" content="#f5f1e9">
 <meta name="color-scheme" content="light">
 <meta name="description" content="ПЕРЕСМОТР — пространство для осознанного взгляда на себя, свои мысли и жизнь.">
 <title>ПЕРЕСМОТР</title>
@@ -246,7 +246,7 @@ h2{font-size:21px;letter-spacing:-.45px;font-weight:650}
 .brand-mini .logo-mark{width:30px}
 .avatar,.round{width:42px;height:42px;border:1px solid #e2dcd1;box-shadow:0 4px 14px rgba(35,45,39,.05)}
 .tabbar{width:min(100%,520px);background:rgba(247,244,237,.94);border-top:1px solid #e3ddd2;padding:9px 8px calc(9px + env(safe-area-inset-bottom))}
-.tabbar button{font-size:10px;gap:4px;color:#92988f}
+.tabbar button{font-size:10px;gap:4px;color:#6d716b}
 .tabbar button.active{color:var(--pine)}
 .tabbar .ico{width:23px;height:23px}
 .welcome{background:linear-gradient(180deg,#f5f1e9 0%,#e8e5dc 100%);padding:18px 26px calc(22px + env(safe-area-inset-bottom))}
@@ -264,43 +264,45 @@ h2{font-size:21px;letter-spacing:-.45px;font-weight:650}
 .info-card p{font-size:13px;color:#778078}
 .consent-actions .fine{font-size:12px}
 .home-intro{padding:20px;border-radius:28px;background:radial-gradient(ellipse at 100% 0%,rgba(206,215,202,.55),transparent 58%),linear-gradient(135deg,#fdfbf6,#edece3);border:1px solid #e3ddd2;box-shadow:var(--shadow)}
-.eyebrow{font-size:10px;letter-spacing:.19em;color:#879087;font-weight:700;display:block}
+.eyebrow{font-size:10px;letter-spacing:.19em;color:#6f766f;font-weight:700;display:block}
 .greet{font-size:30px;margin:8px 0 0}
 .home-intro .lead{margin:9px 0 18px;max-width:390px}
 .home-intro .cta{width:100%;min-height:56px}
 .home-today,.home-themes,.home-path,.home-insights{margin-top:24px}
 .section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:0 1px 12px}
-.section-heading h2{margin:5px 0 0;font-size:20px}
-.date-stamp{font-size:12px;color:#8b928a;padding-bottom:3px}
+.section-heading > div{min-width:0}
+.section-heading h2{margin:5px 0 0;font-size:20px;overflow-wrap:break-word}
+.date-stamp{font-size:12px;color:#6a706a;padding-bottom:3px}
 .daily-card{display:flex;align-items:center;gap:14px;width:100%;padding:17px;border:1px solid #e4ded4;border-radius:22px;background:linear-gradient(130deg,#fcfaf5,#eeece3);box-shadow:var(--shadow);text-align:left;color:var(--ink)}
 .daily-symbol{width:48px;height:48px;border-radius:17px;background:#e5e9df;color:var(--pine);display:grid;place-items:center;flex:none}
 .daily-symbol .ico{width:25px;height:25px}
 .daily-copy{flex:1;min-width:0}
-.daily-copy small,.latest-kicker{display:block;font-size:9px;letter-spacing:.15em;color:#879087;font-weight:700;margin-bottom:5px}
+.daily-copy small,.latest-kicker{display:block;font-size:9px;letter-spacing:.15em;color:#6f766f;font-weight:700;margin-bottom:5px}
 .daily-copy b{display:block;font-size:17px}
-.daily-copy em{display:block;font-style:normal;color:#7b837a;font-size:12px;line-height:1.4;margin-top:3px}
+.daily-copy em{display:block;font-style:normal;color:#626b63;font-size:12px;line-height:1.4;margin-top:3px}
 .theme-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
 .theme-tile{min-width:0;display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:13px 11px;border-radius:19px;border:1px solid #e4ded4;background:rgba(255,253,248,.9);box-shadow:0 7px 20px rgba(35,45,39,.035);color:var(--ink)}
 .theme-mark{width:34px;height:34px;border-radius:12px;background:#e9ece4;color:#4a6258;display:grid;place-items:center;margin-bottom:10px}
 .theme-mark .ico{width:20px;height:20px}
-.theme-content b{font-size:13px;display:block;line-height:1.25}
-.theme-content small{display:block;font-size:10px;color:#899087;margin-top:4px}
+.theme-content{min-width:0;max-width:100%}
+.theme-content b{font-size:13px;display:block;line-height:1.25;overflow-wrap:break-word}
+.theme-content small{display:block;font-size:10px;color:#6e756d;margin-top:4px;overflow-wrap:break-word}
 .theme-count{font-size:21px;font-weight:700;margin-top:8px;color:#34473f}
 .path-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
 .path-stat{background:rgba(255,253,248,.9);border:1px solid #e4ded4;border-radius:19px;padding:15px 13px;box-shadow:0 7px 20px rgba(35,45,39,.035)}
 .path-stat strong{font-size:27px;letter-spacing:-1px;display:block}
-.path-stat span{font-size:11px;color:#838b82;display:block;line-height:1.3;margin-top:5px}
+.path-stat span{font-size:11px;color:#6a7169;display:block;line-height:1.3;margin-top:5px;overflow-wrap:break-word}
 .latest-entry{width:100%;position:relative;display:flex;flex-direction:column;gap:6px;text-align:left;padding:17px 46px 17px 18px;border:1px solid #e4ded4;border-radius:21px;background:linear-gradient(130deg,#fbf9f3,#eeece3);color:var(--ink);box-shadow:var(--shadow)}
 .latest-entry b{font-size:16px;line-height:1.3}
-.latest-entry small{font-size:12px;color:#7c857c;line-height:1.45}
+.latest-entry small{font-size:12px;color:#626b63;line-height:1.45}
 .latest-arrow{position:absolute;right:16px;top:50%;transform:translateY(-50%);color:#758078}
 .empty-latest{padding-right:18px}
 .insight-row{display:flex;align-items:center;gap:12px;width:100%;padding:13px 12px;margin-top:9px;text-align:left;border:1px solid #e5dfd5;border-radius:19px;background:rgba(255,253,248,.9);color:var(--ink)}
 .insight-icon{width:42px;height:42px;border-radius:14px;background:#e9ece4;color:#465a52;display:grid;place-items:center;flex:none}
 .insight-row>span:nth-child(2){flex:1;min-width:0}
-.insight-row small{display:block;font-size:9px;letter-spacing:.12em;color:#8a9289;font-weight:700;margin-bottom:4px}
-.insight-row b{font-size:14px;display:block;line-height:1.3}
-.insight-row em{font-size:11px;color:#8a9289;font-style:normal;display:block;margin-top:3px}
+.insight-row small{display:block;font-size:9px;letter-spacing:.12em;color:#6f766f;font-weight:700;margin-bottom:4px}
+.insight-row b{font-size:14px;display:block;line-height:1.3;overflow-wrap:break-word}
+.insight-row em{font-size:11px;color:#6e756d;font-style:normal;display:block;margin-top:3px}
 .entry-card{padding:18px 19px;border:1px solid #e4ded4;border-radius:22px;background:rgba(255,253,248,.92)}
 .entry-card h3{font-size:17px;letter-spacing:-.25px}
 .chip{background:#ebe7de;box-shadow:none;font-size:12px;padding:9px 13px;color:#747e75}
@@ -315,8 +317,23 @@ h2{font-size:21px;letter-spacing:-.45px;font-weight:650}
 .seg button{font-size:13px;min-height:42px}
 .note{background:#efede6}
 .modal{background:#f5f1e9}
+main > *{min-width:0}
+.chips{max-width:100%}
+.latest-entry b,.latest-entry small,.daily-copy em,.daily-copy b{overflow-wrap:break-word}
+body[data-page="subscription"] .status-line{color:#d5e3d0}
+body[data-page="subscription"],body[data-page="subscription"] .shell{overflow-x:hidden}
+.tabbar button{min-height:44px}
 @media(min-width:700px){body{background:#e7e0d4}.shell{box-shadow:0 0 0 1px rgba(255,255,255,.5)}}
-@media(max-width:370px){main{padding-left:16px;padding-right:16px}.theme-grid{gap:6px}.theme-tile{padding:11px 9px}.theme-content b{font-size:12px}.path-stat{padding:13px 10px}}
+@media(max-width:370px){
+ main{padding-left:16px;padding-right:16px}
+ .theme-grid{gap:6px}
+ .theme-tile{padding:11px 8px}
+ .theme-content b{font-size:12px}
+ .path-stat{padding:13px 8px}
+ .wordmark{font-size:20px;letter-spacing:.3em}
+ .slogan{font-size:10px;letter-spacing:.24em}
+ .section-heading h2{font-size:18px}
+}
 
 </style>
 </head>
@@ -338,7 +355,7 @@ h2{font-size:21px;letter-spacing:-.45px;font-weight:650}
 "use strict";
 var KEY="put-k-sebe-v1",API_BASE="https://d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net",CLOUD_SYNC_ENABLED=true,app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".tabbar button"));
 var tg=window.Telegram&&window.Telegram.WebApp;
-if(tg){try{tg.ready();tg.expand();if(tg.disableVerticalSwipes)tg.disableVerticalSwipes();tg.setHeaderColor("#f3eee6");tg.setBackgroundColor("#f3eee6");}catch(e){}}
+if(tg){try{tg.ready();tg.expand();if(tg.disableVerticalSwipes)tg.disableVerticalSwipes();tg.setHeaderColor("#f5f1e9");tg.setBackgroundColor("#f5f1e9");}catch(e){}}
 var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.first_name;
 var defaults={entries:[],patterns:[],completed:[],practiceHistory:[],personalPractices:[],onboarding:null,chat:[],dailySummaryMeta:null,meta:null};
 var state=load();
@@ -655,7 +672,9 @@ function ico(name){
   layers:'<path d="m4 9 8-4 8 4-8 4-8-4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m4 13 8 4 8-4M4 17l8 4 8-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>',
   compare:'<circle cx="9" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="15" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/>',
   arrow:'<path d="M5 12h12M13 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
-  chev:'<path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+  chev:'<path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+  wave:'<path d="M3.5 13c1.6-2.4 2.6-2.4 4.2 0s2.6 2.4 4.2 0 2.6-2.4 4.2 0 2.6 2.4 4.2 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+  nodes:'<circle cx="7" cy="8.5" r="2.1" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="16.5" cy="8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="16.2" r="2.1" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.7 9.8 10.5 14.4M14.8 9.5 13.3 14.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'
  };
  return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">'+(paths[name]||"")+'</svg>';
 }
@@ -684,7 +703,7 @@ function paintChrome(){
  document.body.classList.toggle("is-wizard",wizard);
  nav.forEach(function(n){n.classList.toggle("active",n.dataset.page===page||(page==="summary"&&n.dataset.page==="home"));});
  var bar=document.getElementById("topbar");
- var bg=page==="subscription"?"#1c2e2c":"#f3eee6";
+ var bg=page==="subscription"?"#1c2e2c":"#f5f1e9";
  var meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute("content",bg);
  if(tg){try{tg.setHeaderColor(bg);tg.setBackgroundColor(bg);}catch(e){}}
  var back=wizard||page==="summary"||page==="subscription";
@@ -739,16 +758,18 @@ function activityDays(list){
  (state.practiceHistory||[]).forEach(function(p){var k=dayKey(p.completedAt);if(k)days[k]=1;});
  return Object.keys(days).length;
 }
+var THEME_DEFS=[
+ {name:"Тревога",terms:["тревог","страх","беспоко"],glyph:"wave"},
+ {name:"Самооценка",terms:["лучше меня","ничтож","неудач","самооцен","сравни"],glyph:"sun"},
+ {name:"Отношения",terms:["отнош","молч","ответ","интерес"],glyph:"nodes"}
+];
+function themeHaystack(e){return String((e.thought||"")+" "+(e.situation||"")+" "+(e.balanced||"")).toLowerCase();}
+function themeMatches(e,terms){var s=themeHaystack(e);return terms.some(function(term){return s.indexOf(term)>=0;});}
 function insightThemeCards(){
  var entries=(state.entries||[]).slice();
- var defs=[
-  {name:"Тревога",terms:["тревог","страх","беспоко"],glyph:"wave"},
-  {name:"Самооценка",terms:["лучше меня","ничтож","неудач","самооцен","сравни"],glyph:"sun"},
-  {name:"Отношения",terms:["отнош","молч","ответ","интерес"],glyph:"nodes"}
- ];
- return defs.map(function(t){
-  var count=entries.filter(function(e){var s=String((e.thought||"")+" "+(e.situation||"")+" "+(e.balanced||"")).toLowerCase();return t.terms.some(function(term){return s.indexOf(term)>=0;});}).length;
-  var label=count?count+" наблюдения":"Пока без записей";
+ return THEME_DEFS.map(function(t){
+  var count=entries.filter(function(e){return themeMatches(e,t.terms);}).length;
+  var label=count?count+" "+plural(count,"наблюдение","наблюдения","наблюдений"):"Пока без записей";
   return '<button type="button" class="theme-tile" data-theme-filter="'+esc(t.name)+'"><span class="theme-mark">'+ico(t.glyph)+'</span><span class="theme-content"><b>'+t.name+'</b><small>'+label+'</small></span><span class="theme-count">'+count+'</span></button>';
  }).join("");
 }
@@ -759,13 +780,14 @@ function home(){
  var latest=(state.entries||[]).slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);})[0];
  var latestCard=latest?'<button class="latest-entry" type="button" data-entry="'+esc(latest.id)+'"><span class="latest-kicker">ПОСЛЕДНЕЕ НАБЛЮДЕНИЕ</span><b>'+esc(latest.thought||"Новая запись")+'</b><small>'+esc(latest.balanced||"Продолжи исследовать эту мысль")+'</small><span class="latest-arrow">'+ico("arrow")+'</span></button>':'<div class="latest-entry empty-latest"><span class="latest-kicker">ТВОЁ ПЕРВОЕ НАБЛЮДЕНИЕ</span><b>Здесь начинается более внимательный взгляд на себя.</b><small>Запиши ситуацию, мысль или чувство — без необходимости сразу что-то менять.</small></div>';
  var pattern=topPattern();
- var patternCard=pattern?'<button class="insight-row" type="button" data-open-pattern="'+esc(pattern.id)+'"><span class="insight-icon">'+ico(patternGlyph(pattern))+'</span><span><small>ВОЗМОЖНЫЙ ПОВТОРЯЮЩИЙСЯ СЦЕНАРИЙ</small><b>'+esc(pattern.name)+'</b><em>'+linkedCount(pattern)+' связанных записей</em></span>'+chev()+'</button>':'';
+ var patternLinks=pattern?linkedCount(pattern):0;
+ var patternCard=pattern?'<button class="insight-row" type="button" data-open-pattern="'+esc(pattern.id)+'"><span class="insight-icon">'+ico(patternGlyph(pattern))+'</span><span><small>ВОЗМОЖНЫЙ ПОВТОРЯЮЩИЙСЯ СЦЕНАРИЙ</small><b>'+esc(pattern.name)+'</b><em>'+patternLinks+' '+plural(patternLinks,"связанная запись","связанные записи","связанных записей")+'</em></span>'+chev()+'</button>':'';
  var active=(state.personalPractices||[]).filter(function(p){return p.status==="active"||p.status==="skipped";})[0];
  var practiceCard=active?'<button class="insight-row" type="button" data-personal-practice="'+esc(active.id)+'"><span class="insight-icon">'+ico("layers")+'</span><span><small>НЕБОЛЬШОЙ ШАГ</small><b>'+esc(active.title)+'</b><em>'+esc(active.duration||"Персональная практика")+'</em></span>'+chev()+'</button>':'';
  return '<section class="home-intro"><div class="eyebrow">ПРОСТРАНСТВО ОСОЗНАННОСТИ</div><h1 class="greet">'+hello+'</h1><p class="lead">Не нужно менять всю жизнь за один день. Достаточно чуть лучше понять себя и сделать следующий небольшой шаг.</p><button class="btn primary cta" type="button" data-act="new"><span class="cta-label">'+ico("pencil")+'Записать мысль</span>'+ico("arrow")+'</button></section>'+
  '<section class="home-today"><div class="section-heading"><div><span class="eyebrow">СЕГОДНЯ</span><h2>Твой внутренний фокус</h2></div><span class="date-stamp">'+new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"short"})+'</span></div><button class="daily-card" type="button" data-act="open-summary"><span class="daily-symbol">'+ico("sun")+'</span><span class="daily-copy"><small>ЕЖЕДНЕВНЫЙ ОБЗОР · НЕЙРОСЕТИ</small><b>Итоги дня</b><em>'+summaryText+'</em></span>'+chev()+'</button></section>'+
  '<section class="home-themes"><div class="section-heading"><div><span class="eyebrow">ЧТО ПОВТОРЯЕТСЯ</span><h2>Темы твоих наблюдений</h2></div><button class="textbtn" type="button" data-go="journal">Все записи</button></div><div class="theme-grid">'+insightThemeCards()+'</div></section>'+
- '<section class="home-path"><div class="section-heading"><div><span class="eyebrow">ТВОЯ ДИНАМИКА</span><h2>Путь в цифрах</h2></div><button class="textbtn" type="button" data-go="progress">Подробнее</button></div><div class="path-stats"><div class="path-stat"><strong>'+n+'</strong><span>'+plural(n,"запись","записи","записей")+'</span></div><div class="path-stat"><strong>'+days+'</strong><span>'+plural(days,"день активности","дня активности","дней активности")+'</span></div><div class="path-stat"><strong>'+((state.practiceHistory||[]).length)+'</strong><span>практик выполнено</span></div></div></section>'+
+ '<section class="home-path"><div class="section-heading"><div><span class="eyebrow">ТВОЯ ДИНАМИКА</span><h2>Путь в цифрах</h2></div><button class="textbtn" type="button" data-go="progress">Подробнее</button></div><div class="path-stats"><div class="path-stat"><strong>'+n+'</strong><span>'+plural(n,"запись","записи","записей")+'</span></div><div class="path-stat"><strong>'+days+'</strong><span>'+plural(days,"день активности","дня активности","дней активности")+'</span></div><div class="path-stat"><strong>'+((state.practiceHistory||[]).length)+'</strong><span>'+plural((state.practiceHistory||[]).length,"практика выполнена","практики выполнены","практик выполнено")+'</span></div></div></section>'+
  '<section class="home-insights"><div class="section-heading"><div><span class="eyebrow">СЛЕДУЮЩИЙ ШАГ</span><h2>Что можно заметить</h2></div></div>'+latestCard+patternCard+practiceCard+'</section>';
 }
 function welcome(){
@@ -972,7 +994,7 @@ function render(){
  bind();
 }
 function bind(){
- app.querySelectorAll("[data-go]").forEach(function(b){b.onclick=function(){go(b.dataset.go);};});
+ app.querySelectorAll("[data-go]").forEach(function(b){b.onclick=function(){if(b.dataset.go==="journal")step=6;go(b.dataset.go);};});
  app.querySelectorAll("[data-act]").forEach(function(b){b.onclick=function(){act(b.dataset.act,b);};});
  app.querySelectorAll("[data-field]").forEach(function(el){el.oninput=function(){draft[el.dataset.field]=el.value;};});
  app.querySelectorAll("[data-range]").forEach(function(el){el.oninput=function(){draft[el.dataset.range]=Number(el.value);var t=document.getElementById("v-"+el.dataset.range);if(t)t.textContent=el.value+((el.dataset.range==="intensity"||el.dataset.range==="emotionAfter")?"/10":"%");};});
@@ -991,8 +1013,8 @@ function bind(){
  var historyBtn=document.getElementById("show-practice-history");if(historyBtn)historyBtn.onclick=function(){showPracticeHistory("");};
  var daily=document.getElementById("daily-summary");if(daily)daily.onclick=function(){runDailySummary(daily);};
  var prev=document.getElementById("daily-summary-previous");if(prev)prev.onclick=function(){openPreviousDailySummary(prev);};
- app.querySelectorAll("[data-theme-filter]").forEach(function(b){b.onclick=function(){var target=b.dataset.themeFilter||"";var terms=target==="Тревога"?["тревог","страх","беспоко"]:target==="Самооценка"?["лучше меня","ничтож","неудач","самооцен","сравни"]:["отнош","молч","ответ","интерес"];var found=(state.entries||[]).find(function(e){var s=String((e.thought||"")+" "+(e.situation||"")+" "+(e.balanced||"")).toLowerCase();return terms.some(function(t){return s.indexOf(t)>=0;});});if(found){entryDetail(found.id);}else{journalFilter="all";go("journal");}};});
-\n}
+ app.querySelectorAll("[data-theme-filter]").forEach(function(b){b.onclick=function(){var target=b.dataset.themeFilter||"";var def=THEME_DEFS.filter(function(t){return t.name===target;})[0];var terms=def?def.terms:[];var found=(state.entries||[]).slice().sort(function(a,c){return new Date(c.date)-new Date(a.date);}).find(function(e){return themeMatches(e,terms);});if(found){entryDetail(found.id);}else{journalFilter="all";step=6;go("journal");}};});
+}
 function act(a){
  if(a==="start"){go("consent");return;}
  if(a==="have-account"){
