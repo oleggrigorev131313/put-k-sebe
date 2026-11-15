@@ -9,9 +9,7 @@
 <title>ПЕРЕСМОТР</title>
 <link rel="icon" href="assets/favicon.png">
 <link rel="apple-touch-icon" href="assets/logo-mark.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,560;7..72,650&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/fonts/fonts.css">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root{
@@ -28,8 +26,8 @@
   --sage:#d7e0d4;
   --shadow:0 10px 28px rgba(62,52,36,.06);
   --radius:26px;
-  --font:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-  --serif:"Literata","Iowan Old Style",Palatino,Georgia,serif;
+  --font:"Onest","Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --serif:"Cormorant Garamond","Iowan Old Style",Palatino,Georgia,serif;
   color-scheme:light;
 }
 *{box-sizing:border-box}
@@ -49,7 +47,7 @@ body[data-page="welcome"] main{padding:0}
 .topbar.slim{min-height:0;height:0;padding:0;overflow:visible}
 .topbar.slim .round{top:4px}
 body.has-float-info .page-head{padding-right:56px}
-.brand-mini{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:.22em;font-size:15px}
+.brand-mini{display:flex;align-items:center;gap:10px;font-weight:500;letter-spacing:.24em;font-size:15px}
 .logo-mark{display:block;height:auto}
 .brand-mini .logo-mark{width:34px}
 .avatar,.round{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;box-shadow:var(--shadow);position:absolute;right:16px;top:8px;padding:0}
@@ -61,7 +59,7 @@ h2{font-size:22px;margin:0;font-weight:800}
 .lead{color:var(--soft);font-size:17px;line-height:1.45;margin:10px 0 0}
 .page-head{margin:8px 0 16px}
 .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 18px}
-.btn{border:0;border-radius:999px;min-height:60px;padding:16px 22px;font-size:17px;font-weight:750;background:var(--pine);color:var(--cream);display:inline-flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;text-align:center;line-height:1.2}
+.btn{border:0;border-radius:999px;min-height:60px;padding:16px 22px;font-size:17px;font-weight:700;background:var(--pine);color:var(--cream);display:inline-flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;text-align:center;line-height:1.2}
 .btn:active{transform:scale(.985)}
 .btn:disabled{opacity:.48;cursor:not-allowed;transform:none}
 .btn.full{width:100%}
@@ -74,8 +72,8 @@ h2{font-size:22px;margin:0;font-weight:800}
 .welcome{position:relative;flex:1;display:flex;flex-direction:column;padding:12px 28px calc(18px + env(safe-area-inset-bottom));overflow:hidden}
 .welcome-mid{position:relative;z-index:1;text-align:center;padding-top:6vh}
 .welcome-logo{width:min(220px,62vw);margin:0 auto}
-.wordmark{font-weight:500;font-size:26px;letter-spacing:.38em;margin:22px 0 12px;padding-left:.38em}
-.slogan{margin:0;font-size:13px;letter-spacing:.34em;font-weight:600;color:#6f7774;padding-left:.34em}
+.wordmark{font-weight:300;font-size:26px;letter-spacing:.42em;margin:22px 0 12px;padding-left:.42em}
+.slogan{margin:0;font-size:13px;letter-spacing:.36em;font-weight:400;color:#6f7774;padding-left:.36em}
 .welcome-copy{max-width:320px;margin:26px auto 0;color:#5e675f;font-size:18px;line-height:1.45}
 .pager{display:flex;gap:8px;justify-content:center;margin:26px 0 0}
 .pager i{width:9px;height:9px;border-radius:50%;background:#ddd6cb;display:block}
@@ -109,7 +107,7 @@ h2{font-size:22px;margin:0;font-weight:800}
 .chevron .ico{width:22px;height:22px}
 .chips{display:flex;gap:10px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
-.chip{flex:none;border:0;background:var(--card);color:#6f736c;border-radius:999px;padding:12px 18px;font-size:15px;font-weight:750;box-shadow:var(--shadow)}
+.chip{flex:none;border:0;background:var(--card);color:#6f736c;border-radius:999px;padding:12px 18px;font-size:15px;font-weight:700;box-shadow:var(--shadow)}
 .chip.active{background:var(--pine);color:var(--cream)}
 .entry-card{width:100%;text-align:left;border:0;margin:0 0 12px;display:block}
 .entry-top{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:14px;font-weight:700}
@@ -174,7 +172,7 @@ body[data-page="subscription"]{background:#1b2c2a}
 body[data-page="subscription"] .shell{background:radial-gradient(80% 42% at 118% -8%,rgba(244,241,234,.42),transparent 46%),radial-gradient(55% 36% at 100% 8%,rgba(150,176,166,.28),transparent 42%),linear-gradient(165deg,#314844 0%,#1d332f 42%,#152422 100%)}
 .premium-glow{position:absolute;right:-120px;top:-140px;width:340px;height:340px;border-radius:50%;border:46px solid rgba(244,241,234,.08);pointer-events:none}
 body[data-page="subscription"] .round{background:rgba(255,255,255,.1);border-color:transparent;color:#f4f1ea;box-shadow:none}
-.premium h1{font-family:var(--font);font-weight:650;font-size:48px;letter-spacing:-.6px;margin-top:8px}
+.premium h1{font-family:var(--serif);font-weight:600;font-size:58px;letter-spacing:-.02em;margin-top:8px;line-height:.95}
 .premium .lead{color:rgba(244,241,234,.82);max-width:320px;font-size:18px}
 .check-list{list-style:none;margin:28px 0 0;padding:0;display:flex;flex-direction:column;gap:18px}
 .check-list li{display:flex;gap:12px;align-items:flex-start;font-size:18px;line-height:1.35}
@@ -189,7 +187,7 @@ body[data-page="subscription"] .round{background:rgba(255,255,255,.1);border-col
 .plan span{display:block;color:rgba(244,241,234,.72);font-size:14px;margin-top:4px;line-height:1.4}
 .tabbar{position:fixed;z-index:20;left:50%;bottom:0;transform:translateX(-50%);width:min(100%,480px);display:none;grid-template-columns:repeat(5,1fr);gap:0;padding:10px 4px calc(10px + env(safe-area-inset-bottom));background:rgba(247,243,236,.94);backdrop-filter:blur(16px);border-top:1px solid rgba(226,220,210,.95)}
 body.has-tabs .tabbar{display:grid}
-.tabbar button{border:0;background:none;color:#a39e95;font-size:12px;font-weight:750;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px 0}
+.tabbar button{border:0;background:none;color:#a39e95;font-size:12px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px 0}
 .tabbar button.active{color:var(--pine)}
 .tabbar .ico{width:26px;height:26px}
 .modalbg{position:fixed;inset:0;z-index:40;background:rgba(28,32,30,.38);display:flex;align-items:flex-end;justify-content:center;padding:0}
