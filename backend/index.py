@@ -178,10 +178,14 @@ def _parse_imeads_click_id(raw):
         return None
     lowered = value.casefold()
     for prefix in ("imeads__", "imeads_"):
-        if lowered.startswith(prefix):
-            click_id = value[len(prefix) :].strip()
-            if 0 < len(click_id) <= 128 and " " not in click_id and "\t" not in click_id:
-                return click_id
+        if not lowered.startswith(prefix):
+            continue
+        click_id = value[len(prefix) :].strip()
+        if not click_id or len(click_id) > 128 or " " in click_id or "\t" in click_id:
+            continue
+        if prefix == "imeads_" and lowered.startswith("imeads__"):
+            continue
+        return click_id
     return None
 
 
