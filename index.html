@@ -106,8 +106,9 @@ h2{font-size:22px;margin:0;font-weight:800}
 .link-card .grow{flex:1;min-width:0}
 .chevron{color:#b7b1a6;flex:none;display:grid;place-items:center}
 .chevron .ico{width:22px;height:22px}
-.chips{display:flex;gap:10px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none}
+.chips{display:flex;gap:10px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none;cursor:grab}
 .chips::-webkit-scrollbar{display:none}
+.chips.is-dragging,.theme-scroll.is-dragging{cursor:grabbing;user-select:none}
 .chip{flex:none;border:0;background:var(--card);color:#6f736c;border-radius:999px;padding:12px 18px;font-size:15px;font-weight:700;box-shadow:var(--shadow)}
 .chip.active{background:var(--pine);color:var(--cream)}
 .entry-card{width:100%;text-align:left;border:0;margin:0 0 12px;display:block}
@@ -281,7 +282,7 @@ h2{font-size:21px;letter-spacing:-.45px;font-weight:650}
 .daily-copy small,.latest-kicker{display:block;font-size:9px;letter-spacing:.15em;color:#6f766f;font-weight:700;margin-bottom:5px}
 .daily-copy b{display:block;font-size:17px}
 .daily-copy em{display:block;font-style:normal;color:#626b63;font-size:12px;line-height:1.4;margin-top:3px}
-.theme-scroll{display:flex;gap:10px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scroll-padding-inline:2px;scrollbar-width:none;-ms-overflow-style:none;max-width:100%;min-width:0;padding:2px 2px 8px}
+.theme-scroll{display:flex;gap:10px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scroll-padding-inline:2px;scrollbar-width:none;-ms-overflow-style:none;max-width:100%;min-width:0;padding:2px 2px 8px;cursor:grab}
 .theme-scroll::-webkit-scrollbar{display:none}
 .home-themes{min-width:0;max-width:100%}
 .theme-hint{margin:0;color:#626b63;font-size:14px;line-height:1.45}
@@ -888,11 +889,27 @@ function library(){
  return '<div class="page-head"><h1>Практики</h1><p class="lead">Небольшие упражнения, которые помогают работать с мыслями и эмоциями.</p></div>'+seg+'<div style="margin-top:6px">'+body+'</div>';
 }
 function normalizeProgressPeriod(value){if(value==="month")return "month";if(value==="year"||value==="quarter")return "year";return "week";}
-function periodDays(){return progressPeriod==="month"?30:progressPeriod==="year"?365:7;}
-function periodStart(){var d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-(periodDays()-1));return d;}
-function inPeriod(value){var d=new Date(value);return !isNaN(d.getTime())&&d>=periodStart()&&d<=new Date();}
-function confidenceChart(){
- var items=(state.entries||[]).filter(function(e){return inPeriod(e.date)&&e.before!=null&&e.before!==""&&!isNaN(Number(e.before));}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+function periodDaysFor(period){period=normalizeProgressPeriod(period);return period==="month"?30:period==="year"?365:7;}
+function periodStartFor(period){var d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-(periodDaysFor(period)-1));return d;}
+function inPeriodFor(value,period){var d=new Date(value);if(isNaN(d.getTime()))return false;var end=new Date();end.setHours(23,59,59,999);return d>=periodStartFor(period)&&d<=end;}
+function activityChart(period){
+ period=normalizeProgressPeriod(period);
+ var total=period==="month"?30:period==="year"?12:7,counts=Array(total).fill(0),now=new Date();
+ function bump(value){var d=new Date(value);if(isNaN(d.getTime()))return;var age=Math.floor((now.getTime()-d.getTime())/86400000);if(age<0)return;var index=-1;if(period==="month"){if(age<30)index=29-age;}else if(period==="year"){var monthsAll=(now.getFullYear()-d.getFullYear())*12+now.getMonth()-d.getMonth();if(monthsAll>=0&&monthsAll<12)index=11-monthsAll;}else if(age<7)index=6-age;if(index>=0&&index<total)counts[index]++;}
+ (state.entries||[]).forEach(function(e){bump(e.date);});(state.practiceHistory||[]).forEach(function(p){bump(p.completedAt);});
+ var sum=counts.reduce(function(a,b){return a+b;},0),W=340,H=210,left=42,right=28,top=16,bottom=36,iw=W-left-right,ih=H-top-bottom,max=Math.max(1,...counts);
+ function x(i){return left+(total===1?iw/2:i*iw/Math.max(1,total-1));}
+ function y(v){return top+ih*(1-v/max);}
+ var line=counts.map(function(v,i){return x(i)+","+y(v);}).join(" ");
+ var grids=[0.25,0.5,0.75,1].map(function(f){var yy=top+ih*(1-f);return '<line x1="'+left+'" y1="'+yy+'" x2="'+(W-right)+'" y2="'+yy+'" stroke="#e6e0d6"/>';}).join("");
+ var labelsWeek=["7д","6д","5д","4д","3д","2д","сег"],labelsYear=["12м","11м","10м","9м","8м","7м","6м","5м","4м","3м","2м","1м"];
+ var labelEvery=total>14?Math.ceil(total/6):total>7?Math.ceil(total/5):1;
+ var dots=counts.map(function(v,i){var show=i===0||i===total-1||i%labelEvery===0;var lbl=period==="year"?labelsYear[i]:period==="month"?String(i+1):(labelsWeek[i]||"");return '<circle cx="'+x(i)+'" cy="'+y(v)+'" r="4.5" fill="#fff" stroke="#31443d" stroke-width="2.4"/>'+(show?'<text x="'+x(i)+'" y="'+(H-10)+'" font-size="11" text-anchor="middle" fill="#8a857c">'+esc(lbl)+'</text>':"");}).join("");
+ return '<p class="chart-note" style="margin:0 0 8px">Всего за период: <strong>'+sum+'</strong> '+plural(sum,"балл","балла","баллов")+' активности</p><div class="chart"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Активность за период">'+grids+'<polyline points="'+line+'" fill="none" stroke="#31443d" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>'+dots+'</svg></div>';
+}
+function confidenceChart(period){
+ period=normalizeProgressPeriod(period);
+ var items=(state.entries||[]).filter(function(e){return inPeriodFor(e.date,period)&&e.before!=null&&e.before!==""&&!isNaN(Number(e.before));}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
  if(!items.length)return '<p class="chart-note">Оценок уверенности за этот период пока нет. Они появляются на шаге «насколько веришь этой мысли».</p>';
  var W=340,H=210,left=42,right=28,top=16,bottom=36,iw=W-left-right,ih=H-top-bottom;
  function x(i){return items.length===1?left+iw/2:left+i*(iw/(items.length-1));}
@@ -908,9 +925,10 @@ function confidenceChart(){
  return '<div class="chart"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Уверенность в мыслях за период"><defs><linearGradient id="confArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b7c9b4" stop-opacity=".9"/><stop offset="1" stop-color="#b7c9b4" stop-opacity=".05"/></linearGradient></defs>'+grids+(area?'<path d="'+area+'" fill="url(#confArea)"/>':"")+'<polyline points="'+line+'" fill="none" stroke="#31443d" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>'+dots+'</svg></div>';
 }
 function progress(){
- progressPeriod=normalizeProgressPeriod(progressPeriod);
- var entries=(state.entries||[]).filter(function(e){return inPeriod(e.date);});
- var practicesDone=(state.practiceHistory||[]).filter(function(p){return inPeriod(p.completedAt);});
+ var period=normalizeProgressPeriod(progressPeriod);
+ progressPeriod=period;
+ var entries=(state.entries||[]).filter(function(e){return inPeriodFor(e.date,period);});
+ var practicesDone=(state.practiceHistory||[]).filter(function(p){return inPeriodFor(p.completedAt,period);});
  var days={};
  entries.forEach(function(e){var k=dayKey(e.date);if(k)days[k]=1;});
  practicesDone.forEach(function(p){var k=dayKey(p.completedAt);if(k)days[k]=1;});
@@ -920,9 +938,11 @@ function progress(){
  var avgLine="";
  if(avg(before)!=null||avg(after)!=null)avgLine='<p class="chart-note">В среднем до разбора '+(avg(before)==null?"—":avg(before)+"%")+' · после '+(avg(after)==null?"—":avg(after)+"%")+'.</p>';
  var historyBtn=(state.practiceHistory||[]).length?'<button class="textbtn" type="button" id="show-practice-history">История выполненных практик</button>':"";
- return '<div class="page-head"><h1>Прогресс</h1><p class="lead">Твоя история изменений.</p></div><div class="seg"><button type="button" data-progress-period="week" class="'+(progressPeriod==="week"?"active":"")+'">Неделя</button><button type="button" data-progress-period="month" class="'+(progressPeriod==="month"?"active":"")+'">Месяц</button><button type="button" data-progress-period="year" class="'+(progressPeriod==="year"?"active":"")+'">Год</button></div>'+
+ var activityCaption=period==="year"?"График активности показывает баллы по месяцам выбранного периода.":"График активности показывает количество баллов за каждый день выбранного периода.";
+ return '<div class="page-head"><h1>Прогресс</h1><p class="lead">Твоя история изменений.</p></div><div class="seg"><button type="button" data-progress-period="week" class="'+(period==="week"?"active":"")+'">Неделя</button><button type="button" data-progress-period="month" class="'+(period==="month"?"active":"")+'">Месяц</button><button type="button" data-progress-period="year" class="'+(period==="year"?"active":"")+'">Год</button></div>'+
  '<div class="card stats3" style="margin-top:14px"><div><strong>'+entries.length+'</strong><span>'+plural(entries.length,"запись","записи","записей")+'</span></div><div><strong>'+practicesDone.length+'</strong><span>'+plural(practicesDone.length,"практика","практики","практик")+'</span></div><div><strong>'+Object.keys(days).length+'</strong><span>'+plural(Object.keys(days).length,"день активности","дня активности","дней активности")+'</span></div></div>'+
- '<section class="card chart-card" style="margin-top:12px"><h2>Уверенность в мыслях</h2>'+confidenceChart()+avgLine+'</section>'+historyBtn+'<p class="chart-note">Цифры считаются по твоим записям и практикам. Это не оценка состояния и не диагноз.</p>';
+ '<section class="card chart-card" style="margin-top:12px"><h2>Активность</h2>'+activityChart(period)+'<p class="chart-note">Каждая запись в дневнике = 1 балл.<br>Каждая выполненная практика = 1 балл.<br>'+activityCaption+'</p></section>'+
+ '<section class="card chart-card" style="margin-top:12px"><h2>Уверенность в мыслях</h2>'+confidenceChart(period)+avgLine+'</section>'+historyBtn+'<p class="chart-note">Цифры считаются по твоим записям и практикам. Это не оценка состояния и не диагноз.</p>';
 }
 function topPattern(){
  var list=(state.patterns||[]).filter(function(p){return p.status!=="rejected";});
@@ -1001,6 +1021,21 @@ function render(){
  paintChrome();
  bind();
 }
+function bindHorizontalScroll(root){
+ var rows=(root||document).querySelectorAll(".theme-scroll,.chips");
+ rows.forEach(function(row){
+  if(row.dataset.hscroll)return;
+  row.dataset.hscroll="1";
+  var drag=null,moved=false,TH=6;
+  row.addEventListener("wheel",function(e){if(Math.abs(e.deltaY)>Math.abs(e.deltaX)){row.scrollLeft+=e.deltaY;e.preventDefault();}},{passive:false});
+  row.addEventListener("mousedown",function(e){if(e.button!==0)return;drag={x:e.pageX,sl:row.scrollLeft};moved=false;row.classList.add("is-dragging");});
+  row.addEventListener("mousemove",function(e){if(!drag||(e.buttons&1)!==1)return;var dx=e.pageX-drag.x;if(Math.abs(dx)>TH)moved=true;row.scrollLeft=drag.sl-dx;});
+  function endDrag(){if(!drag)return;drag=null;row.classList.remove("is-dragging");}
+  row.addEventListener("mouseup",endDrag);
+  row.addEventListener("mouseleave",endDrag);
+  row.addEventListener("click",function(e){if(moved){e.preventDefault();e.stopPropagation();moved=false;}},true);
+ });
+}
 function bind(){
  app.querySelectorAll("[data-go]").forEach(function(b){b.onclick=function(){if(b.dataset.go==="journal")step=6;go(b.dataset.go);};});
  app.querySelectorAll("[data-act]").forEach(function(b){b.onclick=function(){act(b.dataset.act,b);};});
@@ -1022,6 +1057,7 @@ function bind(){
  var daily=document.getElementById("daily-summary");if(daily)daily.onclick=function(){runDailySummary(daily);};
  var prev=document.getElementById("daily-summary-previous");if(prev)prev.onclick=function(){openPreviousDailySummary(prev);};
  app.querySelectorAll("[data-theme-filter]").forEach(function(b){b.onclick=function(){var target=b.dataset.themeFilter||"";var def=THEME_DEFS.filter(function(t){return t.name===target;})[0];var found=(state.entries||[]).slice().sort(function(a,c){return new Date(c.date)-new Date(a.date);}).find(function(e){return def&&themeMatches(e,def);});if(found){entryDetail(found.id);}else{journalFilter="all";step=6;editingId=null;go("journal");}};});
+ bindHorizontalScroll(app);
 }
 function act(a){
  if(a==="start"){go("consent");return;}
