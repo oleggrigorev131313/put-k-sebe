@@ -991,7 +991,8 @@ function bind(){
  var historyBtn=document.getElementById("show-practice-history");if(historyBtn)historyBtn.onclick=function(){showPracticeHistory("");};
  var daily=document.getElementById("daily-summary");if(daily)daily.onclick=function(){runDailySummary(daily);};
  var prev=document.getElementById("daily-summary-previous");if(prev)prev.onclick=function(){openPreviousDailySummary(prev);};
-}
+ app.querySelectorAll("[data-theme-filter]").forEach(function(b){b.onclick=function(){var target=b.dataset.themeFilter||"";var terms=target==="Тревога"?["тревог","страх","беспоко"]:target==="Самооценка"?["лучше меня","ничтож","неудач","самооцен","сравни"]:["отнош","молч","ответ","интерес"];var found=(state.entries||[]).find(function(e){var s=String((e.thought||"")+" "+(e.situation||"")+" "+(e.balanced||"")).toLowerCase();return terms.some(function(t){return s.indexOf(t)>=0;});});if(found){entryDetail(found.id);}else{journalFilter="all";go("journal");}};});
+\n}
 function act(a){
  if(a==="start"){go("consent");return;}
  if(a==="have-account"){
