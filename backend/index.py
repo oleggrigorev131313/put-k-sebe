@@ -789,16 +789,19 @@ def _handle_tribute_webhook(raw_body, signature):
         return _json_response(400, {"error": str(exc)})
 
 
-def _deepseek_chat(messages, max_tokens=3000, timeout=55):
+def _deepseek_chat(messages, max_tokens=3000, timeout=55, reasoning_effort="high", thinking_enabled=True):
     import urllib.request
     payload = {
         "model": DEEPSEEK_MODEL,
         "messages": messages,
-        "thinking": {"type": "enabled"},
-        "reasoning_effort": "high",
         "max_tokens": max_tokens,
         "stream": False,
     }
+    if thinking_enabled:
+        payload["thinking"] = {"type": "enabled"}
+        payload["reasoning_effort"] = reasoning_effort
+    else:
+        payload["thinking"] = {"type": "disabled"}
     request = urllib.request.Request(
         "https://api.deepseek.com/chat/completions",
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -807,6 +810,41 @@ def _deepseek_chat(messages, max_tokens=3000, timeout=55):
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def _deepseek_choice_content(data):
+    choices = data.get("choices") or []
+    message = choices[0].get("message") if choices else {}
+    return str((message or {}).get("content") or "").strip()
+
+
+def _deepseek_finish_reason(data):
+    choices = data.get("choices") or []
+    if not choices:
+        return ""
+    return str(choices[0].get("finish_reason") or "")
+
+
+def _analysis_looks_truncated(text, finish_reason):
+    if finish_reason == "length":
+        return True
+    text = (text or "").rstrip()
+    if len(text) < 40:
+        return False
+    return text[-1].isalnum() and text[-1] not in "»"
+
+
+def _trim_analysis_to_last_sentence(text):
+    import re
+    text = (text or "").rstrip()
+    if not text:
+        return text
+    if text[-1] in ".!?»":
+        return text
+    spans = [m.start() for m in re.finditer(r"[.!?»](?:\s|$)", text)]
+    if spans:
+        return text[: spans[-1] + 1].strip()
+    return text
 
 
 def _diary_entry_quality_error(entry):
@@ -922,21 +960,55 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
         "Не превращай ситуативную мысль в постоянное убеждение: помечай её как гипотезу для проверки. "
         "Пиши 'Гипотеза паттерна: нет достаточных данных' ТОЛЬКО если в самой записи нет ни одной мысли, реакции "
         "или поведения, из которых можно осторожно вывести такую формулировку. "
-        "Если по конкретной записи уместно предложить одно небольшое действие, закончи ответ отдельной строкой строго формата 'Микро-практика: короткое название | конкретная инструкция на 1–10 минут | длительность'. Практика должна вытекать из записи, быть выполнимой самостоятельно и не повторять общий шаблон без оснований. Если подходящего действия нет, эту строку не добавляй. Не используй Markdown-звёздочки. Не более 350 слов. Это поддержка для самонаблюдения, не психотерапия и не медицинская помощь."
+        "Если по конкретной записи уместно предложить одно небольшое действие, закончи ответ отдельной строкой строго формата 'Микро-практика: короткое название | конкретная инструкция на 1–10 минут | длительность'. Практика должна вытекать из записи, быть выполнимой самостоятельно и не повторять общий шаблон без оснований. Если подходящего действия нет, эту строку не добавляй. Не используй Markdown-звёздочки. Не более 250 слов; по 2–3 коротких предложения на каждый пункт структуры. Заканчивай каждый пункт полным предложением. Это поддержка для самонаблюдения, не психотерапия и не медицинская помощь."
+    )
+    user_message = (
+        "Контекст из анкеты (помогает учитывать цели пользователя, но не является доказательством):\n"
+        + json.dumps(user_context, ensure_ascii=False)
+        + "\n\nДанные текущей записи:\n"
+        + entry_text
     )
     try:
         stage = "request_deepseek"
         data = _deepseek_chat(
-            [{"role": "system", "content": system_prompt},
-             {"role": "user", "content": "Контекст из анкеты (помогает учитывать цели пользователя, но не является доказательством):\\n"
-              + json.dumps(user_context, ensure_ascii=False) + "\\n\\nДанные текущей записи:\\n" + entry_text}],
-            max_tokens=3000,
-            timeout=55,
+            [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}],
+            max_tokens=6000,
+            timeout=90,
+            reasoning_effort="low",
+            thinking_enabled=True,
         )
         stage = "parse_model_response"
-        choices = data.get("choices") or []
-        message = choices[0].get("message") if choices else {}
-        analysis = str((message or {}).get("content") or "").strip()
+        finish_reason = _deepseek_finish_reason(data)
+        analysis = _deepseek_choice_content(data)
+        truncated = _analysis_looks_truncated(analysis, finish_reason)
+        if truncated:
+            stage = "request_deepseek_retry"
+            retry_data = _deepseek_chat(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": user_message
+                        + "\n\nОтветь компактно (~220 слов), без рассуждений вслух: 2–3 предложения на каждый пункт, каждый пункт закончи полным предложением.",
+                    },
+                ],
+                max_tokens=6000,
+                timeout=90,
+                thinking_enabled=False,
+            )
+            data = retry_data
+            finish_reason = _deepseek_finish_reason(data)
+            analysis = _deepseek_choice_content(data)
+            truncated = _analysis_looks_truncated(analysis, finish_reason)
+        if truncated:
+            analysis = _trim_analysis_to_last_sentence(analysis)
+            usage = data.get("usage") or {}
+            LOG.info(
+                "entry analysis truncated user_id=%s finish_reason=%s completion_tokens=%s",
+                user_id,
+                finish_reason,
+                int(usage.get("completion_tokens", 0)),
+            )
         if not analysis:
             LOG.error("DeepSeek analysis returned no output")
             return _json_response(502, {"error": "empty_model_response"})
