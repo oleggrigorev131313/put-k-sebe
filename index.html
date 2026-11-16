@@ -221,6 +221,14 @@ body.has-tabs .tabbar{display:grid}
 .entry-menu-item.danger{color:#c45c5c}
 .entry-menu-item .ico{width:18px;height:18px;flex:none}
 .entry-detail-foot{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.pattern-save-btn{width:100%;min-height:52px;margin:12px 0;padding:14px 20px;border-radius:17px;border:1.5px solid #2f4a42;background:#faf6ef;color:#2f4a42;font-size:15px;font-weight:650;box-shadow:none}
+.pattern-detail-actions{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.pattern-detail-row{display:flex;gap:10px}
+.pattern-detail-row .pattern-detail-btn{flex:1;min-width:0}
+.pattern-detail-btn{min-height:52px;border-radius:17px;font-size:15px;font-weight:650}
+.pattern-detail-secondary{background:#ece7dc;color:var(--ink);border:0;box-shadow:var(--shadow)}
+.pattern-detail-secondary.pattern-detail-reject{color:#c45c5c}
+.pattern-records-link{display:block;width:100%;border:0;background:transparent;color:#2f4a42;font-size:15px;font-weight:650;text-align:center;padding:14px;margin-top:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .entry-open-row{display:flex;justify-content:flex-end;margin-top:10px}
 .entry-open-pill{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 18px;border-radius:999px;background:#ece7dc;color:var(--pine);font-size:15px;font-weight:650;line-height:1}
 .toast{position:fixed;z-index:70;left:50%;bottom:calc(108px + env(safe-area-inset-bottom));transform:translate(-50%,10px);opacity:0;pointer-events:none;background:var(--pine);color:var(--cream);padding:14px 18px;border-radius:999px;font-size:15px;max-width:calc(100% - 32px);text-align:center;transition:.2s}
@@ -1239,9 +1247,9 @@ function openPattern(id){
  var p=(state.patterns||[]).find(function(x){return String(x.id)===String(id);});if(!p)return;
  var count=linkedCount(p);
  var actions="";
- if(p.status==="suggested")actions='<div class="stack" style="margin-top:12px"><button class="btn primary full" type="button" data-pattern-action="confirm">Подтвердить</button><button class="btn soft full" type="button" data-pattern-action="edit">Изменить</button><button class="textbtn" type="button" data-pattern-action="reject">Отклонить</button></div>';
- else actions='<div class="stack" style="margin-top:12px"><button class="btn soft full" type="button" data-pattern-action="edit">Изменить формулировку</button></div>';
- modal('<div class="look-label">'+(p.status==="suggested"?"Гипотеза":p.status==="rejected"?"Отклонена":"Твой паттерн")+'</div><h2>'+esc(p.name)+'</h2><p>'+esc(p.detail||"Описание пока не добавлено.")+'</p><p class="muted">Связанных записей: '+count+'</p>'+actions+(count?'<button class="textbtn" type="button" id="pattern-records">Показать связанные записи</button>':""));
+ if(p.status==="suggested")actions='<div class="pattern-detail-actions"><button class="btn primary full pattern-detail-btn" type="button" data-pattern-action="confirm">Подтвердить</button><div class="pattern-detail-row"><button class="btn pattern-detail-btn pattern-detail-secondary" type="button" data-pattern-action="edit">Изменить</button><button class="btn pattern-detail-btn pattern-detail-secondary pattern-detail-reject" type="button" data-pattern-action="reject">Отклонить</button></div></div>';
+ else actions='<div class="pattern-detail-actions"><button class="btn pattern-detail-btn pattern-detail-secondary full" type="button" data-pattern-action="edit">Изменить формулировку</button></div>';
+ modal('<div class="look-label">'+(p.status==="suggested"?"Гипотеза":p.status==="rejected"?"Отклонена":"Твой паттерн")+'</div><h2>'+esc(p.name)+'</h2><p>'+esc(p.detail||"Описание пока не добавлено.")+'</p><p class="muted">Связанных записей: '+count+'</p>'+actions+(count?'<button class="pattern-records-link" type="button" id="pattern-records">Показать связанные записи ›</button>':""));
  var records=document.getElementById("pattern-records");if(records)records.onclick=function(){showPatternEntries(id,"");};
  document.querySelectorAll("[data-pattern-action]").forEach(function(b){b.onclick=function(){patternAction(id,b.dataset.patternAction);};});
 }
@@ -1361,7 +1369,7 @@ function entryDetail(id,opts){
   else analysisAction='<button class="btn light full" type="button" id="premium-analysis">Заказать анализ ситуации — в Premium</button>';
  }
  var head='<div class="modalhead modalhead-actions"><div class="modalhead-menu-wrap"><button class="round" type="button" id="entry-more" aria-label="Действия с записью" aria-haspopup="menu" aria-expanded="false"><span class="entry-more-dots" aria-hidden="true">⋯</span></button><div class="entry-menu" id="entry-menu" hidden role="menu"><button type="button" class="entry-menu-item" id="entry-menu-edit" role="menuitem">'+entryMenuSvgEdit()+'<span>Изменить запись</span></button><button type="button" class="entry-menu-item danger" id="entry-menu-delete" role="menuitem">'+entryMenuSvgTrash()+'<span>Удалить запись</span></button></div></div><button class="round" id="close" type="button" aria-label="Закрыть">×</button></div>';
- modal('<div class="look-label">'+esc(dateLabel(e.date))+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация.</b> '+esc(e.situation)+'</p><p><b>Эмоция.</b> '+esc(e.emotion)+' · '+esc(e.intensity)+'/10</p><p><b>Факты за.</b> '+esc(e.forText)+'</p><p><b>Факты против.</b> '+esc(e.against)+'</p><p><b>Новый взгляд.</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг.</b> '+esc(e.action)+'</p><div class="field pattern-link-field" style="margin-bottom:0"><label>Связать запись с паттерном</label><select class="select" id="entry-pattern">'+options+'</select></div><div id="ai-result" class="note" style="display:none"></div>'+stale+analysisShown+'<div class="entry-detail-foot"><button class="btn light full" type="button" id="save-entry-pattern">Сохранить связь</button>'+analysisAction+'</div>',head);
+ modal('<div class="look-label">'+esc(dateLabel(e.date))+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация.</b> '+esc(e.situation)+'</p><p><b>Эмоция.</b> '+esc(e.emotion)+' · '+esc(e.intensity)+'/10</p><p><b>Факты за.</b> '+esc(e.forText)+'</p><p><b>Факты против.</b> '+esc(e.against)+'</p><p><b>Новый взгляд.</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг.</b> '+esc(e.action)+'</p><div class="field pattern-link-field" style="margin-bottom:0"><label>Связать запись с паттерном</label><select class="select" id="entry-pattern">'+options+'</select></div><button class="pattern-save-btn" type="button" id="save-entry-pattern">Сохранить паттерн</button><div id="ai-result" class="note" style="display:none"></div>'+stale+analysisShown+(analysisAction?'<div class="entry-detail-foot">'+analysisAction+'</div>':""),head);
  document.getElementById("save-entry-pattern").onclick=function(){var pid=document.getElementById("entry-pattern").value;if(pid)linkEntryToPattern(id,pid);else{e.pattern="";e.patterns=[];}save();toast(pid?"Связь с паттерном сохранена.":"Связь с паттерном удалена.");closeModal();render();entryDetail(id,opts);};
  bindEntryOverflowMenu(function(){beginEdit(id);},function(){if(confirm("Удалить эту запись?")){state.entries=state.entries.filter(function(x){return String(x.id)!==String(id);});save();closeModal();render();}});
  var ab=document.getElementById("analyze");
