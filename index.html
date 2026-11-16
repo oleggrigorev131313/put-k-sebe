@@ -337,8 +337,6 @@ main > *{min-width:0}
 body[data-page="subscription"] .status-line{color:#d5e3d0}
 body[data-page="subscription"],body[data-page="subscription"] .shell{overflow-x:hidden}
 .tabbar button{min-height:44px}
-.kb-done{position:fixed;z-index:100;right:max(18px,env(safe-area-inset-right));margin:0;padding:10px 14px;min-height:44px;min-width:44px;border:0;background:transparent;color:var(--pine);font-size:15px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:flex-end;box-shadow:none}
-.kb-done[hidden]{display:none!important}
 .thought-recap{border:1px solid #e4ded4;background:rgba(255,253,248,.92)}
 @media(min-width:700px){body{background:#e7e0d4}.shell{box-shadow:0 0 0 1px rgba(255,255,255,.5)}}
 @media(max-width:370px){
@@ -359,7 +357,6 @@ body[data-page="subscription"],body[data-page="subscription"] .shell{overflow-x:
 <header class="topbar" id="topbar" hidden></header>
 <main id="app" aria-live="polite"></main>
 </div>
-<button type="button" class="kb-done" id="kb-done" hidden aria-label="Скрыть клавиатуру">Готово ↓</button>
 <nav class="tabbar" id="tabbar" aria-label="Навигация">
 <button type="button" data-page="home"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>Главная</button>
 <button type="button" data-page="journal"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h9.5A2.5 2.5 0 0 1 18 6.5V20H8a2 2 0 0 1-2-2z"/><path d="M6 4v14a2 2 0 0 0 2 2h10"/><path d="M9 8h6M9 12h6"/></svg>Дневник</button>
@@ -859,16 +856,16 @@ function journal(){
 }
 var stepTitles=["Что произошло?","Что ты почувствовал?","Какая мысль возникла?","Проверим факты","Более сбалансированный взгляд","Следующий небольшой шаг"];
 var stepHints=["Опиши событие без оценок себя и других.","Назови эмоцию и оцени её интенсивность.","Запиши первую мысль, которая возникла.","Отдели наблюдаемые факты от предположений.","Найди взгляд, который учитывает всю картину.","Выбери выполнимое действие, а не идеальный план."];
-function field(label,key,ph){return '<div class="field"><label>'+label+'</label><textarea class="area" data-field="'+key+'" placeholder="'+ph+'">'+esc(draft[key])+'</textarea></div>';}
+function field(label,key,ph){return '<div class="field"><label>'+label+'</label><textarea class="area" enterkeyhint="done" data-field="'+key+'" placeholder="'+ph+'">'+esc(draft[key])+'</textarea></div>';}
 function range(label,key,max,suffix){return '<div class="field"><label>'+label+'</label><div class="range"><input type="range" min="0" max="'+max+'" value="'+draft[key]+'" data-range="'+key+'"><strong id="v-'+key+'">'+draft[key]+(suffix||"")+'</strong></div></div>';}
 function wizard(){
  var dots="";for(var i=0;i<6;i++){dots+='<i class="'+(i<=step?"on":"")+'"></i>';if(i<5)dots+='<b class="'+(i<step?"on":"")+'"></b>';}
  var thoughtRecap=(function(){var t=String(draft.thought||"").trim();return t?'<div class="card thought-recap"><p class="look-label" style="margin:0 0 6px">Твоя мысль</p><p style="margin:0;font-size:15px;line-height:1.4">«'+esc(t)+'»</p></div>':"";})();
  var bodies=[
-  '<div class="field"><textarea class="area" data-field="situation" placeholder="Например: отправил предложение клиенту, но не получил ответ.">'+esc(draft.situation)+'</textarea></div>',
-  '<div class="field"><label>Какие эмоции ты испытывал?</label><p class="muted">'+(selectedEmotions().length?esc(selectedEmotions().join(" · ")):"Выбери одну или несколько.")+'</p><div class="emotion-groups">'+Object.keys(emotionGroups).map(function(group){var chosen=emotionGroups[group].filter(function(x){return selectedEmotions().indexOf(x)>=0;}).length,open=!!expandedEmotionGroups[group];return '<div class="emotion-group"><button type="button" class="emotion-group-head" data-emotion-group="'+esc(group)+'"><span>'+esc(group)+'</span><span>'+(chosen?'<i class="emotion-group-count">'+chosen+'</i>':"")+(open?"−":"+")+'</span></button>'+(open?'<div class="emotion-group-body"><div class="choice-chips">'+emotionGroups[group].map(function(x){return '<button type="button" class="chip '+(selectedEmotions().indexOf(x)>=0?"active":"")+'" data-emotion="'+esc(x)+'">'+esc(x)+'</button>';}).join("")+'</div></div>':"")+'</div>';}).join("")+'</div><div class="custom-emotion"><label for="custom-emotion-input">Не нашёл нужное состояние?</label><div class="custom-row"><input class="input" id="custom-emotion-input" placeholder="Напиши своё состояние"><button type="button" class="btn soft" data-add-custom-emotion>Добавить</button></div></div></div>'+range("Общая интенсивность эмоций","intensity",10,"/10"),
+  '<div class="field"><textarea class="area" enterkeyhint="done" data-field="situation" placeholder="Например: отправил предложение клиенту, но не получил ответ.">'+esc(draft.situation)+'</textarea></div>',
+  '<div class="field"><label>Какие эмоции ты испытывал?</label><p class="muted">'+(selectedEmotions().length?esc(selectedEmotions().join(" · ")):"Выбери одну или несколько.")+'</p><div class="emotion-groups">'+Object.keys(emotionGroups).map(function(group){var chosen=emotionGroups[group].filter(function(x){return selectedEmotions().indexOf(x)>=0;}).length,open=!!expandedEmotionGroups[group];return '<div class="emotion-group"><button type="button" class="emotion-group-head" data-emotion-group="'+esc(group)+'"><span>'+esc(group)+'</span><span>'+(chosen?'<i class="emotion-group-count">'+chosen+'</i>':"")+(open?"−":"+")+'</span></button>'+(open?'<div class="emotion-group-body"><div class="choice-chips">'+emotionGroups[group].map(function(x){return '<button type="button" class="chip '+(selectedEmotions().indexOf(x)>=0?"active":"")+'" data-emotion="'+esc(x)+'">'+esc(x)+'</button>';}).join("")+'</div></div>':"")+'</div>';}).join("")+'</div><div class="custom-emotion"><label for="custom-emotion-input">Не нашёл нужное состояние?</label><div class="custom-row"><input class="input" id="custom-emotion-input" enterkeyhint="done" placeholder="Напиши своё состояние"><button type="button" class="btn soft" data-add-custom-emotion>Добавить</button></div></div></div>'+range("Общая интенсивность эмоций","intensity",10,"/10"),
   field("Автоматическая мысль","thought","Например: «Я никогда не смогу нормально зарабатывать».")+range("Насколько веришь этой мысли?","before",100,"%"),
-  '<div class="field"><label>Факты за мысль</label><textarea class="area" data-field="forText" placeholder="Какие факты подтверждают эту мысль?">'+esc(draft.forText)+'</textarea></div><div class="field"><label>Факты против мысли</label><textarea class="area" data-field="against" placeholder="Какие факты ей противоречат?">'+esc(draft.against)+'</textarea></div>',
+  '<div class="field"><label>Факты за мысль</label><textarea class="area" enterkeyhint="done" data-field="forText" placeholder="Какие факты подтверждают эту мысль?">'+esc(draft.forText)+'</textarea></div><div class="field"><label>Факты против мысли</label><textarea class="area" enterkeyhint="done" data-field="against" placeholder="Какие факты ей противоречат?">'+esc(draft.against)+'</textarea></div>',
   (thoughtRecap?thoughtRecap+'<div style="height:12px"></div>':"")+field("Как сформулировать эту мысль точнее?","balanced","Если учесть все факты, какая формулировка будет точнее?")+range("Насколько ты теперь веришь в первоначальную мысль?","after",100,"%"),
   field("Какой небольшой шаг ты можешь сделать?","action","Действие на 10–15 минут.")+'<div class="field"><label>С каким паттерном это связано?</label><select class="select" id="patternSelect"><option value="" '+(!draft.pattern?"selected":"")+'>Пока не определил — можно выбрать позже</option>'+state.patterns.filter(function(p){return p.status!=="rejected";}).map(function(p){return '<option value="'+esc(p.id)+'" '+(draft.pattern===p.id?"selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select><button type="button" class="btn soft full" style="margin-top:10px" data-act="add-pattern-in-entry">＋ Создать новый паттерн</button></div>'
  ];
@@ -1064,6 +1061,11 @@ function bind(){
  app.querySelectorAll("[data-go]").forEach(function(b){b.onclick=function(){if(b.dataset.go==="journal")step=6;go(b.dataset.go);};});
  app.querySelectorAll("[data-act]").forEach(function(b){b.onclick=function(){act(b.dataset.act,b);};});
  app.querySelectorAll("[data-field]").forEach(function(el){el.oninput=function(){draft[el.dataset.field]=el.value;};});
+ if(page==="journal"&&step<6){
+  app.querySelectorAll("textarea.area[data-field], #custom-emotion-input").forEach(function(el){
+   el.onkeydown=function(ev){if(ev.key!=="Enter"||ev.shiftKey||ev.isComposing)return;ev.preventDefault();el.blur();};
+  });
+ }
  app.querySelectorAll("[data-range]").forEach(function(el){el.oninput=function(){draft[el.dataset.range]=Number(el.value);var t=document.getElementById("v-"+el.dataset.range);if(t)t.textContent=el.value+(el.dataset.range==="intensity"?"/10":"%");};});
  app.querySelectorAll("[data-emotion-group]").forEach(function(b){b.onclick=function(){expandedEmotionGroups[b.dataset.emotionGroup]=!expandedEmotionGroups[b.dataset.emotionGroup];render();};});
  app.querySelectorAll("[data-emotion]").forEach(function(b){b.onclick=function(){var list=selectedEmotions(),v=b.dataset.emotion,i=list.indexOf(v);if(i>=0)list.splice(i,1);else list.push(v);draft.emotion=list[0]||"";render();};});
@@ -1332,17 +1334,6 @@ document.addEventListener("visibilitychange",function(){
 });
 refreshPremium();
 refreshAiUsage();
-(function initKeyboardDone(){
- var btn=document.getElementById("kb-done");
- if(!btn)return;
- function isField(el){if(!el||!el.tagName)return false;if(el.tagName==="TEXTAREA")return true;if(el.tagName==="INPUT"){var t=(el.type||"text").toLowerCase();return t!=="range"&&t!=="hidden"&&t!=="file"&&t!=="checkbox"&&t!=="radio"&&t!=="button"&&t!=="submit";}return false;}
- function place(){if(btn.hidden)return;var vv=window.visualViewport;btn.style.top=(vv?vv.offsetTop+vv.height-46:window.innerHeight-56)+"px";}
- function sync(){if(isField(document.activeElement)){btn.hidden=false;place();}else btn.hidden=true;}
- btn.onclick=function(e){e.preventDefault();var el=document.activeElement;if(isField(el))el.blur();btn.hidden=true;};
- document.addEventListener("focusin",sync);
- document.addEventListener("focusout",function(){setTimeout(sync,80);});
- if(window.visualViewport){visualViewport.addEventListener("resize",place);visualViewport.addEventListener("scroll",place);}
-})();
 })();
 </script>
 </body>
