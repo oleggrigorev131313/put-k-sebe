@@ -72,7 +72,7 @@ yc serverless function version set-tag --id <PREVIOUS_VERSION_ID> --tag '$latest
 После `migrate.py --apply` появится таблица `imeads_attribution` (только если её ещё нет). `click_id` сохраняется при первом касании из Mini App (`start_param` в `POST /v1/profile`) или `/start imeads__<id>` в боте. События: `new_user`, `signup` (согласие + первая запись в дневнике), `purchase` (webhook Tribute, сумма по `product_id`). Тест: `POST /v1/admin/imeads/test` с заголовком `x-admin-password` и телом `{"click_id":"..."}` или `{"user_id":"..."}`. Ручной curl (подставьте ключ и click_id):
 
 ```bash
-curl -sS "https://ad.api.imem.me/postback?key=YOUR_SECRET&click_id=CLICK_ID&event=test"
+curl -sS -X POST "https://ad.api.imem.me/postback?key=YOUR_SECRET&click_id=CLICK_ID&event=test"
 ```
 - TELEGRAM_WEBHOOK_SECRET — необязательный. Если переменная не задана, секрет webhook выводится из BOT_TOKEN (см. ниже). `deploy.sh` её не создаёт и не передаёт, новый Lockbox-секрет не нужен.
 

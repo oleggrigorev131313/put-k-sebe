@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from threading import RLock
@@ -29,6 +30,7 @@ TRIBUTE_PRODUCTS = {"177388": 30, "177544": 90, "177545": 365}
 TRIBUTE_PRODUCT_AMOUNT_RUB = {"177388": 490, "177544": 1323, "177545": 4704}
 IMEADS_SECRET_KEY = os.environ.get("IMEADS_SECRET_KEY", "").strip()
 IMEADS_POSTBACK_URL = "https://ad.api.imem.me/postback"
+IMEADS_CLICK_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 _driver = None
 _pool = None
@@ -177,15 +179,13 @@ def _parse_imeads_click_id(raw):
     if not value:
         return None
     lowered = value.casefold()
-    for prefix in ("imeads__", "imeads_"):
-        if not lowered.startswith(prefix):
-            continue
-        click_id = value[len(prefix) :].strip()
-        if not click_id or len(click_id) > 128 or " " in click_id or "\t" in click_id:
-            continue
-        if prefix == "imeads_" and lowered.startswith("imeads__"):
-            continue
-        return click_id
+    if lowered.startswith("imeads__"):
+        value = value[8:].strip()
+    elif lowered.startswith("imeads_"):
+        value = value[7:].strip()
+    value = value.casefold()
+    if IMEADS_CLICK_ID_RE.match(value):
+        return value
     return None
 
 
@@ -206,7 +206,8 @@ def _imeads_read(user_id):
                     flags = {}
             except (json.JSONDecodeError, TypeError, ValueError):
                 flags = {}
-            return {"click_id": str(row.click_id), "flags": flags}
+            click_id = _parse_imeads_click_id(str(row.click_id))
+            return {"click_id": click_id, "flags": flags}
     return None
 
 
@@ -230,9 +231,17 @@ def _imeads_persist_flags(user_id, click_id, captured_at, flags):
     )
 
 
-def _imeads_fire_postback(click_id, event, value=None, currency=None):
+def _imeads_redact_body(text):
+    if not text:
+        return ""
+    return re.sub(r"(?i)(key=)[^&\s\"']+", r"\1REDACTED", str(text))[:500]
+
+
+def _imeads_fire_postback(click_id, event, value=None, currency=None, log_errors=True):
+    click_id = _parse_imeads_click_id(click_id)
     if not IMEADS_SECRET_KEY or not click_id:
-        return
+        return {"ok": False, "status": None, "body": "", "skipped": True}
+    import urllib.error
     import urllib.parse
     import urllib.request
 
@@ -242,10 +251,32 @@ def _imeads_fire_postback(click_id, event, value=None, currency=None):
     if currency:
         params["currency"] = str(currency)[:8]
     url = IMEADS_POSTBACK_URL + "?" + urllib.parse.urlencode(params)
+    status = None
+    body = ""
     try:
-        urllib.request.urlopen(urllib.request.Request(url, method="GET"), timeout=3)
+        request = urllib.request.Request(url, method="POST", data=b"")
+        with urllib.request.urlopen(request, timeout=3) as response:
+            status = response.status
+            body = response.read(512).decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+        try:
+            body = exc.read(512).decode("utf-8", errors="replace")
+        except Exception:
+            body = ""
     except Exception:
-        pass
+        if log_errors:
+            LOG.info("imeads postback event=%s failed transport", event)
+        return {"ok": False, "status": status, "body": _imeads_redact_body(body)}
+    ok = status is not None and 200 <= status < 300
+    if log_errors and not ok:
+        LOG.info(
+            "imeads postback event=%s status=%s body=%s",
+            event,
+            status,
+            _imeads_redact_body(body)[:200],
+        )
+    return {"ok": ok, "status": status, "body": _imeads_redact_body(body)}
 
 
 def _imeads_send_once(user_id, event, value=None, currency=None):
@@ -261,7 +292,11 @@ def _imeads_send_once(user_id, event, value=None, currency=None):
     flags = dict(row.get("flags") or {})
     if flags.get(flag_key):
         return
-    _imeads_fire_postback(row["click_id"], event, value, currency)
+    if not row.get("click_id"):
+        return
+    sent = _imeads_fire_postback(row["click_id"], event, value, currency)
+    if not sent.get("ok"):
+        return
     flags[flag_key] = True
     try:
         attrib = _execute(
@@ -1985,9 +2020,17 @@ def handler(event, context):
                 except TableMissing:
                     return _json_response(503, {"error": "imeads_table_missing"})
             if not click_id:
-                return _json_response(400, {"error": "click_id_required"})
-            _imeads_fire_postback(click_id, "test")
-            return _json_response(200, {"ok": True, "sent": "test"})
+                return _json_response(400, {"error": "click_id_invalid_or_missing"})
+            result = _imeads_fire_postback(click_id, "test", log_errors=False)
+            return _json_response(
+                200 if result.get("ok") else 502,
+                {
+                    "ok": bool(result.get("ok")),
+                    "sent": "test",
+                    "imeads_status": result.get("status"),
+                    "imeads_body": result.get("body") or "",
+                },
+            )
 
         if path == "/v1/events" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
