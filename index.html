@@ -140,6 +140,15 @@ body[data-page="subscription"] .btn.trial-cta{background:transparent;color:var(-
 .hintbox .ico{width:20px;height:20px;flex:none;margin-top:1px;color:#8d948c}
 .wizard-actions{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:18px}
 .wizard-actions .textbtn{margin-right:auto}
+.wizard-footer{display:flex;flex-direction:column;gap:12px;margin-top:18px}
+.wizard-footer .wizard-actions{margin-top:0}
+.wizard-footer .wizard-actions .btn{min-width:0;flex:1}
+.entry-detail-actions{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.pattern-link-field{margin-top:12px}
+.pattern-save-row{display:flex;justify-content:flex-end;margin-top:8px}
+.btn-compact{min-height:40px;padding:8px 16px;font-size:14px;font-weight:700;border-radius:14px;box-shadow:var(--shadow)}
+.textbtn.danger{color:#c45c5c;font-weight:700}
+.modal-actions.stack{display:flex;flex-direction:column;gap:12px;margin-top:16px}
 .range{display:flex;align-items:center;gap:12px}
 .range input{flex:1;accent-color:var(--pine)}
 .range strong{min-width:48px;text-align:right;color:var(--pine);font-size:14px}
@@ -381,7 +390,7 @@ var step=6,draft=blank(),editingId=null,journalFilter="all",libraryTab="plan",sh
 var progressPeriod=normalizeProgressPeriod(state.progressPeriod!=null?state.progressPeriod:"week");
 var pageHistory=[],cloudReady=false,cloudSyncTimer=null,cloudRetryTimer=null,cloudRetryAttempt=0,cloudInitInFlight=false,cloudLastToast="",cloudErrorShown=false,cloudStatus="paused",cloudErrorText="";
 var premiumStatus={active:false,trial_used:false},premiumLoading=false,aiUsage={limit:5,used:0,remaining:5,loading:false};
-var summaryView=null,expandedEmotionGroups={},activityPointPick=null;
+var summaryView=null,expandedEmotionGroups={},activityPointPick=null,pendingAnalysisEntryId=null;
 var PLANS=[
  {id:"month",title:"1 месяц · 490 ₽",text:"Разовая покупка. Автоматического списания нет.",href:"https://web.tribute.tg/p/K96"},
  {id:"quarter",title:"3 месяца · 1 323 ₽",text:"Разовая покупка · скидка 10% · 441 ₽ в месяц.",href:"https://web.tribute.tg/p/KbC"},
@@ -471,7 +480,7 @@ async function analyzeEntry(id,buttonEl){
   var data=await response.json();
   if(!response.ok){
    if(response.status===403){premiumStatus={active:false};throw new Error("Для анализа нужен активный Premium.");}
-   if(response.status===422)throw new Error(data.message||"Не удалось разобрать запись. Проверь, достаточно ли в ней понятного текста.");
+   if(response.status===422)throw new Error(data.message||"Не удалось выполнить анализ ситуации. Проверь, достаточно ли в записи понятного текста.");
    if(response.status===429)throw new Error(data.message||"Дневной лимит анализов исчерпан.");
    var diagnostic=data.detail||data.provider_code||data.error||"Неизвестная ошибка";
    if(data.provider_status)diagnostic+=" (HTTP "+data.provider_status+")";
@@ -488,7 +497,7 @@ async function analyzeEntry(id,buttonEl){
   refreshAiUsage();
  }catch(e){
   toast(e.message||"Ошибка анализа.");
-  if(buttonEl){buttonEl.disabled=false;buttonEl.textContent="Повторить анализ";}if(result){result.style.display="none";result.innerHTML="";}
+  if(buttonEl){buttonEl.disabled=false;buttonEl.textContent="Заказать анализ снова";}if(result){result.style.display="none";result.innerHTML="";}
  }
 }
 function cleanSummary(raw){return String(raw||"").replace(/^Практика на завтра:.*$/gmi,"").trim();}
@@ -751,7 +760,7 @@ function explain(){
   library:"«Мой план» — персональные шаги. «Все практики» — короткие базовые упражнения.",
   progress:"Неделя, месяц и год считаются по твоим записям и выполненным практикам. График показывает, насколько ты верил мысли до разбора.",
   summary:"Итоги дня собираются один раз в сутки. Направления берутся из твоих паттернов и практик.",
-  subscription:"392 ₽ в месяц — это оплата года сразу, 4 704 ₽. Месяц отдельно стоит 490 ₽. Разбор записи открывается в Premium, итоги дня остаются на любом тарифе."
+  subscription:"392 ₽ в месяц — это оплата года сразу, 4 704 ₽. Месяц отдельно стоит 490 ₽. Анализ ситуации по записи — в Premium, итоги дня остаются на любом тарифе."
  };
  modal('<h2>Пояснение</h2><p>'+(copy[page]||"ПЕРЕСМОТР помогает замечать мысли и выбирать следующий небольшой шаг.")+'</p>');
 }
@@ -880,7 +889,8 @@ function wizard(){
  ];
  var note=step===0?"Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее.":"Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее и выбрать следующий посильный шаг.";
  var leftAction=step?'<button class="textbtn" type="button" data-act="prev">Назад</button>':'<button class="textbtn" type="button" data-act="cancel">Отменить</button>';
- return '<div class="page-head"><h1>'+(editingId?"Изменить запись":"Новая запись")+'</h1><p class="step-label">Шаг '+(step+1)+' из 6</p><div class="stepdots">'+dots+'</div></div><h2 class="question">'+stepTitles[step]+'</h2><p class="lead">'+stepHints[step]+'</p><section class="card field-card'+(step===0?" solo":"")+'" style="margin-top:14px">'+bodies[step]+'</section><div class="hintbox">'+ico("info")+'<span>'+note+'</span></div><div class="wizard-actions">'+leftAction+'<button class="btn primary" type="button" data-act="'+(step===5?"save":"next")+'">'+(step===5?"Сохранить":"Далее →")+'</button></div>';
+ var footer=step===5?'<div class="wizard-footer"><button class="btn primary full" type="button" data-act="save-analyze">Заказать анализ ситуации</button><div class="wizard-actions">'+leftAction+'<button class="btn light" type="button" data-act="save">Сохранить</button></div></div>':'<div class="wizard-actions">'+leftAction+'<button class="btn primary" type="button" data-act="next">Далее →</button></div>';
+ return '<div class="page-head"><h1>'+(editingId?"Изменить запись":"Новая запись")+'</h1><p class="step-label">Шаг '+(step+1)+' из 6</p><div class="stepdots">'+dots+'</div></div><h2 class="question">'+stepTitles[step]+'</h2><p class="lead">'+stepHints[step]+'</p><section class="card field-card'+(step===0?" solo":"")+'" style="margin-top:14px">'+bodies[step]+'</section><div class="hintbox">'+ico("info")+'<span>'+note+'</span></div>'+footer;
 }
 function linkedCount(p){return state.entries.filter(function(e){return e.pattern===p.id||(e.patterns||[]).indexOf(p.id)>=0;}).length;}
 function patternGlyph(p){var icons=["infinity","layers","compare"],n=0,s=String(p&&p.name||"");for(var i=0;i<s.length;i++)n+=s.charCodeAt(i);return icons[n%icons.length];}
@@ -1026,11 +1036,11 @@ function subscription(){
  var until="";
  if(premium.active&&premium.premium_until){var d=new Date(premium.premium_until);if(!isNaN(d.getTime()))until=d.toLocaleDateString("ru-RU",{day:"numeric",month:"long",year:"numeric"});}
  var status=premium.active?'<p class="status-line">Premium активен'+(until?" до "+esc(until):"")+(premium.source==="trial"?" · пробный период":"")+'.</p>':"";
- var usage=premium.active?('Сегодня использовано '+(aiUsage.used||0)+' из '+(aiUsage.limit||5)+' разборов записей.'):'Разбор отдельной записи — в Premium. Итоги дня по-прежнему один раз в сутки на любом тарифе.';
+ var usage=premium.active?('Сегодня использовано '+(aiUsage.used||0)+' из '+(aiUsage.limit||5)+' анализов ситуации.'):'Анализ ситуации по записи — в Premium. Итоги дня по-прежнему один раз в сутки на любом тарифе.';
  var trialEligible=!premium.active&&!premium.trial_used;
  var trialBtn=trialEligible?'<button class="btn trial-cta full" type="button" data-act="start-trial">'+trialPeriodCtaLabel(TRIAL_DAYS)+'</button>':"";
  var plans=PLANS.map(function(plan){return '<a class="plan" href="'+plan.href+'" target="_blank" rel="noopener"><b>'+plan.title+'</b><span>'+plan.text+'</span></a>';}).join("");
- return '<section class="premium"><div class="premium-glow" aria-hidden="true"></div><div class="premium-screen"><h1>Premium</h1><p class="lead">Персональный аналитик и расширенные возможности.</p>'+status+'<ul class="check-list"><li><span class="check-bullet">'+ico("check")+'</span>Анализ записей и истории</li><li><span class="check-bullet">'+ico("check")+'</span>Выявление повторяющихся паттернов</li><li><span class="check-bullet">'+ico("check")+'</span>Персональные рекомендации</li><li><span class="check-bullet">'+ico("check")+'</span>До 5 разборов записей в день</li></ul><div class="premium-buy"><div class="premium-buy-stack"><a class="btn light full" href="#plans">От 392 ₽ / месяц →</a>'+trialBtn+'</div><p class="price-note">Это цена месяца при оплате года сразу: 4 704 ₽ за год. Месяц отдельно — 490 ₽.</p></div></div><div class="premium-plans" id="plans">'+plans+'<p class="fine">'+usage+' Оплата проходит на Tribute. Суммы списания те же: 490 ₽, 1 323 ₽ и 4 704 ₽. Автопродления нет.</p></div></section>';
+ return '<section class="premium"><div class="premium-glow" aria-hidden="true"></div><div class="premium-screen"><h1>Premium</h1><p class="lead">Персональный аналитик и расширенные возможности.</p>'+status+'<ul class="check-list"><li><span class="check-bullet">'+ico("check")+'</span>Анализ записей и истории</li><li><span class="check-bullet">'+ico("check")+'</span>Выявление повторяющихся паттернов</li><li><span class="check-bullet">'+ico("check")+'</span>Персональные рекомендации</li><li><span class="check-bullet">'+ico("check")+'</span>До '+(aiUsage.limit||5)+' анализов ситуации в день</li></ul><div class="premium-buy"><div class="premium-buy-stack"><a class="btn light full" href="#plans">От 392 ₽ / месяц →</a>'+trialBtn+'</div><p class="price-note">Это цена месяца при оплате года сразу: 4 704 ₽ за год. Месяц отдельно — 490 ₽.</p></div></div><div class="premium-plans" id="plans">'+plans+'<p class="fine">'+usage+' Оплата проходит на Tribute. Суммы списания те же: 490 ₽, 1 323 ₽ и 4 704 ₽. Автопродления нет.</p></div></section>';
 }
 var practices=[
  {icon:"layers",title:"Поймать автоматическую мысль",time:"5–7 минут",text:"Вспомни конкретную ситуацию. Запиши, что произошло, какие слова возникли в голове и какую эмоцию ты почувствовал. Не пытайся пока менять мысль — сначала просто заметь её."},
@@ -1114,7 +1124,14 @@ function act(a){
    var data=await r.json();
    if(r.status===409){premiumStatus=data;toast("Пробный период уже использован на этом Telegram-аккаунте.");}
    else if(!r.ok)throw new Error(data.error||"Не удалось активировать пробный период");
-   else{premiumStatus=data;toast("Premium активирован на "+TRIAL_DAYS+" "+(TRIAL_DAYS===1?"день":(TRIAL_DAYS>=2&&TRIAL_DAYS<=4?"дня":"дней"))+".");}
+   else{
+    premiumStatus=data;
+    refreshAiUsage().then(function(){
+     render();
+     showTrialActivatedModal();
+    });
+    return;
+   }
    render();
   }).catch(function(){toast("Не удалось активировать пробный период. Попробуй позже.");});
   return;
@@ -1134,18 +1151,15 @@ function act(a){
   return;
  }
  if(a==="new"){editingId=null;draft=blank();step=0;if(page!=="journal")go("journal");else render();return;}
- if(a==="next"||a==="save"){
+ if(a==="next"||a==="save"||a==="save-analyze"){
   var checks=[!!String(draft.situation||"").trim(),selectedEmotions().length>0,!!String(draft.thought||"").trim(),!!(String(draft.forText||"").trim()||String(draft.against||"").trim()),!!String(draft.balanced||"").trim(),!!String(draft.action||"").trim()];
   var prompts=["Опиши ситуацию, чтобы продолжить.","Выбери хотя бы одну эмоцию.","Запиши автоматическую мысль.","Добавь хотя бы один факт за или против этой мысли.","Сформулируй более точный взгляд.","Укажи один небольшой следующий шаг."];
   if(a==="next"){if(!checks[step]){toast(prompts[step]);return;}if(step<5)step++;render();return;}
-  var missing=!checks[0]||!checks[1]||!checks[2]||!checks[3]||!checks[4]||!checks[5];
-  if(missing){toast("Заполни обязательные поля — можно вернуться к нужному шагу.");return;}
-  draft.emotions=selectedEmotions().slice();draft.emotion=draft.emotions.join(", ");
+  if(!wizardComplete()){toast("Заполни обязательные поля — можно вернуться к нужному шагу.");return;}
   if(editingId){saveEditedEntry();return;}
-  draft.date=new Date().toISOString();draft.id=Date.now().toString();
-  state.entries.unshift(Object.assign({},draft));save();trackEvent("diary_entry_created");step=6;editingId=null;
-  toast(cloudReady?"Запись сохранена. Отправляю в облако…":"Запись сохранена на устройстве.");
-  go("journal");return;
+  var entryId=persistNewWizardEntry();
+  afterWizardSaveToJournal(entryId,a==="save-analyze");
+  return;
  }
  if(a==="prev"){if(step>0)step--;render();return;}
  if(a==="cancel"){step=6;editingId=null;if(page!=="journal")go("journal");else render();return;}
@@ -1271,16 +1285,56 @@ function practiceFeedback(id){
 }
 function modal(content){closeModal();var d=document.createElement("div");d.className="modalbg";d.id="modal";d.innerHTML='<section class="modal" role="dialog" aria-modal="true"><div class="modalhead"><button class="round" id="close" type="button" aria-label="Закрыть">×</button></div>'+content+'</section>';document.body.appendChild(d);d.onclick=function(e){if(e.target===d)closeModal();};document.getElementById("close").onclick=closeModal;}
 function closeModal(){var m=document.getElementById("modal");if(m)m.remove();}
-function entryDetail(id){
+function showTrialActivatedModal(){
+ var pending=pendingAnalysisEntryId;
+ var limit=aiUsage.limit||5;
+ var body='<h2>Пробный период активирован</h2><p>Теперь вы можете заказывать до '+limit+' анализов ситуации в день по своим записям в дневнике.</p>';
+ var actions=pending?'<div class="modal-actions stack"><button class="btn primary full" type="button" id="trial-analyze-entry">Получить анализ этой записи</button><button class="btn soft full" type="button" id="trial-go-journal">Перейти в дневник</button></div>':'<button class="btn primary full" type="button" id="trial-go-journal" style="margin-top:16px">Перейти в дневник</button>';
+ modal(body+actions);
+ var journalBtn=document.getElementById("trial-go-journal");
+ if(journalBtn)journalBtn.onclick=function(){closeModal();step=6;editingId=null;go("journal");};
+ var analyzeBtn=document.getElementById("trial-analyze-entry");
+ if(analyzeBtn)analyzeBtn.onclick=function(){var entryId=pending;closeModal();step=6;editingId=null;if(page!=="journal")go("journal");else render();if(entryId)entryDetail(entryId,{autoAnalyze:true});};
+}
+function persistNewWizardEntry(){
+ draft.emotions=selectedEmotions().slice();draft.emotion=draft.emotions.join(", ");
+ draft.date=new Date().toISOString();draft.id=Date.now().toString();
+ var id=draft.id;
+ state.entries.unshift(Object.assign({},draft));save();trackEvent("diary_entry_created");step=6;editingId=null;
+ return id;
+}
+function wizardComplete(){
+ var checks=[!!String(draft.situation||"").trim(),selectedEmotions().length>0,!!String(draft.thought||"").trim(),!!(String(draft.forText||"").trim()||String(draft.against||"").trim()),!!String(draft.balanced||"").trim(),!!String(draft.action||"").trim()];
+ return !checks.some(function(ok){return !ok;});
+}
+function afterWizardSaveToJournal(entryId,requestAnalysis){
+ toast(cloudReady?"Запись сохранена. Отправляю в облако…":"Запись сохранена на устройстве.");
+ if(requestAnalysis&&!premiumStatus.active){pendingAnalysisEntryId=entryId;go("subscription");return;}
+ if(page!=="journal")go("journal");else render();
+ if(requestAnalysis&&premiumStatus.active)entryDetail(entryId,{autoAnalyze:true});
+}
+function entryDetail(id,opts){
+ opts=opts||{};
  var e=state.entries.find(function(x){return String(x.id)===String(id);});if(!e)return;
  var selected=e.pattern||(Array.isArray(e.patterns)&&e.patterns[0])||"";
  var options='<option value="">Не привязывать к паттерну</option>'+state.patterns.map(function(p){return '<option value="'+esc(p.id)+'" '+(selected===p.id?"selected":"")+'>'+esc(p.name)+'</option>';}).join("");
- var stale=e.analysis&&e.analysisStale?'<p class="muted">Разбор мог устареть: текст записи изменился.</p>':'';
- modal('<div class="look-label">'+esc(dateLabel(e.date))+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация.</b> '+esc(e.situation)+'</p><p><b>Эмоция.</b> '+esc(e.emotion)+' · '+esc(e.intensity)+'/10</p><p><b>Факты за.</b> '+esc(e.forText)+'</p><p><b>Факты против.</b> '+esc(e.against)+'</p><p><b>Новый взгляд.</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг.</b> '+esc(e.action)+'</p><div class="field"><label>Связать запись с паттерном</label><select class="select" id="entry-pattern">'+options+'</select><button class="btn soft full" type="button" id="save-entry-pattern" style="margin-top:8px">Сохранить связь</button></div><button class="btn soft full" type="button" id="edit-entry" style="margin-top:8px">Изменить запись</button><div id="ai-result" class="note" style="display:none"></div>'+stale+(e.analysis&&premiumStatus.active?'<div class="note" style="margin-top:10px">'+renderAnalysis(e.analysis,id)+'</div>':(premiumStatus.active?'<button class="btn primary full" type="button" id="analyze">Разобрать запись</button>':'<button class="btn soft full" type="button" id="premium-analysis">Разбор записи — в Premium</button>'))+'<button class="btn outline full" type="button" id="del" style="margin-top:10px">Удалить запись</button>');
- document.getElementById("save-entry-pattern").onclick=function(){var pid=document.getElementById("entry-pattern").value;if(pid)linkEntryToPattern(id,pid);else{e.pattern="";e.patterns=[];}save();toast(pid?"Связь с паттерном сохранена.":"Связь с паттерном удалена.");closeModal();render();entryDetail(id);};
+ var stale=e.analysis&&e.analysisStale?'<p class="muted" style="margin:0 0 4px">Анализ мог устареть: текст записи изменился.</p>':'';
+ var hasFreshAnalysis=e.analysis&&premiumStatus.active&&!e.analysisStale;
+ var analysisShown=hasFreshAnalysis?'<div class="note" style="margin-top:10px">'+renderAnalysis(e.analysis,id)+'</div>':"";
+ var analysisAction="";
+ if(!hasFreshAnalysis){
+  if(premiumStatus.active)analysisAction='<button class="btn primary full" type="button" id="analyze">Заказать анализ ситуации</button>';
+  else analysisAction='<button class="btn light full" type="button" id="premium-analysis">Заказать анализ ситуации — в Premium</button>';
+ }
+ modal('<div class="look-label">'+esc(dateLabel(e.date))+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация.</b> '+esc(e.situation)+'</p><p><b>Эмоция.</b> '+esc(e.emotion)+' · '+esc(e.intensity)+'/10</p><p><b>Факты за.</b> '+esc(e.forText)+'</p><p><b>Факты против.</b> '+esc(e.against)+'</p><p><b>Новый взгляд.</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг.</b> '+esc(e.action)+'</p><div class="field pattern-link-field"><label>Связать запись с паттерном</label><select class="select" id="entry-pattern">'+options+'</select><div class="pattern-save-row"><button class="btn btn-compact soft" type="button" id="save-entry-pattern">Сохранить связь</button></div></div><div id="ai-result" class="note" style="display:none"></div>'+stale+analysisShown+'<div class="entry-detail-actions">'+analysisAction+'<button class="btn light full" type="button" id="edit-entry">Изменить запись</button></div><button class="textbtn danger full" type="button" id="del" style="margin-top:12px;text-align:center">Удалить запись</button>');
+ document.getElementById("save-entry-pattern").onclick=function(){var pid=document.getElementById("entry-pattern").value;if(pid)linkEntryToPattern(id,pid);else{e.pattern="";e.patterns=[];}save();toast(pid?"Связь с паттерном сохранена.":"Связь с паттерном удалена.");closeModal();render();entryDetail(id,opts);};
  document.getElementById("edit-entry").onclick=function(){beginEdit(id);};
- var ab=document.getElementById("analyze");if(ab)ab.onclick=function(){analyzeEntry(id,ab);};
- var premiumButton=document.getElementById("premium-analysis");if(premiumButton)premiumButton.onclick=function(){closeModal();go("subscription");};
+ var ab=document.getElementById("analyze");
+ if(ab){
+  ab.onclick=function(){analyzeEntry(id,ab);};
+  if(opts.autoAnalyze)setTimeout(function(){analyzeEntry(id,ab);},0);
+ }
+ var premiumButton=document.getElementById("premium-analysis");if(premiumButton)premiumButton.onclick=function(){pendingAnalysisEntryId=id;closeModal();go("subscription");};
  var addMicro=document.querySelector("[data-add-micro]");if(addMicro)addMicro.onclick=function(){addMicroPractice(id);};
  var existingAccept=document.getElementById("accept-ai-pattern");
  if(existingAccept){var mm=String(e.analysis||"").match(/\*{0,2}Гипотеза паттерна:\*{0,2}\s*\*{0,2}([^|\n*]+)\*{0,2}\s*\|\s*\*{0,2}([^\n*]+)\*{0,2}/i);if(mm)existingAccept.onclick=function(){addSuggestedPattern(mm[1].trim(),mm[2].trim(),id);};}
