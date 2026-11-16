@@ -67,6 +67,7 @@ h2{font-size:22px;margin:0;font-weight:800}
 .btn.soft{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
 .btn.light{background:var(--cream);color:var(--pine)}
 .btn.outline{background:transparent;color:var(--ink);border:1px solid var(--line);box-shadow:none}
+body[data-page="subscription"] .btn.trial-cta{background:transparent;color:var(--cream);border:1.5px solid rgba(244,241,234,.9);box-shadow:none}
 .btn .ico{width:22px;height:22px}
 .textbtn{border:0;background:none;padding:10px 4px;color:var(--ink);font-weight:700;font-size:16px}
 .stack{display:flex;flex-direction:column;gap:12px}
@@ -185,6 +186,7 @@ body[data-page="subscription"] .round{background:rgba(255,255,255,.1);border-col
 .price-note{color:rgba(244,241,234,.78);font-size:15px;line-height:1.45;margin:14px 0 0}
 .premium-screen{min-height:calc(100vh - env(safe-area-inset-top) - 86px);display:flex;flex-direction:column}
 .premium-buy{margin-top:auto;padding-top:18px}
+.premium-buy-stack{display:flex;flex-direction:column;gap:10px}
 .premium-plans{display:flex;flex-direction:column;gap:12px;padding:22px 0 12px}
 .plan{display:block;background:rgba(255,255,255,.06);border-radius:18px;padding:14px 16px;color:inherit;text-decoration:none}
 .plan b{display:block;font-size:17px}
@@ -385,6 +387,13 @@ var PLANS=[
  {id:"quarter",title:"3 месяца · 1 323 ₽",text:"Разовая покупка · скидка 10% · 441 ₽ в месяц.",href:"https://web.tribute.tg/p/KbC"},
  {id:"year",title:"12 месяцев · 4 704 ₽",text:"Разовая покупка · скидка 20% · 392 ₽ в месяц.",href:"https://web.tribute.tg/p/KbD"}
 ];
+var TRIAL_DAYS=7;
+function trialPeriodCtaLabel(days){
+ var n=Number(days)||TRIAL_DAYS,m10=n%10,m100=n%100,word="дней";
+ if(m10===1&&m100!==11)word="день";
+ else if(m10>=2&&m10<=4&&(m100<12||m100>14))word="дня";
+ return "Попробовать "+n+" "+word+" бесплатно";
+}
 
 function load(){try{var x=JSON.parse(localStorage.getItem(KEY));if(!x||!Array.isArray(x.entries))return JSON.parse(JSON.stringify(defaults));var out=Object.assign({},defaults,x);out.patterns=(out.patterns||[]).filter(function(p){return ["p1","p2","p3","p4"].indexOf(p.id)<0;});out.practiceHistory=Array.isArray(out.practiceHistory)?out.practiceHistory:[];out.personalPractices=Array.isArray(out.personalPractices)?out.personalPractices:[];out.chat=Array.isArray(out.chat)?out.chat:[];if(out.meta&&typeof out.meta!=="object")out.meta=null;if(out.dailySummaryMeta&&typeof out.dailySummaryMeta!=="object")out.dailySummaryMeta=null;return out;}catch(e){return JSON.parse(JSON.stringify(defaults));}}
 function saveLocalOnly(){try{state.progressPeriod=progressPeriod;localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
@@ -1018,9 +1027,10 @@ function subscription(){
  if(premium.active&&premium.premium_until){var d=new Date(premium.premium_until);if(!isNaN(d.getTime()))until=d.toLocaleDateString("ru-RU",{day:"numeric",month:"long",year:"numeric"});}
  var status=premium.active?'<p class="status-line">Premium активен'+(until?" до "+esc(until):"")+(premium.source==="trial"?" · пробный период":"")+'.</p>':"";
  var usage=premium.active?('Сегодня использовано '+(aiUsage.used||0)+' из '+(aiUsage.limit||5)+' разборов записей.'):'Разбор отдельной записи — в Premium. Итоги дня по-прежнему один раз в сутки на любом тарифе.';
- var trial=premium.trial_used?"":'<button class="textbtn" type="button" data-act="start-trial" style="color:#f4f1ea">7 дней бесплатно, без карты</button>';
+ var trialEligible=!premium.active&&!premium.trial_used;
+ var trialBtn=trialEligible?'<button class="btn trial-cta full" type="button" data-act="start-trial">'+trialPeriodCtaLabel(TRIAL_DAYS)+'</button>':"";
  var plans=PLANS.map(function(plan){return '<a class="plan" href="'+plan.href+'" target="_blank" rel="noopener"><b>'+plan.title+'</b><span>'+plan.text+'</span></a>';}).join("");
- return '<section class="premium"><div class="premium-glow" aria-hidden="true"></div><div class="premium-screen"><h1>Premium</h1><p class="lead">Персональный аналитик и расширенные возможности.</p>'+status+'<ul class="check-list"><li><span class="check-bullet">'+ico("check")+'</span>Анализ записей и истории</li><li><span class="check-bullet">'+ico("check")+'</span>Выявление повторяющихся паттернов</li><li><span class="check-bullet">'+ico("check")+'</span>Персональные рекомендации</li><li><span class="check-bullet">'+ico("check")+'</span>До 5 разборов записей в день</li></ul><div class="premium-buy"><a class="btn light full" href="#plans">От 392 ₽ / месяц →</a><p class="price-note">Это цена месяца при оплате года сразу: 4 704 ₽ за год. Месяц отдельно — 490 ₽.</p></div></div><div class="premium-plans" id="plans">'+trial+plans+'<p class="fine">'+usage+' Оплата проходит на Tribute. Суммы списания те же: 490 ₽, 1 323 ₽ и 4 704 ₽. Автопродления нет.</p></div></section>';
+ return '<section class="premium"><div class="premium-glow" aria-hidden="true"></div><div class="premium-screen"><h1>Premium</h1><p class="lead">Персональный аналитик и расширенные возможности.</p>'+status+'<ul class="check-list"><li><span class="check-bullet">'+ico("check")+'</span>Анализ записей и истории</li><li><span class="check-bullet">'+ico("check")+'</span>Выявление повторяющихся паттернов</li><li><span class="check-bullet">'+ico("check")+'</span>Персональные рекомендации</li><li><span class="check-bullet">'+ico("check")+'</span>До 5 разборов записей в день</li></ul><div class="premium-buy"><div class="premium-buy-stack"><a class="btn light full" href="#plans">От 392 ₽ / месяц →</a>'+trialBtn+'</div><p class="price-note">Это цена месяца при оплате года сразу: 4 704 ₽ за год. Месяц отдельно — 490 ₽.</p></div></div><div class="premium-plans" id="plans">'+plans+'<p class="fine">'+usage+' Оплата проходит на Tribute. Суммы списания те же: 490 ₽, 1 323 ₽ и 4 704 ₽. Автопродления нет.</p></div></section>';
 }
 var practices=[
  {icon:"layers",title:"Поймать автоматическую мысль",time:"5–7 минут",text:"Вспомни конкретную ситуацию. Запиши, что произошло, какие слова возникли в голове и какую эмоцию ты почувствовал. Не пытайся пока менять мысль — сначала просто заметь её."},
@@ -1104,7 +1114,7 @@ function act(a){
    var data=await r.json();
    if(r.status===409){premiumStatus=data;toast("Пробный период уже использован на этом Telegram-аккаунте.");}
    else if(!r.ok)throw new Error(data.error||"Не удалось активировать пробный период");
-   else{premiumStatus=data;toast("Premium активирован на 7 дней.");}
+   else{premiumStatus=data;toast("Premium активирован на "+TRIAL_DAYS+" "+(TRIAL_DAYS===1?"день":(TRIAL_DAYS>=2&&TRIAL_DAYS<=4?"дня":"дней"))+".");}
    render();
   }).catch(function(){toast("Не удалось активировать пробный период. Попробуй позже.");});
   return;
