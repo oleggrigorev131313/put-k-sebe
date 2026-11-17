@@ -399,7 +399,9 @@ body[data-page="subscription"],body[data-page="subscription"] .shell{overflow-x:
 <script>
 (function(){
 "use strict";
-var KEY="put-k-sebe-v1",API_BASE="https://d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net",CLOUD_SYNC_ENABLED=true,app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".tabbar button"));
+var KEY="put-k-sebe-v1",GATEWAY_BASE="https://d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net",DIRECT_BASE="https://functions.yandexcloud.net/d4etj8737dl7lmfb36d0",API_BASE=GATEWAY_BASE,CLOUD_SYNC_ENABLED=true,app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".tabbar button"));
+function apiUrl(path){var route=path.charAt(0)==="/"?path:"/"+path;return DIRECT_BASE+"?_p="+encodeURIComponent(route);}
+function apiFetch(path,options){options=options||{};var timeout=8000,controller=new AbortController(),timer=setTimeout(function(){controller.abort();},timeout),directOpts=Object.assign({},options,{signal:controller.signal});return fetch(apiUrl(path),directOpts).then(function(r){clearTimeout(timer);return r;}).catch(function(err){clearTimeout(timer);return fetch(GATEWAY_BASE+path,options);});}
 var tg=window.Telegram&&window.Telegram.WebApp;
 if(tg){try{tg.ready();tg.expand();if(tg.disableVerticalSwipes)tg.disableVerticalSwipes();tg.setHeaderColor("#f5f1e9");tg.setBackgroundColor("#f5f1e9");}catch(e){}}
 var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.first_name;
@@ -439,7 +441,7 @@ async function refreshPremium(){
  if(!API_BASE||!tg||!tg.initData)return;
  premiumLoading=true;
  try{
-  var r=await fetch(API_BASE+"/v1/premium",{method:"GET",headers:apiHeaders(),cache:"no-store"});
+  var r=await apiFetch("/v1/premium",{method:"GET",headers:apiHeaders(),cache:"no-store"});
   if(!r.ok)throw new Error("premium status unavailable");
   premiumStatus=await r.json();
  }catch(e){premiumStatus={active:false,trial_used:false,error:true};}
@@ -449,7 +451,7 @@ async function refreshAiUsage(){
  if(!tg||!tg.initData||!API_BASE){aiUsage.loading=false;return;}
  try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
  var usageHeaders=apiHeaders();usageHeaders["X-User-Timezone"]=tz;
- var r=await fetch(API_BASE+"/v1/ai/usage",{method:"GET",headers:usageHeaders,cache:"no-store"});
+ var r=await apiFetch("/v1/ai/usage",{method:"GET",headers:usageHeaders,cache:"no-store"});
  if(r.ok){aiUsage=await r.json();aiUsage.loading=false;if(page==="home"||page==="subscription"||page==="summary")render();}}catch(e){aiUsage.loading=false;}
 }
 function formatAnalysis(raw){
@@ -496,7 +498,7 @@ async function analyzeEntry(id,buttonEl){
  if(buttonEl){buttonEl.disabled=true;buttonEl.innerHTML='<span class="analysis-spinner" style="display:inline-block;vertical-align:middle;margin-right:8px"></span>Аналитик изучает запись<span class="analysis-dots"></span>';}
  if(result){result.style.display="block";result.innerHTML='<div class="analysis-loading"><span class="analysis-spinner"></span><span>Аналитик изучает запись<span class="analysis-dots"></span></span></div>';}
  try{
-  var response=await fetch(API_BASE+"/v1/ai/analyze-entry",{method:"POST",headers:apiHeaders(),body:JSON.stringify({entry_id:String(id),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
+  var response=await apiFetch("/v1/ai/analyze-entry",{method:"POST",headers:apiHeaders(),body:JSON.stringify({entry_id:String(id),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
   var data=await response.json();
   if(!response.ok){
    if(response.status===403){premiumStatus={active:false};throw new Error("Для анализа нужен активный Premium.");}
@@ -541,7 +543,7 @@ async function openPreviousDailySummary(buttonEl){
  if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
  if(buttonEl){buttonEl.disabled=true;buttonEl.textContent="Загружаю сводку…";}
  try{
-  var response=await fetch(API_BASE+"/v1/ai/daily-summary",{method:"POST",headers:apiHeaders(),body:JSON.stringify({action:"previous",timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
+  var response=await apiFetch("/v1/ai/daily-summary",{method:"POST",headers:apiHeaders(),body:JSON.stringify({action:"previous",timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
   var data={};try{data=await response.json();}catch(ignore){}
   if(!response.ok){
    if(data.error==="previous_summary_not_found")throw new Error("Сводка за предыдущий день не найдена. Возможно, она не создавалась или история AI не сохранялась.");
@@ -557,7 +559,7 @@ async function runDailySummary(buttonEl){
  if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
  if(buttonEl){buttonEl.disabled=true;buttonEl.textContent=gate.done?"Открываю итоги…":"Собираю сводку…";}
  try{
-  var response=await fetch(API_BASE+"/v1/ai/daily-summary",{method:"POST",headers:apiHeaders(),body:JSON.stringify({timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
+  var response=await apiFetch("/v1/ai/daily-summary",{method:"POST",headers:apiHeaders(),body:JSON.stringify({timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
   var raw=await response.text(),data={};try{data=raw?JSON.parse(raw):{};}catch(parseError){data={error:"invalid_server_response",detail:raw.slice(0,180)};}
   if(!response.ok){
    if(response.status===403)throw new Error(data.message||"Повторный обзор недоступен.");
@@ -589,13 +591,13 @@ function todayActivitySignature(){var a=todayActivity();return a.entries.map(fun
 function summaryButtonState(){var a=todayActivity(),has=a.entries.length+a.practices.length>0;return {has:has,done:!!(aiUsage&&aiUsage.summary_done)||(!!(state.dailySummaryMeta&&state.dailySummaryMeta.day===localDayKey()))};}
 function trackEvent(name,metadata){
  if(!API_BASE||!tg||!tg.initData)return;
- fetch(API_BASE+"/v1/events",{method:"POST",headers:apiHeaders(),body:JSON.stringify({event:name,metadata:metadata||{}})}).catch(function(){});
+ apiFetch("/v1/events",{method:"POST",headers:apiHeaders(),body:JSON.stringify({event:name,metadata:metadata||{}})}).catch(function(){});
 }
 function registerAdminProfile(){
  if(!API_BASE||!tg||!tg.initData)return;
  var u=tg.initDataUnsafe&&tg.initDataUnsafe.user||{};
  var sp=(tg.initDataUnsafe&&(tg.initDataUnsafe.start_param||tg.initDataUnsafe.startapp||""))||"";
- fetch(API_BASE+"/v1/profile",{method:"POST",headers:apiHeaders(),body:JSON.stringify({
+ apiFetch("/v1/profile",{method:"POST",headers:apiHeaders(),body:JSON.stringify({
   user:{username:u.username||"",first_name:u.first_name||"",last_name:u.last_name||""},
   timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC",
   start_param:sp
@@ -610,7 +612,7 @@ async function cloudSaveNow(showToast){
  if(!CLOUD_SYNC_ENABLED||!API_BASE||!tg||!tg.initData||!cloudReady)return;
  cloudStatus="syncing";
  var snapshot=JSON.stringify(state);
- var r=await fetch(API_BASE+"/v1/state",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({state:JSON.parse(snapshot)})});
+ var r=await apiFetch("/v1/state",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({state:JSON.parse(snapshot)})});
  if(!r.ok){var errBody="";try{var errJson=await r.json();errBody=errJson&&errJson.error?": "+errJson.error:"";}catch(ignore){}throw new Error("HTTP "+r.status+errBody);}
  cloudStatus="synced";cloudErrorText="";
  if(showToast)toast("Запись синхронизирована с аккаунтом");
@@ -673,7 +675,7 @@ async function initCloud(){
  cloudInitInFlight=true;
  cloudStatus="connecting";
  try{
-  var consentResponse=await fetch(API_BASE+"/v1/consents",{method:"GET",headers:apiHeaders(),cache:"no-store"});
+  var consentResponse=await apiFetch("/v1/consents",{method:"GET",headers:apiHeaders(),cache:"no-store"});
   if(!consentResponse.ok)throw await cloudHttpError(consentResponse,"Не удалось получить настройки согласий");
   var consentData=await consentResponse.json();
   consentSettings=consentData.consents||{ai_processing:false,ai_history_storage:false};consentLoaded=true;
@@ -683,7 +685,7 @@ async function initCloud(){
    render();return;
   }
   registerAdminProfile();
-  var r=await fetch(API_BASE+"/v1/state",{method:"GET",headers:apiHeaders(),cache:"no-store"});
+  var r=await apiFetch("/v1/state",{method:"GET",headers:apiHeaders(),cache:"no-store"});
   if(!r.ok)throw await cloudHttpError(r,"Не удалось загрузить состояние");
   var result=await r.json();
   if(result.found&&result.state)state=mergeStates(result.state,state);
@@ -1140,7 +1142,7 @@ function act(a){
  if(a==="start-trial"){
   if(!tg||!tg.initData){toast("Открой приложение через Telegram, чтобы активировать пробный период.");return;}
   if(premiumLoading){toast("Проверяем доступ. Попробуй ещё раз через секунду.");return;}
-  fetch(API_BASE+"/v1/trial",{method:"POST",headers:apiHeaders(),body:"{}"}).then(async function(r){
+  apiFetch("/v1/trial",{method:"POST",headers:apiHeaders(),body:"{}"}).then(async function(r){
    var data=await r.json();
    if(r.status===409){premiumStatus=data;toast("Пробный период уже использован на этом Telegram-аккаунте.");}
    else if(!r.ok)throw new Error(data.error||"Не удалось активировать пробный период");
@@ -1160,7 +1162,7 @@ function act(a){
   if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
   var btn=document.querySelector('[data-act="accept-all-consents"]');
   if(btn){btn.disabled=true;btn.textContent="Сохраняем…";}
-  fetch(API_BASE+"/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:true,ai_history_storage:true})}).then(async function(r){
+  apiFetch("/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:true,ai_history_storage:true})}).then(async function(r){
    var data={};try{data=await r.json();}catch(ignore){}
    if(!r.ok)throw new Error(data.error||"Не удалось сохранить согласия");
    consentSettings=data.consents||consentSettings;consentLoaded=true;
@@ -1402,7 +1404,7 @@ function manageConsents(){
   if(history&&!processing){toast("Для хранения истории нужно разрешить AI-обработку.");return;}
   if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
   try{
-   var response=await fetch(API_BASE+"/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:processing,ai_history_storage:history})});
+   var response=await apiFetch("/v1/consents",{method:"PUT",headers:apiHeaders(),body:JSON.stringify({ai_processing:processing,ai_history_storage:history})});
    var data=await response.json();if(!response.ok)throw new Error(data.error||"Не удалось сохранить настройки");
    consentSettings=data.consents;
    if(!processing||!history){state.entries.forEach(function(entry){delete entry.analysis;});state.chat=[];if(state.dailySummaryMeta){delete state.dailySummaryMeta.text;delete state.dailySummaryMeta.practices;}save();}
@@ -1421,7 +1423,7 @@ function settings(){
  f.onchange=async function(){try{var x=JSON.parse(await f.files[0].text());if(!Array.isArray(x.entries)||!Array.isArray(x.patterns))throw Error();state=Object.assign({},defaults,x);if(!Array.isArray(state.practiceHistory))state.practiceHistory=[];if(!Array.isArray(state.personalPractices))state.personalPractices=[];if(!Array.isArray(state.chat))state.chat=[];progressPeriod=normalizeProgressPeriod(state.progressPeriod);save();closeModal();go(entered()?"home":"welcome");toast("Данные восстановлены");}catch(e){toast("Не удалось прочитать файл");}};
  document.getElementById("clear").onclick=async function(){
   if(!confirm("Удалить все записи, паттерны, практики и остальные данные приложения? Сначала скачай копию, если она нужна."))return;
-  if(cloudReady&&API_BASE&&tg&&tg.initData){try{var r=await fetch(API_BASE+"/v1/state",{method:"DELETE",headers:apiHeaders()});if(!r.ok)throw new Error("delete failed");}catch(e){toast("Не удалось удалить облачные данные. Проверь соединение.");return;}}
+  if(cloudReady&&API_BASE&&tg&&tg.initData){try{var r=await apiFetch("/v1/state",{method:"DELETE",headers:apiHeaders()});if(!r.ok)throw new Error("delete failed");}catch(e){toast("Не удалось удалить облачные данные. Проверь соединение.");return;}}
   var keepConsent=!!(consentSettings&&consentSettings.updated_at);
   state=JSON.parse(JSON.stringify(defaults));
   summaryView=null;step=6;journalFilter="all";

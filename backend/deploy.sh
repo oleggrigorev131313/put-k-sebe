@@ -149,6 +149,7 @@ python3 -m pip install --disable-pip-version-check --quiet \
   --platform manylinux2014_x86_64 --only-binary=:all: \
   -r "$WORKDIR/backend/requirements.txt" || fail "Не удалось установить зависимости Python"
 cp "$WORKDIR/backend/index.py" "$BUILD_DIR/index.py"
+cp "$WORKDIR/backend/route_override.py" "$BUILD_DIR/route_override.py"
 python3 - "$BUILD_DIR" "$ZIP_FILE" <<'PY'
 import os, sys, zipfile
 root, target = sys.argv[1], sys.argv[2]

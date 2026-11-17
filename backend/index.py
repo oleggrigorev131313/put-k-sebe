@@ -11,6 +11,7 @@ from threading import RLock
 from urllib.parse import parse_qsl
 
 import ydb
+from route_override import resolve_request_path
 import ydb.iam
 
 LOG = logging.getLogger("put-k-sebe")
@@ -424,17 +425,32 @@ def _record_event(user_id, event_name, metadata=None):
     )
 
 
+def _cors_headers():
+    return {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,PUT,DELETE,POST,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type,X-Telegram-Init-Data,X-Admin-Password,X-Route-Path",
+    }
+
+
 def _json_response(status, payload):
     return {
         "statusCode": status,
-        "headers": {
-            "Content-Type": "application/json; charset=utf-8",
-            "Cache-Control": "no-store",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET,PUT,DELETE,POST,OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type,X-Telegram-Init-Data,X-Admin-Password",
-        },
+        "headers": _cors_headers(),
         "body": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        "isBase64Encoded": False,
+    }
+
+
+def _preflight_response():
+    headers = _cors_headers()
+    headers.pop("Content-Type", None)
+    return {
+        "statusCode": 204,
+        "headers": headers,
+        "body": "",
         "isBase64Encoded": False,
     }
 
@@ -449,8 +465,6 @@ def _request_parts(event):
     raw_query = event.get("rawQueryString") or ""
     for key, value in parse_qsl(raw_query, keep_blank_values=True):
         query.setdefault(key, value)
-    if query.get("timezone"):
-        headers["x-user-timezone"] = str(query.get("timezone"))[:80]
     context = event.get("requestContext") or {}
     http_context = context.get("http") or {}
     method = (
@@ -465,10 +479,13 @@ def _request_parts(event):
         or event.get("rawPath")
         or "/"
     )
+    path, query = resolve_request_path(path, headers, query)
+    if query.get("timezone"):
+        headers["x-user-timezone"] = str(query.get("timezone"))[:80]
     body = event.get("body") or ""
     if event.get("isBase64Encoded") and body:
         body = base64.b64decode(body).decode("utf-8")
-    return method, path.split("?", 1)[0].rstrip("/") or "/", headers, body
+    return method, path, headers, body
 
 
 def _telegram_user(init_data):
@@ -1887,7 +1904,7 @@ def handler(event, context):
         method, path, headers, body = _request_parts(event)
 
         if method == "OPTIONS":
-            return _json_response(204, {"ok": True})
+            return _preflight_response()
 
         if path == "/health" and method == "GET":
             # Liveness only. Table readiness is /health/schema and does not create tables.
