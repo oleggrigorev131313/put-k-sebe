@@ -68,20 +68,34 @@ h2{font-size:22px;margin:0;font-weight:800}
 .btn.soft{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
 .btn.light{background:var(--cream);color:var(--pine)}
 .btn.outline{background:transparent;color:var(--ink);border:1px solid var(--line);box-shadow:none}
-.wizard-quota-pill{position:absolute;right:16px;top:8px;z-index:2;font-size:12px;font-weight:650;padding:7px 12px;border-radius:999px;background:#ece7dc;color:var(--pine);white-space:nowrap}
+.topbar.wizard-topbar{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:8px;padding:10px 12px 0}
+.wizard-quota-pill{justify-self:center;grid-column:2;font-size:11px;font-weight:650;padding:6px 11px;border-radius:999px;background:#ece7dc;color:var(--pine);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .thought-pin{background:#fff;border-radius:16px;padding:14px 16px;margin:0 0 12px;border-left:4px solid #e07a6a;box-shadow:var(--shadow)}
-.thought-pin-new{border-left-color:#4a8f6a}
-.thought-pin-label{margin:0 0 6px;font-size:13px;font-weight:700;color:var(--muted)}
-.thought-pin-text{margin:0;font-family:"PT Serif",Georgia,serif;font-size:16px;line-height:1.45;color:var(--ink)}
-.assistant-hint-btn{width:100%;min-height:48px;margin:12px 0 0;border-radius:16px;background:#f3eee6;color:var(--pine);border:1px solid #e4ddd2;font-size:15px;font-weight:650}
-.field-guides{margin-top:10px;display:flex;flex-direction:column;gap:6px;font-size:14px;color:#6f736c;line-height:1.4}
+.thought-pin-original{border-left-color:#e07a6a}
+.thought-pin-new{background:#edf6ef;border-left-color:#4a8f6a}
+.thought-pin-label{margin:0 0 8px;font-size:11px;font-weight:700;font-variant:all-small-caps;letter-spacing:.1em;text-transform:uppercase}
+.thought-pin-original .thought-pin-label{color:#d96b5c}
+.thought-pin-new .thought-pin-label{color:#3d7a58}
+.thought-pin-text{margin:0;font-family:"PT Serif",Georgia,serif;font-size:17px;line-height:1.45;color:var(--ink)}
+.assistant-hint-btn{width:100%;min-height:48px;margin:12px 0 0;border-radius:16px;background:linear-gradient(180deg,#fde8d8 0%,#f9ddc8 100%);color:#2a3d38;border:1px solid #e8cbb5;font-size:15px;font-weight:650;box-shadow:0 2px 8px rgba(62,52,36,.06)}
+.field-guides{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px;font-size:13px;color:#6f736c;line-height:1.35}
+.field-guides li{position:relative;padding-left:14px}
+.field-guides li::before{content:"";position:absolute;left:0;top:.55em;width:5px;height:5px;border-radius:50%;background:#c4bdb2}
 .assistant-chips{display:flex;flex-direction:column;gap:10px;margin-top:12px}
 .assistant-chips .chip{text-align:left;white-space:normal;height:auto;min-height:44px;padding:12px 16px}
-.step-why{margin:14px 0 0;padding:14px 16px;border-radius:16px;background:#f7f4ee;font-size:15px;line-height:1.45;color:#5c6560}
-.practice-plan-card{position:relative;display:flex;gap:12px;align-items:flex-start;width:100%;text-align:left;margin:0 0 12px;padding:16px 44px 16px 16px;border:1px solid #e4ded4;border-radius:20px;background:var(--card);box-shadow:var(--shadow)}
-.practice-plan-check{width:28px;height:28px;border-radius:10px;border:2px solid #c9c2b6;background:#fff;flex:none;display:grid;place-items:center;margin-top:2px}
-.practice-plan-check.done{background:var(--pine);border-color:var(--pine);color:#fff}
-.practice-plan-menu{position:absolute;top:12px;right:12px}
+.step-why{margin:0 0 14px;padding:14px 16px;border-radius:16px;background:#edf6ef;font-size:15px;line-height:1.45;color:#5c6560}
+.step-why-body{margin:8px 0 0}
+.step-practice-note{display:flex;gap:10px;align-items:flex-start;margin:12px 0 0;padding:12px 14px;border-radius:14px;background:#f3f0ea;color:#6f736c;font-size:13px;line-height:1.4}
+.step-practice-note .ico{width:20px;height:20px;flex:none;margin-top:1px;color:#9a948a}
+.practice-plan-card{position:relative;display:flex;flex-direction:column;width:100%;text-align:left;margin:0 0 12px;padding:16px 16px 0;border:1px solid #e4ded4;border-radius:20px;background:var(--card);box-shadow:var(--shadow)}
+.practice-plan-card.is-done .practice-plan-body b{color:var(--muted)}
+.practice-plan-body{border:0;background:transparent;text-align:left;padding:0 36px 12px 0;margin:0;color:inherit;width:100%;cursor:pointer}
+.practice-plan-body small{display:block;color:var(--muted);margin-top:4px;font-size:13px}
+.practice-done-row{width:calc(100% + 32px);margin:0 -16px;display:flex;align-items:center;gap:10px;border:0;border-top:1px solid #ece7dc;background:#faf6ef;padding:12px 16px;border-radius:0 0 20px 20px;font-size:14px;font-weight:650;color:var(--pine);cursor:pointer;text-align:left}
+.practice-done-row.done{color:var(--muted)}
+.practice-done-check{width:26px;height:26px;border-radius:8px;border:2px solid #c9c2b6;background:#fff;flex:none;display:grid;place-items:center}
+.practice-done-row.done .practice-done-check{background:var(--pine);border-color:var(--pine);color:#fff}
+.practice-plan-menu{position:absolute;top:10px;right:10px;width:36px;height:36px}
 .btn .ico{width:22px;height:22px}
 .textbtn{border:0;background:none;padding:10px 4px;color:var(--ink);font-weight:700;font-size:16px}
 .stack{display:flex;flex-direction:column;gap:12px}
@@ -425,7 +439,7 @@ var page=entered()?"home":"welcome";
 var step=6,draft=blank(),editingId=null,journalFilter="all",libraryTab="plan",showRejected=false;
 var progressPeriod=normalizeProgressPeriod(state.progressPeriod!=null?state.progressPeriod:"week");
 var pageHistory=[],cloudReady=false,cloudSyncTimer=null,cloudRetryTimer=null,cloudRetryAttempt=0,cloudInitInFlight=false,cloudLastToast="",cloudErrorShown=false,cloudStatus="paused",cloudErrorText="";
-var premiumStatus={active:false,trial_used:false},premiumLoading=false,aiUsage={limit:5,used:0,remaining:5,loading:false};
+var premiumStatus={active:false,trial_used:false},premiumLoading=false,aiUsage={limit:15,lifetime_limit:15,used:0,remaining:15,mode:"lifetime",exhausted:false,loading:false};
 var summaryView=null,expandedEmotionGroups={},activityPointPick=null,pendingAnalysisEntryId=null,entryMenuEscHandler=null;
 var PLANS=[
  {id:"month",title:"1 месяц · 490 ₽",text:"Разовая покупка. Автоматического списания нет.",href:"https://web.tribute.tg/p/K96"},
@@ -434,8 +448,12 @@ var PLANS=[
 ];
 function assistantQuotaLabel(){
  var q=aiUsage||{};
- if(q.paid_premium||q.mode==="daily")return "Сегодня: "+(q.used||0)+" из "+(q.limit||10);
- return "Подсказок: "+(q.used||0)+" из "+(q.limit||15);
+ var premium=!!(q.paid_premium||q.mode==="daily"||premiumStatus.active);
+ var limit=premium?(Number(q.limit)||10):(Number(q.lifetime_limit||q.limit)||15);
+ var used=Number(q.used)||0;
+ var rem=q.remaining!=null&&!isNaN(Number(q.remaining))?Math.max(0,Number(q.remaining)):Math.max(0,limit-used);
+ if(premium)return "Сегодня: "+rem+" из "+limit;
+ return "Подсказок: "+rem+" из "+limit;
 }
 function showHintsExhaustedSheet(){
  modal('<h2>Бесплатные подсказки закончились</h2><p><strong>15 из 15 использовано</strong></p><p>Записи в дневнике остаются бесплатными и без лимита. Premium даёт 10 подсказок персонального ассистента в день.</p><div class="modal-actions stack"><button class="btn primary full" type="button" id="hints-go-premium">Перейти на Премиум</button><button class="btn soft full" type="button" id="hints-continue">Продолжить без подсказок</button></div>');
@@ -472,7 +490,8 @@ async function requestAssistantHint(step,field){
 }
 function thoughtPinCard(kind,label,text){
  if(!String(text||"").trim())return "";
- return '<div class="thought-pin '+(kind==="new"?"thought-pin-new":"")+'"><p class="thought-pin-label">'+esc(label)+'</p><p class="thought-pin-text">«'+esc(text)+'»</p></div>';
+ var cls=kind==="new"?"thought-pin-new":"thought-pin-original";
+ return '<div class="thought-pin '+cls+'"><p class="thought-pin-label">'+esc(label)+'</p><p class="thought-pin-text">«'+esc(text)+'»</p></div>';
 }
 function assistantHintBtn(step,field){return '<button type="button" class="btn assistant-hint-btn" data-assistant-hint="'+esc(field)+'" data-assistant-step="'+step+'">✨ Подсказка от ассистента</button>';}
 
@@ -498,11 +517,16 @@ async function refreshPremium(){
  finally{premiumLoading=false;if(page==="home"||page==="subscription")render();}
 }
 async function refreshAiUsage(){
- if(!tg||!tg.initData||!API_BASE){aiUsage.loading=false;return;}
+ if(!tg||!tg.initData||!API_BASE){
+  aiUsage=Object.assign({limit:15,lifetime_limit:15,used:0,remaining:15,mode:"lifetime",exhausted:false},aiUsage||{});
+  aiUsage.loading=false;
+  if(page==="journal"&&step<6)paintChrome();
+  return;
+ }
  try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
  var usageHeaders=apiHeaders();usageHeaders["X-User-Timezone"]=tz;
  var r=await apiFetch("/v1/ai/usage",{method:"GET",headers:usageHeaders,cache:"no-store"});
- if(r.ok){aiUsage=await r.json();aiUsage.loading=false;if(page==="home"||page==="subscription"||page==="summary")render();}}catch(e){aiUsage.loading=false;}
+ if(r.ok){aiUsage=await r.json();aiUsage.loading=false;if(page==="home"||page==="subscription"||page==="summary")render();if(page==="journal"&&step<6)paintChrome();}}catch(e){aiUsage.loading=false;}
 }
 function formatAnalysis(raw){
  var safe=esc(String(raw||""));
@@ -822,10 +846,12 @@ function paintChrome(){
  if(page==="consent"){bar.innerHTML='<div class="brand-mini">'+logo(34)+'<span>ПЕРЕСМОТР</span></div>';return;}
  if(page==="home"){bar.innerHTML='<div class="brand-mini">'+logo(34)+'<span>ПЕРЕСМОТР</span></div><button class="avatar" id="settings" type="button" aria-label="Профиль">'+initial()+'</button>';document.getElementById("settings").onclick=settings;return;}
  if(back){
+  bar.classList.toggle("wizard-topbar",wizard);
   var quotaPill=wizard?'<span class="wizard-quota-pill">'+assistantQuotaLabel()+'</span>':"";
-  bar.innerHTML=quotaPill+'<button class="round left" id="app-back" type="button" aria-label="Назад">'+ico("back")+'</button><button class="round" id="app-info" type="button" aria-label="Пояснение">'+ico("info")+'</button>';
+  bar.innerHTML='<button class="round left" id="app-back" type="button" aria-label="Назад">'+ico("back")+'</button>'+quotaPill+'<button class="round" id="app-info" type="button" aria-label="Пояснение">'+ico("info")+'</button>';
   document.getElementById("app-back").onclick=goBack;document.getElementById("app-info").onclick=explain;return;
  }
+ bar.classList.remove("wizard-topbar");
  bar.innerHTML='<button class="round" id="app-info" type="button" aria-label="Пояснение">'+ico("info")+'</button>';
  document.getElementById("app-info").onclick=explain;
 }
@@ -960,9 +986,9 @@ function wizard(){
   '<div class="field"><textarea class="area" enterkeyhint="done" data-field="situation" placeholder="Например: отправил предложение клиенту, но не получил ответ.">'+esc(draft.situation)+'</textarea></div>',
   '<div class="field"><label>Какие эмоции ты испытывал?</label><p class="muted">'+(selectedEmotions().length?esc(selectedEmotions().join(" · ")):"Выбери одну или несколько.")+'</p><div class="emotion-groups">'+Object.keys(emotionGroups).map(function(group){var chosen=emotionGroups[group].filter(function(x){return selectedEmotions().indexOf(x)>=0;}).length,open=!!expandedEmotionGroups[group];return '<div class="emotion-group"><button type="button" class="emotion-group-head" data-emotion-group="'+esc(group)+'"><span>'+esc(group)+'</span><span>'+(chosen?'<i class="emotion-group-count">'+chosen+'</i>':"")+(open?"−":"+")+'</span></button>'+(open?'<div class="emotion-group-body"><div class="choice-chips">'+emotionGroups[group].map(function(x){return '<button type="button" class="chip '+(selectedEmotions().indexOf(x)>=0?"active":"")+'" data-emotion="'+esc(x)+'">'+esc(x)+'</button>';}).join("")+'</div></div>':"")+'</div>';}).join("")+'</div><div class="custom-emotion"><label for="custom-emotion-input">Не нашёл нужное состояние?</label><div class="custom-row"><input class="input" id="custom-emotion-input" enterkeyhint="done" placeholder="Напиши своё состояние"><button type="button" class="btn soft" data-add-custom-emotion>Добавить</button></div></div></div>'+range("Общая интенсивность эмоций","intensity",10,"/10"),
   field("Автоматическая мысль","thought","Например: «Я никогда не смогу нормально зарабатывать».")+range("Насколько веришь этой мысли?","before",100,"%"),
-  thoughtPinCard("original","Исходная мысль",originalThought)+'<div class="field"><label>Факты за мысль</label><textarea class="area" enterkeyhint="done" data-field="forText" placeholder="Какие факты подтверждают эту мысль?">'+esc(draft.forText)+'</textarea></div>'+assistantHintBtn(4,"forText")+'<div class="field"><label>Факты против мысли</label><textarea class="area" enterkeyhint="done" data-field="against" placeholder="Какие факты ей противоречат?">'+esc(draft.against)+'</textarea></div><div class="field-guides"><p>Что сказал бы близкий друг?</p><p>Было ли, что это не подтвердилось?</p><p>Что ты знаешь точно, а что предполагаешь?</p></div>'+assistantHintBtn(4,"against"),
+  thoughtPinCard("original","Исходная мысль",originalThought)+'<div class="field"><label>Факты за мысль</label><textarea class="area" enterkeyhint="done" data-field="forText" placeholder="Какие факты подтверждают эту мысль?">'+esc(draft.forText)+'</textarea></div>'+assistantHintBtn(4,"forText")+'<div class="field"><label>Факты против мысли</label><textarea class="area" enterkeyhint="done" data-field="against" placeholder="Какие факты ей противоречат?">'+esc(draft.against)+'</textarea></div><ul class="field-guides"><li>Что сказал бы близкий друг?</li><li>Было ли, что это не подтвердилось?</li><li>Что ты знаешь точно, а что предполагаешь?</li></ul>'+assistantHintBtn(4,"against"),
   thoughtPinCard("original","Исходная мысль",originalThought)+thoughtPinCard("new","Новая мысль",newThought)+field("Как сформулировать эту мысль точнее?","balanced","Если учесть все факты, какая формулировка будет точнее?")+assistantHintBtn(5,"balanced")+range("Насколько ты теперь веришь в первоначальную мысль?","after",100,"%"),
-  thoughtPinCard("new","Новая мысль",newThought)+field("Какой небольшой шаг ты можешь сделать?","action","Действие на 10–15 минут.")+assistantHintBtn(6,"action")+'<div class="step-why"><b>Зачем этот шаг</b><p style="margin:8px 0 0">Небольшое реальное действие — это активация: оно помогает закрепить новую мысль и вернуть ощущение контроля. Не идеальный план, а то, что точно получится сегодня или завтра.</p><p class="muted" style="margin:10px 0 0">Этот шаг автоматически появится во вкладке «Практики». Отметь его, когда выполнишь.</p></div>'+'<div class="field"><label>С каким паттерном это связано?</label><select class="select" id="patternSelect"><option value="" '+(!draft.pattern?"selected":"")+'>Пока не определил — можно выбрать позже</option>'+state.patterns.filter(function(p){return p.status!=="rejected";}).map(function(p){return '<option value="'+esc(p.id)+'" '+(draft.pattern===p.id?"selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select><button type="button" class="btn soft full" style="margin-top:10px" data-act="add-pattern-in-entry">＋ Создать новый паттерн</button></div>'
+  thoughtPinCard("new","Новая мысль",newThought)+'<div class="step-why"><b>Зачем этот шаг</b><p class="step-why-body">Небольшое реальное действие — это активация: оно помогает закрепить новую мысль и вернуть ощущение контроля. Не идеальный план, а то, что точно получится сегодня или завтра.</p></div>'+field("Какой небольшой шаг ты можешь сделать?","action","Действие на 10–15 минут.")+'<div class="step-practice-note">'+ico("layers")+'<span>Этот шаг автоматически появится во вкладке «Практики». Отметь его, когда выполнишь.</span></div>'+assistantHintBtn(6,"action")+'<div class="field"><label>С каким паттерном это связано?</label><select class="select" id="patternSelect"><option value="" '+(!draft.pattern?"selected":"")+'>Пока не определил — можно выбрать позже</option>'+state.patterns.filter(function(p){return p.status!=="rejected";}).map(function(p){return '<option value="'+esc(p.id)+'" '+(draft.pattern===p.id?"selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select><button type="button" class="btn soft full" style="margin-top:10px" data-act="add-pattern-in-entry">＋ Создать новый паттерн</button></div>'
  ];
  var note=step===0?"Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее.":"Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее и выбрать следующий посильный шаг.";
  var leftAction=step?'<button class="textbtn" type="button" data-act="prev">Назад</button>':'<button class="textbtn" type="button" data-act="cancel">Отменить</button>';
@@ -997,7 +1023,7 @@ function library(){
  if(libraryTab==="plan"){
   body=personal.length?personal.map(function(p){
    var done=p.status==="completed";
-   return '<article class="practice-plan-card"><button type="button" class="practice-plan-check '+(done?"done":"")+'" data-practice-done="'+esc(p.id)+'" aria-label="Выполнено">'+(done?ico("check"):"")+'</button><button type="button" class="grow" style="border:0;background:transparent;text-align:left;padding:0;color:inherit" data-personal-practice="'+esc(p.id)+'"><b>'+esc(p.title)+'</b><small style="display:block;color:var(--muted);margin-top:4px">'+esc(practiceMeta(p)||"В плане")+'</small><span style="display:inline-block;margin-top:8px;font-size:13px;font-weight:650;color:var(--pine)">Выполнено</span></button><button type="button" class="round static practice-plan-menu" data-pp-menu="'+esc(p.id)+'" aria-label="Ещё"><span class="entry-more-dots">⋯</span></button></article>';
+   return '<article class="practice-plan-card'+(done?" is-done":"")+'"><button type="button" class="round static practice-plan-menu" data-pp-menu="'+esc(p.id)+'" aria-label="Ещё"><span class="entry-more-dots">⋯</span></button><button type="button" class="practice-plan-body" data-personal-practice="'+esc(p.id)+'"><b>'+esc(p.title)+'</b><small>'+esc(practiceMeta(p)||"В плане")+'</small></button><button type="button" class="practice-done-row'+(done?" done":"")+'" data-practice-done="'+esc(p.id)+'"><span class="practice-done-check" aria-hidden="true">'+(done?ico("check"):"")+'</span><span>Выполнено</span></button></article>';
   }).join(""):'<div class="card empty"><b>В плане пока пусто</b><span>Шаг из дневника или рекомендация ассистента может появиться здесь автоматически.</span></div>';
  }else{
   body=practices.map(function(p,i){
