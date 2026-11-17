@@ -895,12 +895,19 @@ def _deepseek_assistant_hint(user_id, payload, timezone_name="UTC"):
         return _json_response(503, {"error": "deepseek_not_configured"})
     step = str(payload.get("step") or "")
     field = str(payload.get("field") or "")
+    if step == "4":
+        field = "against"
     thought = str(payload.get("thought") or "")[:1200]
     context = str(payload.get("context") or "")[:2400]
     system = (
         "Ты — персональный ассистент приложения ПЕРЕСМОТР. "
         "Дай 2–3 короткие подсказки по-русски, без markdown и нумерации."
     )
+    if step == "4":
+        system += (
+            " На шаге «факты против» предлагай только аргументы против автоматической мысли, "
+            "не факты «за» и не новую сбалансированную формулировку."
+        )
     user_message = (
         f"Шаг мастера: {step}\nПоле: {field}\nИсходная мысль: {thought}\n"
         f"Уже написано пользователем: {context}\n"
@@ -916,10 +923,16 @@ def _deepseek_assistant_hint(user_id, payload, timezone_name="UTC"):
         )
         suggestions = _parse_assistant_suggestions(_deepseek_choice_content(data))
         if len(suggestions) < 2:
-            suggestions = [
-                "Опиши, что произошло, без оценок себя.",
-                "Отдели факты от предположений.",
-            ]
+            if step == "4":
+                suggestions = [
+                    "Что бы сказал близкий друг, если бы услышал эту мысль?",
+                    "Были ли случаи, когда похожая мысль не подтвердилась?",
+                ]
+            else:
+                suggestions = [
+                    "Опиши, что произошло, без оценок себя.",
+                    "Отдели факты от предположений.",
+                ]
         created = datetime.now(timezone.utc).isoformat()
         request_key = f"{step}:{field}:{uuid.uuid4().hex[:8]}"
         _record_chargeable_assistant_use(user_id, "assistant_hint", request_key, created)
