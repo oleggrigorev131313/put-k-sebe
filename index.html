@@ -425,8 +425,9 @@ body[data-page="subscription"],body[data-page="subscription"] .shell{overflow-x:
 <script>
 (function(){
 "use strict";
-var KEY="put-k-sebe-v1",API_BASE="https://d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net",CLOUD_SYNC_ENABLED=true,app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".tabbar button"));
-function apiFetch(path,options){options=options||{};var timeout=8000,controller=new AbortController(),timer=setTimeout(function(){controller.abort();},timeout),fetchOpts=Object.assign({},options,{signal:controller.signal});return fetch(API_BASE+path,fetchOpts).finally(function(){clearTimeout(timer);});}
+var KEY="put-k-sebe-v1",GATEWAY_BASE="https://d5dhdhkofvnr2t1fnkag.7qsg961h.apigw.yandexcloud.net",DIRECT_BASE="https://functions.yandexcloud.net/d4etj8737dl7lmfb36d0",API_BASE=GATEWAY_BASE,CLOUD_SYNC_ENABLED=true,app=document.getElementById("app"),nav=[].slice.call(document.querySelectorAll(".tabbar button"));
+function apiUrl(path){var route=path.charAt(0)==="/"?path:"/"+path;return DIRECT_BASE+"?_p="+encodeURIComponent(route);}
+function apiFetch(path,options){options=options||{};var timeout=8000,controller=new AbortController(),timer=setTimeout(function(){controller.abort();},timeout),directOpts=Object.assign({},options,{signal:controller.signal});return fetch(apiUrl(path),directOpts).then(function(r){clearTimeout(timer);return r;}).catch(function(err){clearTimeout(timer);return fetch(GATEWAY_BASE+path,options);});}
 var tg=window.Telegram&&window.Telegram.WebApp;
 if(tg){try{tg.ready();tg.expand();if(tg.disableVerticalSwipes)tg.disableVerticalSwipes();tg.setHeaderColor("#f5f1e9");tg.setBackgroundColor("#f5f1e9");}catch(e){}}
 var first=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.first_name;
