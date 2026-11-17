@@ -55,7 +55,7 @@ required = [
     "/v1/consents",
     "/v1/ai/analyze-entry",
     "/v1/ai/daily-summary",
-    "/v1/trial",
+    "/v1/assistant/hint",
     "/v1/state",
     "out.onboarding",
     "put-k-sebe-v1",

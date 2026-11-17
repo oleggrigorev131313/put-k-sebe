@@ -11,6 +11,12 @@ from threading import RLock
 from urllib.parse import parse_qsl
 
 import ydb
+from assistant_quota import (
+    CHARGE_FEATURES,
+    FREE_LIFETIME_LIMIT,
+    PREMIUM_DAILY_LIMIT,
+    quota_payload,
+)
 from route_override import resolve_request_path
 import ydb.iam
 
@@ -47,6 +53,7 @@ TABLES = (
     "daily_summary_claims",
     "ai_usage_events",
     "imeads_attribution",
+    "assistant_quota",
 )
 
 _MISSING_TABLE_MARKERS = (
@@ -674,18 +681,15 @@ def _premium_status(user_id):
             trial_active = trial_expiry > now
         except ValueError:
             trial_active = False
-    active = paid_active or trial_active
+    active = paid_active
     premium_until = expiry if paid_active else None
-    if trial_active:
-        trial_expiry = datetime.fromisoformat(trial["expires_at"].replace("Z", "+00:00"))
-        if premium_until is None or trial_expiry > premium_until:
-            premium_until = trial_expiry
     return {
         "active": active,
         "premium_until": premium_until.isoformat() if premium_until else None,
-        "source": "paid" if paid_active else ("trial" if trial_active else None),
+        "source": "paid" if paid_active else None,
         "trial_used": trial is not None,
-        "trial_active": trial_active,
+        "trial_active": False,
+        "paid_premium": paid_active,
     }
 
 
@@ -864,6 +868,68 @@ def _trim_analysis_to_last_sentence(text):
     return text
 
 
+def _parse_assistant_suggestions(text):
+    lines = []
+    for raw in str(text or "").splitlines():
+        line = raw.strip().lstrip("0123456789.)-• ")
+        if len(line) > 3:
+            lines.append(line[:160])
+    if len(lines) < 2:
+        blob = str(text or "").strip()
+        if blob:
+            parts = [p.strip() for p in blob.replace(";", "\n").split("\n") if p.strip()]
+            lines.extend(parts)
+    return lines[:3]
+
+
+def _deepseek_assistant_hint(user_id, payload, timezone_name="UTC"):
+    from datetime import datetime, timezone
+
+    quota = _assistant_quota_status(user_id, timezone_name)
+    if quota.get("exhausted"):
+        return _assistant_quota_block_response(quota)
+    denied = _require_ai_processing(user_id)
+    if denied:
+        return denied
+    if not DEEPSEEK_API_KEY:
+        return _json_response(503, {"error": "deepseek_not_configured"})
+    step = str(payload.get("step") or "")
+    field = str(payload.get("field") or "")
+    thought = str(payload.get("thought") or "")[:1200]
+    context = str(payload.get("context") or "")[:2400]
+    system = (
+        "Ты — персональный ассистент приложения ПЕРЕСМОТР. "
+        "Дай 2–3 короткие подсказки по-русски, без markdown и нумерации."
+    )
+    user_message = (
+        f"Шаг мастера: {step}\nПоле: {field}\nИсходная мысль: {thought}\n"
+        f"Уже написано пользователем: {context}\n"
+        "Верни только подсказки, каждая с новой строки, до 120 символов."
+    )
+    try:
+        data = _deepseek_chat(
+            [{"role": "system", "content": system}, {"role": "user", "content": user_message}],
+            max_tokens=220,
+            timeout=25,
+            reasoning_effort="low",
+            thinking_enabled=False,
+        )
+        suggestions = _parse_assistant_suggestions(_deepseek_choice_content(data))
+        if len(suggestions) < 2:
+            suggestions = [
+                "Опиши, что произошло, без оценок себя.",
+                "Отдели факты от предположений.",
+            ]
+        created = datetime.now(timezone.utc).isoformat()
+        request_key = f"{step}:{field}:{uuid.uuid4().hex[:8]}"
+        _record_chargeable_assistant_use(user_id, "assistant_hint", request_key, created)
+        quota = _assistant_quota_status(user_id, timezone_name)
+        return _json_response(200, {"ok": True, "suggestions": suggestions[:3], **quota})
+    except Exception:
+        LOG.exception("assistant hint failed")
+        return _json_response(502, {"error": "assistant_hint_failed", "message": "Не удалось получить подсказку. Попробуй позже."})
+
+
 def _diary_entry_quality_error(entry):
     """Reject empty or fragmentary input before spending tokens on a personal analysis."""
     import re
@@ -885,9 +951,7 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
     from datetime import datetime, timezone
     import urllib.error
     stage = "load_user_state"
-    premium = _premium_status(user_id)
-    if not premium.get("active"):
-        return _json_response(403, {"error": "premium_required", "message": "Персональный анализ доступен только в Premium. Активируйте пробный период или выберите тариф."})
+    quota = _assistant_quota_status(user_id, timezone_name)
     state = _read_state(user_id)
     if not isinstance(state, dict):
         return _json_response(404, {"error": "user_state_not_found"})
@@ -916,14 +980,11 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
                 "ok": True, "cached": True, "analysis": str(row.analysis_text),
                 "usage": {"input_tokens": int(row.input_tokens), "output_tokens": int(row.output_tokens)},
                 "created_at": str(row.created_at),
+                **quota,
             })
 
-    from datetime import datetime, timezone
-    user_tz = _safe_user_timezone(timezone_name)
-    used_today, _ = _daily_ai_usage(user_id, datetime.now(user_tz).date().isoformat(), user_tz)
-    if used_today >= 5:
-        return _json_response(429, {"error":"daily_analysis_limit","limit":5,"used":used_today,
-                                    "message":"На сегодня использованы все 5 индивидуальных анализов."})
+    if quota.get("exhausted"):
+        return _assistant_quota_block_response(quota)
     stage = "prepare_prompt"
     fields = [
         ("Ситуация", "situation"), ("Эмоция", "emotion"),
@@ -1125,11 +1186,93 @@ def _daily_ai_usage(user_id, day_key, user_tz):
                 analyzed_entries.add(entry_id.rsplit(":", 1)[-1])
     return len(analyzed_entries), summary_exists
 
-def _save_ai_result(user_id, cache_key, text_value, usage, created):
-    consent = _get_user_consents(user_id)
-    feature = "daily_summary" if cache_key.startswith("daily-summary:") else ("onboarding" if cache_key.startswith("onboarding-profile:") else "analyze_entry")
-    request_key = cache_key.rsplit(":", 1)[-1]
-    _execute("""
+
+def _lifetime_assistant_used(user_id):
+    result = _execute(
+        """
+        DECLARE $user_id AS Utf8;
+        SELECT lifetime_used FROM assistant_quota WHERE user_id = $user_id;
+        """,
+        parameters={"$user_id": user_id},
+    )
+    for result_set in result:
+        for row in result_set.rows:
+            return int(row.lifetime_used)
+    return 0
+
+
+def _daily_assistant_charges(user_id, day_key, user_tz):
+    count = 0
+    result = _execute(
+        """
+        DECLARE $user_id AS Utf8;
+        SELECT feature, created_at FROM ai_usage_events WHERE user_id = $user_id;
+        """,
+        parameters={"$user_id": user_id},
+    )
+    for result_set in result:
+        for row in result_set.rows:
+            feature = str(row.feature)
+            if feature not in CHARGE_FEATURES:
+                continue
+            if _created_at_is_local_day(str(row.created_at), day_key, user_tz):
+                count += 1
+    return count
+
+
+def _bump_lifetime_assistant_used(user_id):
+    used = _lifetime_assistant_used(user_id) + 1
+    _execute(
+        """
+        DECLARE $user_id AS Utf8;
+        DECLARE $lifetime_used AS Uint32;
+        UPSERT INTO assistant_quota (user_id, lifetime_used)
+        VALUES ($user_id, $lifetime_used);
+        """,
+        parameters={
+            "$user_id": user_id,
+            "$lifetime_used": ydb.TypedValue(used, ydb.PrimitiveType.Uint32),
+        },
+    )
+    return used
+
+
+def _assistant_quota_status(user_id, timezone_name="UTC"):
+    from datetime import datetime
+
+    premium = _premium_status(user_id)
+    paid = bool(premium.get("paid_premium"))
+    user_tz = _safe_user_timezone(timezone_name)
+    day_key = datetime.now(user_tz).date().isoformat()
+    lifetime_used = _lifetime_assistant_used(user_id)
+    daily_used = _daily_assistant_charges(user_id, day_key, user_tz)
+    _, summary_done = _daily_ai_usage(user_id, day_key, user_tz)
+    return quota_payload(bool(premium.get("active")), paid, lifetime_used, daily_used, summary_done)
+
+
+def _assistant_quota_block_response(status):
+    if status["mode"] == "daily":
+        return _json_response(
+            429,
+            {
+                "error": "daily_assistant_limit",
+                "message": "На сегодня использованы все подсказки персонального ассистента.",
+                **status,
+            },
+        )
+    return _json_response(
+        429,
+        {
+            "error": "lifetime_assistant_limit",
+            "message": "Бесплатные подсказки ассистента закончились.",
+            **status,
+        },
+    )
+
+
+def _record_chargeable_assistant_use(user_id, feature, request_key, created):
+    _execute(
+        """
         DECLARE $event_id AS Utf8;
         DECLARE $user_id AS Utf8;
         DECLARE $feature AS Utf8;
@@ -1137,7 +1280,46 @@ def _save_ai_result(user_id, cache_key, text_value, usage, created):
         DECLARE $created_at AS Utf8;
         INSERT INTO ai_usage_events (event_id, user_id, feature, request_key, created_at)
         VALUES ($event_id, $user_id, $feature, $request_key, $created_at);
-        """, parameters={"$event_id": str(uuid.uuid4()), "$user_id": user_id, "$feature": feature, "$request_key": request_key, "$created_at": created})
+        """,
+        parameters={
+            "$event_id": str(uuid.uuid4()),
+            "$user_id": user_id,
+            "$feature": feature,
+            "$request_key": request_key,
+            "$created_at": created,
+        },
+    )
+    premium = _premium_status(user_id)
+    if not premium.get("paid_premium"):
+        return _bump_lifetime_assistant_used(user_id)
+    return _lifetime_assistant_used(user_id)
+
+
+def _save_ai_result(user_id, cache_key, text_value, usage, created):
+    consent = _get_user_consents(user_id)
+    feature = "daily_summary" if cache_key.startswith("daily-summary:") else ("onboarding" if cache_key.startswith("onboarding-profile:") else "analyze_entry")
+    request_key = cache_key.rsplit(":", 1)[-1]
+    if feature in CHARGE_FEATURES:
+        _record_chargeable_assistant_use(user_id, feature, request_key, created)
+    else:
+        _execute(
+            """
+            DECLARE $event_id AS Utf8;
+            DECLARE $user_id AS Utf8;
+            DECLARE $feature AS Utf8;
+            DECLARE $request_key AS Utf8;
+            DECLARE $created_at AS Utf8;
+            INSERT INTO ai_usage_events (event_id, user_id, feature, request_key, created_at)
+            VALUES ($event_id, $user_id, $feature, $request_key, $created_at);
+            """,
+            parameters={
+                "$event_id": str(uuid.uuid4()),
+                "$user_id": user_id,
+                "$feature": feature,
+                "$request_key": request_key,
+                "$created_at": created,
+            },
+        )
     if not consent["ai_history_storage"]:
         return
     _execute("""
@@ -1765,6 +1947,8 @@ WELCOME_CAPTION = """\
 🔄 переписать её на более честный и добрый взгляд на себя
 📊 следить, как со временем меняется твоё состояние
 
+15 бесплатных подсказок персонального ассистента — без активации. Записи в дневнике остаются бесплатными и без лимита.
+
 Шаг за шагом ты отпускаешь убеждения, которые причиняют боль, и становишься той версией себя, которой хочешь быть.
 
 👇 Нажми кнопку «Открыть дневник» под этим сообщением, и он откроется прямо в Telegram. Ничего скачивать не нужно.\
@@ -2029,8 +2213,17 @@ def handler(event, context):
             return _json_response(200, _premium_status(user_id))
 
         if path == "/v1/trial" and method == "POST":
+            return _json_response(410, {"error": "trial_removed", "message": "Пробный период больше не используется."})
+        if path in ("/v1/assistant/hint", "/assistant/hint") and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            return _start_trial(user_id)
+            try:
+                payload = json.loads(body or "{}")
+                if not isinstance(payload, dict):
+                    raise ValueError("invalid_body")
+            except (json.JSONDecodeError, ValueError, TypeError):
+                return _json_response(400, {"error": "invalid_body"})
+            timezone_name = str(payload.get("timezone") or headers.get("x-user-timezone") or "UTC")
+            return _deepseek_assistant_hint(user_id, payload, timezone_name)
         if path == "/v1/ai/test" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
             if not DEEPSEEK_API_KEY:
@@ -2065,13 +2258,9 @@ def handler(event, context):
 
         if path == "/v1/ai/usage" and method == "GET":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            from datetime import datetime
             timezone_name = headers.get("x-user-timezone", "UTC")
-            user_tz = _safe_user_timezone(timezone_name)
-            day_key = datetime.now(user_tz).date().isoformat()
-            used, summary_done = _daily_ai_usage(user_id, day_key, user_tz)
-            return _json_response(200, {"limit": 5, "used": used, "remaining": max(0, 5-used),
-                                        "summary_done": summary_done, "premium_required": False})
+            status = _assistant_quota_status(user_id, timezone_name)
+            return _json_response(200, status)
 
         if path == "/v1/ai/analyze-entry" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
