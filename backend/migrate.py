@@ -26,6 +26,7 @@ TABLES = (
     "daily_summary_claims",
     "ai_usage_events",
     "imeads_attribution",
+    "assistant_quota",
 )
 
 # Same columns and primary keys as the application reads and writes.
@@ -119,6 +120,13 @@ DDL = {
             click_id Utf8 NOT NULL,
             captured_at Utf8 NOT NULL,
             sent_json Utf8 NOT NULL,
+            PRIMARY KEY (user_id)
+        );
+    """,
+    "assistant_quota": """
+        CREATE TABLE assistant_quota (
+            user_id Utf8 NOT NULL,
+            lifetime_used Uint32 NOT NULL,
             PRIMARY KEY (user_id)
         );
     """,

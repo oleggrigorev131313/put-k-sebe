@@ -150,6 +150,7 @@ python3 -m pip install --disable-pip-version-check --quiet \
   -r "$WORKDIR/backend/requirements.txt" || fail "Не удалось установить зависимости Python"
 cp "$WORKDIR/backend/index.py" "$BUILD_DIR/index.py"
 cp "$WORKDIR/backend/route_override.py" "$BUILD_DIR/route_override.py"
+cp "$WORKDIR/backend/assistant_quota.py" "$BUILD_DIR/assistant_quota.py"
 python3 - "$BUILD_DIR" "$ZIP_FILE" <<'PY'
 import os, sys, zipfile
 root, target = sys.argv[1], sys.argv[2]
