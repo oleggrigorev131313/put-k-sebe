@@ -179,8 +179,15 @@ h2{font-size:22px;margin:0;font-weight:800}
 .wizard-actions .btn-wizard-main{flex:2;min-width:0;min-height:52px;padding:12px 18px;font-size:16px;font-weight:700;border-radius:18px}
 .wizard-footer{display:flex;flex-direction:column;gap:10px;margin-top:18px}
 .wizard-footer .wizard-actions{margin-top:0}
-.btn.wizard-analyze{width:100%;min-height:50px;padding:14px 18px;font-size:16px;font-weight:650;border-radius:18px;background:#f3f0ea;color:var(--pine);border:1px solid #e4ddd4;box-shadow:none}
-.btn.wizard-analyze:active{transform:scale(.985)}
+.analyze-cta-card{width:100%;display:flex;align-items:center;gap:12px;text-align:left;border:0;border-radius:18px;padding:14px 44px 14px 11px;background:#fff;box-shadow:0 4px 16px rgba(45,42,36,.08);border-left:4px solid #4F8A6B;cursor:pointer;position:relative;transition:transform .1s ease,box-shadow .1s ease}
+.analyze-cta-card:active{transform:scale(.985);box-shadow:0 2px 10px rgba(45,42,36,.06)}
+.analyze-cta-card:disabled{opacity:.7;cursor:not-allowed;transform:none}
+.analyze-cta-ico{width:44px;height:44px;border-radius:12px;background:#EAF3EE;color:#4F8A6B;flex:none;display:grid;place-items:center}
+.analyze-cta-ico .ico{width:22px;height:22px}
+.analyze-cta-copy{flex:1;min-width:0}
+.analyze-cta-copy b{display:block;font-size:16px;font-weight:800;color:#2e3632;line-height:1.25}
+.analyze-cta-copy small{display:block;margin-top:3px;font-size:13px;line-height:1.35;color:#6f736c;font-weight:500}
+.analyze-cta-chev{position:absolute;right:16px;top:50%;transform:translateY(-50%);flex:none;color:#9a948a;font-size:22px;line-height:1}
 .entry-detail-actions{display:flex;flex-direction:column;gap:12px;margin-top:12px}
 .pattern-link-field{margin-top:12px}
 .pattern-save-row{display:flex;justify-content:flex-end;margin-top:8px}
@@ -515,6 +522,17 @@ function thoughtPinCard(kind,label,text){
  return '<div class="thought-pin '+cls+'"><p class="thought-pin-label">'+esc(label)+'</p><p class="thought-pin-text">«'+esc(text)+'»</p></div>';
 }
 function assistantHintBtn(step,field){return '<button type="button" class="btn assistant-hint-btn" data-assistant-hint="'+esc(field)+'" data-assistant-step="'+step+'">✨ Подсказка от ассистента</button>';}
+function analysisSituationCta(extraAttrs){
+ return '<button type="button" class="analyze-cta-card" '+(extraAttrs||"")+'><span class="analyze-cta-ico">'+ico("lens")+'</span><span class="analyze-cta-copy"><b>Анализ ситуации (за 1 подсказку)</b><small>Персональный ассистент разберёт запись целиком</small></span><span class="analyze-cta-chev" aria-hidden="true">›</span></button>';
+}
+function setAnalyzeCtaState(buttonEl,state){
+ if(!buttonEl)return;
+ var title=buttonEl.querySelector(".analyze-cta-copy b");
+ if(!title)return;
+ if(state==="loading")title.innerHTML='<span class="analysis-spinner" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>Аналитик изучает запись<span class="analysis-dots"></span>';
+ else if(state==="retry")title.textContent="Анализ ситуации — попробовать снова";
+ else title.textContent="Анализ ситуации (за 1 подсказку)";
+}
 
 function load(){try{var x=JSON.parse(localStorage.getItem(KEY));if(!x||!Array.isArray(x.entries))return JSON.parse(JSON.stringify(defaults));var out=Object.assign({},defaults,x);out.patterns=(out.patterns||[]).filter(function(p){return ["p1","p2","p3","p4"].indexOf(p.id)<0;});out.practiceHistory=Array.isArray(out.practiceHistory)?out.practiceHistory:[];out.personalPractices=Array.isArray(out.personalPractices)?out.personalPractices:[];out.chat=Array.isArray(out.chat)?out.chat:[];if(out.meta&&typeof out.meta!=="object")out.meta=null;if(out.dailySummaryMeta&&typeof out.dailySummaryMeta!=="object")out.dailySummaryMeta=null;return out;}catch(e){return JSON.parse(JSON.stringify(defaults));}}
 function saveLocalOnly(){try{state.progressPeriod=progressPeriod;localStorage.setItem(KEY,JSON.stringify(state));}catch(e){toast("Не удалось сохранить данные на устройстве.");}}
@@ -590,7 +608,7 @@ async function analyzeEntry(id,buttonEl){
  if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
  if(aiUsage&&aiUsage.exhausted&&!premiumStatus.active){showHintsExhaustedSheet();return;}
  var result=document.getElementById("ai-result");
- if(buttonEl){buttonEl.disabled=true;buttonEl.innerHTML='<span class="analysis-spinner" style="display:inline-block;vertical-align:middle;margin-right:8px"></span>Аналитик изучает запись<span class="analysis-dots"></span>';}
+ if(buttonEl){buttonEl.disabled=true;setAnalyzeCtaState(buttonEl,"loading");}
  if(result){result.style.display="block";result.innerHTML='<div class="analysis-loading"><span class="analysis-spinner"></span><span>Аналитик изучает запись<span class="analysis-dots"></span></span></div>';}
  try{
   var response=await apiFetch("/v1/ai/analyze-entry",{method:"POST",headers:apiHeaders(),body:JSON.stringify({entry_id:String(id),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
@@ -614,7 +632,7 @@ async function analyzeEntry(id,buttonEl){
   refreshAiUsage();
  }catch(e){
   toast(e.message||"Ошибка анализа.");
-  if(buttonEl){buttonEl.disabled=false;buttonEl.textContent="Заказать анализ снова";}if(result){result.style.display="none";result.innerHTML="";}
+  if(buttonEl){buttonEl.disabled=false;setAnalyzeCtaState(buttonEl,"retry");}if(result){result.style.display="none";result.innerHTML="";}
  }
 }
 function cleanSummary(raw){return String(raw||"").replace(/^Практика на завтра:.*$/gmi,"").trim();}
@@ -825,6 +843,7 @@ function ico(name){
   compare:'<circle cx="9" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="15" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/>',
   arrow:'<path d="M5 12h12M13 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
   chev:'<path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+  lens:'<circle cx="10.5" cy="10.5" r="5.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M14.5 14.5 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
   wave:'<path d="M3.5 13c1.6-2.4 2.6-2.4 4.2 0s2.6 2.4 4.2 0 2.6-2.4 4.2 0 2.6 2.4 4.2 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
   nodes:'<circle cx="7" cy="8.5" r="2.1" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="16.5" cy="8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="16.2" r="2.1" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.7 9.8 10.5 14.4M14.8 9.5 13.3 14.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'
  };
@@ -1013,7 +1032,7 @@ function wizard(){
  ];
  var note=step===0?"Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее.":"Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее и выбрать следующий посильный шаг.";
  var wizardNav='<div class="wizard-actions"><button class="btn outline btn-wizard-back" type="button" data-act="'+(step?"prev":"cancel")+'">'+(step?"Назад":"Отменить")+'</button><button class="btn primary btn-wizard-main" type="button" data-act="'+(step===5?"save":"next")+'">'+(step===5?"Сохранить":"Далее →")+'</button></div>';
- var footer=step===5?'<div class="wizard-footer"><button class="btn wizard-analyze" type="button" data-act="save-analyze">Заказать анализ ситуации</button>'+wizardNav+'</div>':wizardNav;
+ var footer=step===5?'<div class="wizard-footer">'+analysisSituationCta('data-act="save-analyze"')+wizardNav+'</div>':wizardNav;
  return '<div class="page-head"><h1>'+(editingId?"Изменить запись":"Новая запись")+'</h1><p class="step-label">Шаг '+(step+1)+' из 6</p><div class="stepdots">'+dots+'</div></div><h2 class="question">'+stepTitles[step]+'</h2><p class="lead">'+stepHints[step]+'</p><section class="card field-card'+(step===0?" solo":"")+'" style="margin-top:14px">'+bodies[step]+'</section><div class="hintbox">'+ico("info")+'<span>'+note+'</span></div>'+footer;
 }
 function linkedCount(p){return state.entries.filter(function(e){return e.pattern===p.id||(e.patterns||[]).indexOf(p.id)>=0;}).length;}
@@ -1453,8 +1472,8 @@ function entryDetail(id,opts){
  var analysisShown=hasFreshAnalysis?'<div class="note" style="margin-top:10px">'+renderAnalysis(e.analysis,id)+'</div>':"";
  var analysisAction="";
  if(!hasFreshAnalysis){
-  if(aiUsage&&aiUsage.exhausted&&!premiumStatus.active)analysisAction='<button class="btn light full" type="button" id="premium-analysis">Заказать анализ ситуации</button>';
-  else analysisAction='<button class="btn primary full" type="button" id="analyze">Заказать анализ ситуации</button>';
+  if(aiUsage&&aiUsage.exhausted&&!premiumStatus.active)analysisAction=analysisSituationCta('id="premium-analysis"');
+  else analysisAction=analysisSituationCta('id="analyze"');
  }
  var head='<div class="modalhead modalhead-actions"><div class="modalhead-menu-wrap"><button class="round" type="button" id="entry-more" aria-label="Действия с записью" aria-haspopup="menu" aria-expanded="false"><span class="entry-more-dots" aria-hidden="true">⋯</span></button><div class="entry-menu" id="entry-menu" hidden role="menu"><button type="button" class="entry-menu-item" id="entry-menu-edit" role="menuitem">'+entryMenuSvgEdit()+'<span>Изменить запись</span></button><button type="button" class="entry-menu-item danger" id="entry-menu-delete" role="menuitem">'+entryMenuSvgTrash()+'<span>Удалить запись</span></button></div></div><button class="round" id="close" type="button" aria-label="Закрыть">×</button></div>';
  modal('<div class="look-label">'+esc(dateLabel(e.date))+'</div><h2>'+esc(e.thought||"Запись")+'</h2><p><b>Ситуация.</b> '+esc(e.situation)+'</p><p><b>Эмоция.</b> '+esc(e.emotion)+' · '+esc(e.intensity)+'/10</p><p><b>Факты за.</b> '+esc(e.forText)+'</p><p><b>Факты против.</b> '+esc(e.against)+'</p><p><b>Новый взгляд.</b> '+esc(e.balanced)+'</p><p><b>Следующий шаг.</b> '+esc(e.action)+'</p><div class="field pattern-link-field" style="margin-bottom:0"><label>Связать запись с паттерном</label><select class="select" id="entry-pattern">'+options+'</select></div><button class="pattern-save-btn" type="button" id="save-entry-pattern">Сохранить паттерн</button><div id="ai-result" class="note" style="display:none"></div>'+stale+analysisShown+(analysisAction?'<div class="entry-detail-foot">'+analysisAction+'</div>':""),head);
