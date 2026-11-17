@@ -48,6 +48,27 @@ python3 backend/migrate.py --dry-run
 python3 backend/migrate.py --apply
 ```
 
+## Сброс Premium / пробного периода (одноразово)
+
+Скрипт `backend/reset_premium.py` переводит всех пользователей на бесплатный тариф: в `premium_trials` проставляется прошедшая дата `expires_at` (строки не удаляются). Перед любой записью считает пользователей с **активными** записями Tribute в `premium_purchases`; если таких пользователей больше нуля, скрипт **останавливается без изменений**.
+
+По умолчанию — **dry-run** (только отчёт). Запись в YDB только с `--yes`.
+
+Из **Yandex Cloud Shell** (те же `YDB_ENDPOINT` / `YDB_DATABASE`, что у `migrate.py`):
+
+```bash
+git clone https://github.com/oleggrigorev131313/put-k-sebe.git
+cd put-k-sebe
+python3 -m pip install 'ydb>=3.20,<4'
+readarray -t DB_CFG < <(yc ydb database get put-k-sebe-db --format json | python3 -c 'import json,sys; u=json.load(sys.stdin)["endpoint"]; a,b=u.split("/?database=",1); print(a.rstrip("/")); print("/"+b.lstrip("/"))')
+export YDB_ENDPOINT="${DB_CFG[0]}"
+export YDB_DATABASE="${DB_CFG[1]}"
+python3 backend/reset_premium.py
+python3 backend/reset_premium.py --yes
+```
+
+Токен: `export YC_IAM_TOKEN="$(yc iam create-token)"` при необходимости. Секреты и пароли скрипт не выводит.
+
 ## Проверка и откат
 
 ```bash
