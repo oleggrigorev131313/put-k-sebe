@@ -166,7 +166,6 @@ h2{font-size:22px;margin:0;font-weight:800}
 .field-card{padding:8px}
 .field-card.solo{padding:6px 8px}
 .field-card.solo .area{border:0;background:transparent;box-shadow:none;min-height:168px}
-.wizard-actions .btn{min-width:168px;min-height:56px;padding:14px 26px}
 .field{margin:14px 0}
 .field label,.label{display:block;font-size:15px;font-weight:800;margin-bottom:8px}
 .input,.area,.select{width:100%;border:1px solid var(--line);background:#fff;border-radius:18px;padding:16px;font-size:17px;outline:none;caret-color:var(--pine)}
@@ -175,11 +174,13 @@ h2{font-size:22px;margin:0;font-weight:800}
 .area::placeholder,.input::placeholder{color:#b0aaa0}
 .hintbox{display:flex;gap:12px;align-items:flex-start;background:#f7f4ee;border-radius:18px;padding:14px 16px;color:#8d887f;font-size:15px;line-height:1.45;margin-top:14px}
 .hintbox .ico{width:20px;height:20px;flex:none;margin-top:1px;color:#8d948c}
-.wizard-actions{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:18px}
-.wizard-actions .textbtn{margin-right:auto}
-.wizard-footer{display:flex;flex-direction:column;gap:12px;margin-top:18px}
+.wizard-actions{display:flex;align-items:stretch;gap:10px;margin-top:18px;width:100%}
+.wizard-actions .btn-wizard-back{flex:1;min-width:0;min-height:52px;padding:12px 14px;font-size:16px;font-weight:700;border-radius:18px}
+.wizard-actions .btn-wizard-main{flex:2;min-width:0;min-height:52px;padding:12px 18px;font-size:16px;font-weight:700;border-radius:18px}
+.wizard-footer{display:flex;flex-direction:column;gap:10px;margin-top:18px}
 .wizard-footer .wizard-actions{margin-top:0}
-.wizard-footer .wizard-actions .btn{min-width:0;flex:1}
+.btn.wizard-analyze{width:100%;min-height:50px;padding:14px 18px;font-size:16px;font-weight:650;border-radius:18px;background:#f3f0ea;color:var(--pine);border:1px solid #e4ddd4;box-shadow:none}
+.btn.wizard-analyze:active{transform:scale(.985)}
 .entry-detail-actions{display:flex;flex-direction:column;gap:12px;margin-top:12px}
 .pattern-link-field{margin-top:12px}
 .pattern-save-row{display:flex;justify-content:flex-end;margin-top:8px}
@@ -1011,8 +1012,8 @@ function wizard(){
   thoughtPinCard("new","Новая мысль",newThought)+field("Какой небольшой шаг ты можешь сделать?","action","Действие на 10–15 минут.")+'<div class="step-practice-note">'+ico("layers")+'<span>Этот шаг автоматически появится во вкладке «Практики». Отметь его, когда выполнишь.</span></div>'+assistantHintBtn(6,"action")+'<div class="field"><label>С каким паттерном это связано?</label><select class="select" id="patternSelect"><option value="" '+(!draft.pattern?"selected":"")+'>Пока не определил — можно выбрать позже</option>'+state.patterns.filter(function(p){return p.status!=="rejected";}).map(function(p){return '<option value="'+esc(p.id)+'" '+(draft.pattern===p.id?"selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select><button type="button" class="btn soft full" style="margin-top:10px" data-act="add-pattern-in-entry">＋ Создать новый паттерн</button></div>'
  ];
  var note=step===0?"Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее.":"Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее и выбрать следующий посильный шаг.";
- var leftAction=step?'<button class="textbtn" type="button" data-act="prev">Назад</button>':'<button class="textbtn" type="button" data-act="cancel">Отменить</button>';
- var footer=step===5?'<div class="wizard-footer"><button class="btn primary full" type="button" data-act="save-analyze">Заказать анализ ситуации</button><div class="wizard-actions">'+leftAction+'<button class="btn light" type="button" data-act="save">Сохранить</button></div></div>':'<div class="wizard-actions">'+leftAction+'<button class="btn primary" type="button" data-act="next">Далее →</button></div>';
+ var wizardNav='<div class="wizard-actions"><button class="btn outline btn-wizard-back" type="button" data-act="'+(step?"prev":"cancel")+'">'+(step?"Назад":"Отменить")+'</button><button class="btn primary btn-wizard-main" type="button" data-act="'+(step===5?"save":"next")+'">'+(step===5?"Сохранить":"Далее →")+'</button></div>';
+ var footer=step===5?'<div class="wizard-footer"><button class="btn wizard-analyze" type="button" data-act="save-analyze">Заказать анализ ситуации</button>'+wizardNav+'</div>':wizardNav;
  return '<div class="page-head"><h1>'+(editingId?"Изменить запись":"Новая запись")+'</h1><p class="step-label">Шаг '+(step+1)+' из 6</p><div class="stepdots">'+dots+'</div></div><h2 class="question">'+stepTitles[step]+'</h2><p class="lead">'+stepHints[step]+'</p><section class="card field-card'+(step===0?" solo":"")+'" style="margin-top:14px">'+bodies[step]+'</section><div class="hintbox">'+ico("info")+'<span>'+note+'</span></div>'+footer;
 }
 function linkedCount(p){return state.entries.filter(function(e){return e.pattern===p.id||(e.patterns||[]).indexOf(p.id)>=0;}).length;}
