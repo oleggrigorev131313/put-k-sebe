@@ -77,12 +77,23 @@ h2{font-size:22px;margin:0;font-weight:800}
 .thought-pin-original .thought-pin-label{color:#d96b5c}
 .thought-pin-new .thought-pin-label{color:#3d7a58}
 .thought-pin-text{margin:0;font-family:"PT Serif",Georgia,serif;font-size:17px;line-height:1.45;color:var(--ink)}
-.assistant-hint-btn{width:100%;min-height:48px;margin:12px 0 0;border-radius:16px;background:linear-gradient(180deg,#fde8d8 0%,#f9ddc8 100%);color:#2a3d38;border:1px solid #e8cbb5;font-size:15px;font-weight:650;box-shadow:0 2px 8px rgba(62,52,36,.06)}
+.assistant-hint-btn{width:100%;min-height:48px;margin:12px 0 0;border-radius:16px;background:linear-gradient(135deg,#ffe8d6 0%,#f5c9a8 48%,#f9ddc8 100%);color:#243329;border:1px solid #e0b894;font-size:15px;font-weight:700;box-shadow:0 4px 14px rgba(224,147,100,.22);transition:transform .12s ease,box-shadow .12s ease}
+.assistant-hint-btn:active{transform:scale(.985);box-shadow:0 2px 8px rgba(224,147,100,.18)}
 .field-guides{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px;font-size:13px;color:#6f736c;line-height:1.35}
 .field-guides li{position:relative;padding-left:14px}
 .field-guides li::before{content:"";position:absolute;left:0;top:.55em;width:5px;height:5px;border-radius:50%;background:#c4bdb2}
 .assistant-chips{display:flex;flex-direction:column;gap:10px;margin-top:12px}
-.assistant-chips .chip{text-align:left;white-space:normal;height:auto;min-height:44px;padding:12px 16px}
+.assistant-sheet-hint{margin:0 0 8px;font-size:13px;color:#6f736c}
+.assistant-suggest-card{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;border-radius:16px;padding:14px 14px 14px 12px;background:#fffdf9;border:1px solid #ebe4d8;box-shadow:0 3px 12px rgba(45,42,36,.07);color:var(--ink);cursor:pointer;transition:transform .1s ease,box-shadow .1s ease,border-color .1s ease;border-left-width:4px;border-left-style:solid}
+.assistant-suggest-card:active{transform:scale(.985);box-shadow:0 1px 6px rgba(45,42,36,.06)}
+.assistant-suggest-coral{border-left-color:#e07a6a}
+.assistant-suggest-green{border-left-color:#4a8f6a}
+.assistant-suggest-peach{border-left-color:#e8b58a}
+.assistant-suggest-icon{width:22px;height:22px;flex:none;color:#d96b5c;margin-top:2px}
+.assistant-suggest-green .assistant-suggest-icon{color:#3d7a58}
+.assistant-suggest-peach .assistant-suggest-icon{color:#c98a52}
+.assistant-suggest-text{flex:1;font-size:15px;line-height:1.4;font-weight:550;color:#2e3632}
+.assistant-suggest-go{width:20px;height:20px;flex:none;color:#9a948a;margin-top:2px;opacity:.85}
 .step-practice-note{display:flex;gap:10px;align-items:flex-start;margin:12px 0 0;padding:12px 14px;border-radius:14px;background:#f3f0ea;color:#6f736c;font-size:13px;line-height:1.4}
 .step-practice-note .ico{width:20px;height:20px;flex:none;margin-top:1px;color:#9a948a}
 .practice-plan-card{position:relative;display:flex;flex-direction:column;width:100%;text-align:left;margin:0 0 12px;padding:16px 16px 0;border:1px solid #e4ded4;border-radius:20px;background:var(--card);box-shadow:var(--shadow)}
@@ -155,7 +166,6 @@ h2{font-size:22px;margin:0;font-weight:800}
 .field-card{padding:8px}
 .field-card.solo{padding:6px 8px}
 .field-card.solo .area{border:0;background:transparent;box-shadow:none;min-height:168px}
-.wizard-actions .btn{min-width:168px;min-height:56px;padding:14px 26px}
 .field{margin:14px 0}
 .field label,.label{display:block;font-size:15px;font-weight:800;margin-bottom:8px}
 .input,.area,.select{width:100%;border:1px solid var(--line);background:#fff;border-radius:18px;padding:16px;font-size:17px;outline:none;caret-color:var(--pine)}
@@ -164,11 +174,13 @@ h2{font-size:22px;margin:0;font-weight:800}
 .area::placeholder,.input::placeholder{color:#b0aaa0}
 .hintbox{display:flex;gap:12px;align-items:flex-start;background:#f7f4ee;border-radius:18px;padding:14px 16px;color:#8d887f;font-size:15px;line-height:1.45;margin-top:14px}
 .hintbox .ico{width:20px;height:20px;flex:none;margin-top:1px;color:#8d948c}
-.wizard-actions{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:18px}
-.wizard-actions .textbtn{margin-right:auto}
-.wizard-footer{display:flex;flex-direction:column;gap:12px;margin-top:18px}
+.wizard-actions{display:flex;align-items:stretch;gap:10px;margin-top:18px;width:100%}
+.wizard-actions .btn-wizard-back{flex:1;min-width:0;min-height:52px;padding:12px 14px;font-size:16px;font-weight:700;border-radius:18px}
+.wizard-actions .btn-wizard-main{flex:2;min-width:0;min-height:52px;padding:12px 18px;font-size:16px;font-weight:700;border-radius:18px}
+.wizard-footer{display:flex;flex-direction:column;gap:10px;margin-top:18px}
 .wizard-footer .wizard-actions{margin-top:0}
-.wizard-footer .wizard-actions .btn{min-width:0;flex:1}
+.btn.wizard-analyze{width:100%;min-height:50px;padding:14px 18px;font-size:16px;font-weight:650;border-radius:18px;background:#f3f0ea;color:var(--pine);border:1px solid #e4ddd4;box-shadow:none}
+.btn.wizard-analyze:active{transform:scale(.985)}
 .entry-detail-actions{display:flex;flex-direction:column;gap:12px;margin-top:12px}
 .pattern-link-field{margin-top:12px}
 .pattern-save-row{display:flex;justify-content:flex-end;margin-top:8px}
@@ -458,12 +470,34 @@ function showHintsExhaustedSheet(){
  document.getElementById("hints-go-premium").onclick=function(){closeModal();go("subscription");};
  document.getElementById("hints-continue").onclick=closeModal;
 }
+function assistantSuggestAccent(step){return step===5?"coral":step===4?"green":"peach";}
+function showAssistantSuggestionSheet(step,field,suggestions){
+ var accent=assistantSuggestAccent(step);
+ var lead=step===5&&field==="balanced"?'<p class="assistant-sheet-hint">Нажми, чтобы вставить</p>':"";
+ var cards=suggestions.map(function(s,i){
+  return '<button type="button" class="assistant-suggest-card assistant-suggest-'+accent+'" data-sugg="'+i+'"><span class="assistant-suggest-icon">'+ico("spark")+'</span><span class="assistant-suggest-text">'+esc(s)+'</span><span class="assistant-suggest-go">'+ico("arrow")+'</span></button>';
+ }).join("");
+ modal('<h2>Персональный ассистент предлагает</h2>'+lead+'<div class="assistant-chips">'+cards+'</div>');
+ document.querySelectorAll(".assistant-suggest-card").forEach(function(btn){
+  btn.onclick=function(){
+   var text=suggestions[Number(btn.dataset.sugg)];
+   var el=document.querySelector('[data-field="'+field+'"]');if(!el)return;
+   if(step===5&&field==="balanced"){el.value=text;}else{
+    var sep=el.value&&!el.value.endsWith("\n")&&!el.value.endsWith(" ")?" ":"";
+    el.value=(el.value||"")+sep+text;
+   }
+   draft[field]=el.value;
+   closeModal();
+   toast(step===5&&field==="balanced"?"Формулировка вставлена.":"Подсказка добавлена в поле.");
+  };
+ });
+}
 async function requestAssistantHint(step,field){
  if(aiUsage&&aiUsage.exhausted){showHintsExhaustedSheet();return;}
  if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
  var context=[draft.situation,draft.forText,draft.against,draft.balanced,draft.action].map(function(x){return String(x||"").trim();}).filter(Boolean).join(" | ");
  try{
-  var r=await apiFetch("/v1/assistant/hint",{method:"POST",headers:apiHeaders(),body:JSON.stringify({step:step,field:field,thought:draft.thought||"",context:context,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
+  var r=await apiFetch("/v1/assistant/hint",{method:"POST",headers:apiHeaders(),body:JSON.stringify({step:step,field:field,thought:draft.thought||"",for_text:draft.forText||"",against:draft.against||"",context:context,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
   var data=await r.json();
   if(!r.ok){
    if(r.status===429){aiUsage=data;showHintsExhaustedSheet();refreshAiUsage();return;}
@@ -472,18 +506,7 @@ async function requestAssistantHint(step,field){
   aiUsage=data;refreshAiUsage();
   var suggestions=(data.suggestions||[]).slice(0,3);
   if(!suggestions.length){toast("Подсказки не пришли. Попробуй ещё раз.");return;}
-  modal('<h2>Персональный ассистент предлагает</h2><div class="assistant-chips">'+suggestions.map(function(s,i){return '<button type="button" class="chip assistant-chip" data-sugg="'+i+'">'+esc(s)+'</button>';}).join("")+'</div>');
-  document.querySelectorAll(".assistant-chip").forEach(function(btn){
-   btn.onclick=function(){
-    var text=suggestions[Number(btn.dataset.sugg)];
-    var el=document.querySelector('[data-field="'+field+'"]');if(!el)return;
-    var sep=el.value&&!el.value.endsWith("\n")&&!el.value.endsWith(" ")?" ":"";
-    el.value=(el.value||"")+sep+text;
-    draft[field]=el.value;
-    closeModal();
-    toast("Подсказка добавлена в поле.");
-   };
-  });
+  showAssistantSuggestionSheet(step,field,suggestions);
  }catch(e){toast(e.message||"Не удалось получить подсказку.");}
 }
 function thoughtPinCard(kind,label,text){
@@ -985,12 +1008,12 @@ function wizard(){
   '<div class="field"><label>Какие эмоции ты испытывал?</label><p class="muted">'+(selectedEmotions().length?esc(selectedEmotions().join(" · ")):"Выбери одну или несколько.")+'</p><div class="emotion-groups">'+Object.keys(emotionGroups).map(function(group){var chosen=emotionGroups[group].filter(function(x){return selectedEmotions().indexOf(x)>=0;}).length,open=!!expandedEmotionGroups[group];return '<div class="emotion-group"><button type="button" class="emotion-group-head" data-emotion-group="'+esc(group)+'"><span>'+esc(group)+'</span><span>'+(chosen?'<i class="emotion-group-count">'+chosen+'</i>':"")+(open?"−":"+")+'</span></button>'+(open?'<div class="emotion-group-body"><div class="choice-chips">'+emotionGroups[group].map(function(x){return '<button type="button" class="chip '+(selectedEmotions().indexOf(x)>=0?"active":"")+'" data-emotion="'+esc(x)+'">'+esc(x)+'</button>';}).join("")+'</div></div>':"")+'</div>';}).join("")+'</div><div class="custom-emotion"><label for="custom-emotion-input">Не нашёл нужное состояние?</label><div class="custom-row"><input class="input" id="custom-emotion-input" enterkeyhint="done" placeholder="Напиши своё состояние"><button type="button" class="btn soft" data-add-custom-emotion>Добавить</button></div></div></div>'+range("Общая интенсивность эмоций","intensity",10,"/10"),
   field("Автоматическая мысль","thought","Например: «Я никогда не смогу нормально зарабатывать».")+range("Насколько веришь этой мысли?","before",100,"%"),
   thoughtPinCard("original","Исходная мысль",originalThought)+'<div class="field"><label>Факты за мысль</label><textarea class="area" enterkeyhint="done" data-field="forText" placeholder="Какие факты подтверждают эту мысль?">'+esc(draft.forText)+'</textarea></div>'+'<div class="field"><label>Факты против мысли</label><textarea class="area" enterkeyhint="done" data-field="against" placeholder="Какие факты ей противоречат?">'+esc(draft.against)+'</textarea></div>'+assistantHintBtn(4,"against")+'<ul class="field-guides"><li>Что сказал бы близкий друг?</li><li>Было ли, что это не подтвердилось?</li><li>Что ты знаешь точно, а что предполагаешь?</li></ul>',
-  thoughtPinCard("original","Исходная мысль",originalThought)+thoughtPinCard("new","Новая мысль",newThought)+field("Как сформулировать эту мысль точнее?","balanced","Если учесть все факты, какая формулировка будет точнее?")+assistantHintBtn(5,"balanced")+range("Насколько ты теперь веришь в первоначальную мысль?","after",100,"%"),
+  thoughtPinCard("original","Исходная мысль",originalThought)+field("Как сформулировать эту мысль точнее?","balanced","Если учесть все факты, какая формулировка будет точнее?")+assistantHintBtn(5,"balanced")+range("Насколько ты теперь веришь в первоначальную мысль?","after",100,"%"),
   thoughtPinCard("new","Новая мысль",newThought)+field("Какой небольшой шаг ты можешь сделать?","action","Действие на 10–15 минут.")+'<div class="step-practice-note">'+ico("layers")+'<span>Этот шаг автоматически появится во вкладке «Практики». Отметь его, когда выполнишь.</span></div>'+assistantHintBtn(6,"action")+'<div class="field"><label>С каким паттерном это связано?</label><select class="select" id="patternSelect"><option value="" '+(!draft.pattern?"selected":"")+'>Пока не определил — можно выбрать позже</option>'+state.patterns.filter(function(p){return p.status!=="rejected";}).map(function(p){return '<option value="'+esc(p.id)+'" '+(draft.pattern===p.id?"selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select><button type="button" class="btn soft full" style="margin-top:10px" data-act="add-pattern-in-entry">＋ Создать новый паттерн</button></div>'
  ];
  var note=step===0?"Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее.":"Не нужно заставлять себя мыслить позитивно. Цель — посмотреть на ситуацию чуть точнее и выбрать следующий посильный шаг.";
- var leftAction=step?'<button class="textbtn" type="button" data-act="prev">Назад</button>':'<button class="textbtn" type="button" data-act="cancel">Отменить</button>';
- var footer=step===5?'<div class="wizard-footer"><button class="btn primary full" type="button" data-act="save-analyze">Заказать анализ ситуации</button><div class="wizard-actions">'+leftAction+'<button class="btn light" type="button" data-act="save">Сохранить</button></div></div>':'<div class="wizard-actions">'+leftAction+'<button class="btn primary" type="button" data-act="next">Далее →</button></div>';
+ var wizardNav='<div class="wizard-actions"><button class="btn outline btn-wizard-back" type="button" data-act="'+(step?"prev":"cancel")+'">'+(step?"Назад":"Отменить")+'</button><button class="btn primary btn-wizard-main" type="button" data-act="'+(step===5?"save":"next")+'">'+(step===5?"Сохранить":"Далее →")+'</button></div>';
+ var footer=step===5?'<div class="wizard-footer"><button class="btn wizard-analyze" type="button" data-act="save-analyze">Заказать анализ ситуации</button>'+wizardNav+'</div>':wizardNav;
  return '<div class="page-head"><h1>'+(editingId?"Изменить запись":"Новая запись")+'</h1><p class="step-label">Шаг '+(step+1)+' из 6</p><div class="stepdots">'+dots+'</div></div><h2 class="question">'+stepTitles[step]+'</h2><p class="lead">'+stepHints[step]+'</p><section class="card field-card'+(step===0?" solo":"")+'" style="margin-top:14px">'+bodies[step]+'</section><div class="hintbox">'+ico("info")+'<span>'+note+'</span></div>'+footer;
 }
 function linkedCount(p){return state.entries.filter(function(e){return e.pattern===p.id||(e.patterns||[]).indexOf(p.id)>=0;}).length;}

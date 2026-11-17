@@ -868,17 +868,17 @@ def _trim_analysis_to_last_sentence(text):
     return text
 
 
-def _parse_assistant_suggestions(text):
+def _parse_assistant_suggestions(text, max_len=160):
     lines = []
     for raw in str(text or "").splitlines():
-        line = raw.strip().lstrip("0123456789.)-• ")
+        line = raw.strip().lstrip("0123456789.)-• «»")
         if len(line) > 3:
-            lines.append(line[:160])
+            lines.append(line[:max_len])
     if len(lines) < 2:
         blob = str(text or "").strip()
         if blob:
-            parts = [p.strip() for p in blob.replace(";", "\n").split("\n") if p.strip()]
-            lines.extend(parts)
+            parts = [p.strip().lstrip("«").rstrip("»") for p in blob.replace(";", "\n").split("\n") if p.strip()]
+            lines.extend(p[:max_len] for p in parts)
     return lines[:3]
 
 
@@ -898,35 +898,75 @@ def _deepseek_assistant_hint(user_id, payload, timezone_name="UTC"):
     if step == "4":
         field = "against"
     thought = str(payload.get("thought") or "")[:1200]
+    for_text = str(payload.get("for_text") or "")[:1200]
+    against = str(payload.get("against") or "")[:1200]
     context = str(payload.get("context") or "")[:2400]
+    max_tokens = 220
+    suggest_max_len = 160
+    if step == "5":
+        field = "balanced"
     system = (
         "Ты — персональный ассистент приложения ПЕРЕСМОТР. "
-        "Дай 2–3 короткие подсказки по-русски, без markdown и нумерации."
+        "Отвечай по-русски, без markdown и нумерации."
     )
     if step == "4":
         system += (
-            " На шаге «факты против» предлагай только аргументы против автоматической мысли, "
+            " На шаге «факты против» дай 3 короткие подсказки-аргументы против автоматической мысли, "
             "не факты «за» и не новую сбалансированную формулировку."
         )
-    user_message = (
-        f"Шаг мастера: {step}\nПоле: {field}\nИсходная мысль: {thought}\n"
-        f"Уже написано пользователем: {context}\n"
-        "Верни только подсказки, каждая с новой строки, до 120 символов."
-    )
+        user_message = (
+            f"Исходная мысль: {thought}\n"
+            f"Уже написано: {context}\n"
+            "Верни ровно 3 подсказки, каждая с новой строки, до 120 символов."
+        )
+    elif step == "5":
+        system += (
+            " На шаге более сбалансированной мысли верни ровно 3 готовые альтернативные "
+            "формулировки новой мысли от первого лица. Это готовые фразы мыслей, а не советы, "
+            "вопросы или инструкции. Учитывай исходную автоматическую мысль и факты за/против."
+        )
+        user_message = (
+            f"Исходная автоматическая мысль: {thought}\n"
+            f"Факты за мысль: {for_text or '(пока пусто)'}\n"
+            f"Факты против мысли: {against or '(пока пусто)'}\n"
+            "Верни ровно 3 формулировки новой сбалансированной мысли, каждая с новой строки, "
+            "до 160 символов, без кавычек и нумерации."
+        )
+        max_tokens = 320
+        suggest_max_len = 180
+    else:
+        system += " Дай 3 короткие подсказки."
+        user_message = (
+            f"Шаг мастера: {step}\nПоле: {field}\nИсходная мысль: {thought}\n"
+            f"Уже написано пользователем: {context}\n"
+            "Верни 3 подсказки, каждая с новой строки, до 120 символов."
+        )
     try:
         data = _deepseek_chat(
             [{"role": "system", "content": system}, {"role": "user", "content": user_message}],
-            max_tokens=220,
+            max_tokens=max_tokens,
             timeout=25,
             reasoning_effort="low",
             thinking_enabled=False,
         )
-        suggestions = _parse_assistant_suggestions(_deepseek_choice_content(data))
-        if len(suggestions) < 2:
+        suggestions = _parse_assistant_suggestions(
+            _deepseek_choice_content(data), max_len=suggest_max_len
+        )
+        if step == "5":
+            fallbacks = [
+                "Я не знаю всей картины: ситуация может значить не только одно.",
+                "Задержка ответа ещё не доказывает, что со мной что-то не так.",
+                "Мне помогает помнить и факты «за», и факты «против» этой мысли.",
+            ]
+            while len(suggestions) < 3:
+                suggestions.append(fallbacks[len(suggestions)])
+            suggestions = suggestions[:3]
+        elif len(suggestions) < 2:
             if step == "4":
                 suggestions = [
                     "Что бы сказал близкий друг, если бы услышал эту мысль?",
                     "Были ли случаи, когда похожая мысль не подтвердилась?",
+                    "Что ты знаешь точно, а что пока предполагаешь?",
                 ]
             else:
                 suggestions = [
