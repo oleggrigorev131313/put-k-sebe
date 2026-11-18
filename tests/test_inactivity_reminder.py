@@ -13,7 +13,6 @@ from inactivity_reminder import (  # noqa: E402
     INACTIVITY_REMINDER_TEXTS,
     effective_user_timezone,
     inactivity_hours_elapsed,
-    is_reminder_quiet_hours,
     pick_reminder_variant,
     reminder_stale_after_last_seen,
     should_send_inactivity_reminder,
@@ -21,12 +20,6 @@ from inactivity_reminder import (  # noqa: E402
 
 
 class InactivityReminderLogicTest(unittest.TestCase):
-    def test_quiet_hours_moscow(self):
-        now = datetime(2026, 1, 15, 20, 0, tzinfo=timezone.utc)  # 23:00 MSK
-        self.assertTrue(is_reminder_quiet_hours("Europe/Moscow", now))
-        now = datetime(2026, 1, 15, 6, 0, tzinfo=timezone.utc)  # 09:00 MSK
-        self.assertFalse(is_reminder_quiet_hours("Europe/Moscow", now))
-
     def test_default_timezone_when_utc(self):
         self.assertEqual(effective_user_timezone("UTC"), "Europe/Moscow")
         self.assertEqual(effective_user_timezone(""), "Europe/Moscow")
@@ -58,23 +51,23 @@ class InactivityReminderLogicTest(unittest.TestCase):
         meta = {"telegram_blocked": False, "reminder_sent_at": ""}
         self.assertTrue(
             should_send_inactivity_reminder(
-                "42", last_seen, "Europe/Moscow", meta, now, ai_processing=True
+                "42", last_seen, meta, now, ai_processing=True
             )
         )
         self.assertFalse(
             should_send_inactivity_reminder(
                 "42",
                 last_seen,
-                "Europe/Moscow",
                 {**meta, "telegram_blocked": True},
                 now,
                 ai_processing=True,
             )
         )
-        quiet_now = datetime(2026, 1, 15, 20, 30, tzinfo=timezone.utc)  # 23:30 MSK
-        self.assertFalse(
+        night = datetime(2026, 1, 15, 2, 0, tzinfo=timezone.utc)
+        night_last_seen = (night - timedelta(hours=25)).isoformat()
+        self.assertTrue(
             should_send_inactivity_reminder(
-                "42", last_seen, "Europe/Moscow", meta, quiet_now, ai_processing=True
+                "42", night_last_seen, meta, night, ai_processing=True
             )
         )
 
