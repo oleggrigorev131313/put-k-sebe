@@ -27,6 +27,7 @@ TABLES = (
     "ai_usage_events",
     "imeads_attribution",
     "assistant_quota",
+    "user_reminders",
 )
 
 # Same columns and primary keys as the application reads and writes.
@@ -127,6 +128,15 @@ DDL = {
         CREATE TABLE assistant_quota (
             user_id Utf8 NOT NULL,
             lifetime_used Uint32 NOT NULL,
+            PRIMARY KEY (user_id)
+        );
+    """,
+    "user_reminders": """
+        CREATE TABLE user_reminders (
+            user_id Utf8 NOT NULL,
+            reminder_sent_at Utf8,
+            last_reminder_variant Int32,
+            telegram_blocked Bool NOT NULL,
             PRIMARY KEY (user_id)
         );
     """,

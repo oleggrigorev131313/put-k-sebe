@@ -357,23 +357,35 @@ VERSION_JSON="$(yc serverless function version create \
 NEW_VERSION_ID="$(printf '%s' "$VERSION_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')"
 echo "    Создана версия: ${NEW_VERSION_ID:-неизвестный id}"
 
-# Timer runs each minute; backend generates summaries only for users at local 23:59.
+# Reuse the legacy timer name put-k-sebe-daily-summary (one trigger, no duplicate).
+# Cron is hourly; payload runs inactivity reminders. Nightly summary push stays off in code.
 # Use Trigger API v2 (the v1 CLI is deprecated).
+FUNCTION_TAG='$latest'
 TIMER_NAME="put-k-sebe-daily-summary"
-TIMER_JSON="$(yc serverless trigger v2 get "$TIMER_NAME" --format json 2>/dev/null || true)"
-if [[ -z "$TIMER_JSON" ]]; then
-  TIMER_ACTION_FILE="$WORKDIR/timer-action.json"
-  FUNCTION_TAG='$latest'
-  cat > "$TIMER_ACTION_FILE" <<JSON
+TIMER_CRON='0 * * * ? *'
+TIMER_PAYLOAD='{"job":"inactivity_reminder"}'
+TIMER_ACTION_FILE="$WORKDIR/timer-action.json"
+cat > "$TIMER_ACTION_FILE" <<JSON
 {"invoke_function":{"function_id":"$FUNCTION_ID","function_tag":"$FUNCTION_TAG","service_account_id":"$SA_ID"}}
 JSON
+TIMER_JSON="$(yc serverless trigger v2 get "$TIMER_NAME" --format json 2>/dev/null || true)"
+if [[ -z "$TIMER_JSON" ]]; then
   yc serverless trigger v2 create timer "$TIMER_NAME" \
-    --description "One daily summary at 23:59 in each user's local timezone" \
-    --cron-expression '* * * * ? *' \
-    --payload '{"job":"daily_summary"}' \
-    --action "@$TIMER_ACTION_FILE" || fail "Не удалось создать таймер ежедневной сводки"
+    --description "Hourly inactivity reminders (20h idle)" \
+    --cron-expression "$TIMER_CRON" \
+    --payload "$TIMER_PAYLOAD" \
+    --action "@$TIMER_ACTION_FILE" || fail "Не удалось создать таймер put-k-sebe-daily-summary"
+  echo "    Создан таймер ${TIMER_NAME} (cron ${TIMER_CRON})."
 else
-  echo "    Таймер ежедневной сводки уже существует."
+  echo "    Таймер ${TIMER_NAME} уже существует — обновляю cron и payload."
+  yc serverless trigger v2 update timer "$TIMER_NAME" \
+    --description "Hourly inactivity reminders (20h idle)" \
+    --cron-expression "$TIMER_CRON" \
+    --payload "$TIMER_PAYLOAD" || fail "Не удалось обновить таймер ${TIMER_NAME}"
+fi
+LEGACY_INACTIVITY_TIMER="put-k-sebe-inactivity-reminder"
+if yc serverless trigger v2 get "$LEGACY_INACTIVITY_TIMER" --format json >/dev/null 2>&1; then
+  echo "    ВНИМАНИЕ: найден лишний таймер ${LEGACY_INACTIVITY_TIMER} — удалите его вручную в консоли, если он был создан ранее."
 fi
 
 # Cloud Functions copies the package during version creation; remove the temporary object.

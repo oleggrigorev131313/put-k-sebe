@@ -120,6 +120,7 @@ def _load_index():
     os.environ["YDB_ENDPOINT"] = "grpcs://ydb.example:2135"
     os.environ["YDB_DATABASE"] = "/local/test"
     os.environ["BOT_TOKEN"] = FIXTURE_TOKEN
+    os.environ["DAILY_SUMMARY_TELEGRAM_PUSH_ENABLED"] = "1"
     _stub_ydb()
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import index
