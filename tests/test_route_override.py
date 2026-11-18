@@ -18,6 +18,11 @@ class RouteOverrideTest(unittest.TestCase):
         self.assertEqual(path, "/v1/admin/user")
         self.assertEqual(query.get("user_id"), "42")
 
+    def test_p_with_timezone_query(self):
+        path, query = resolve_request_path("/", {}, {"_p": "/v1/ai/usage?tz=Europe%2FMoscow"})
+        self.assertEqual(path, "/v1/ai/usage")
+        self.assertEqual(query.get("tz"), "Europe/Moscow")
+
     def test_header_fallback(self):
         path, query = resolve_request_path("/invoke", {"x-route-path": "/v1/premium"}, {})
         self.assertEqual(path, "/v1/premium")
