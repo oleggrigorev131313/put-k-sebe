@@ -359,11 +359,11 @@ echo "    Создана версия: ${NEW_VERSION_ID:-неизвестный 
 
 # Timer runs each minute; backend generates summaries only for users at local 23:59.
 # Use Trigger API v2 (the v1 CLI is deprecated).
+FUNCTION_TAG='$latest'
 TIMER_NAME="put-k-sebe-daily-summary"
 TIMER_JSON="$(yc serverless trigger v2 get "$TIMER_NAME" --format json 2>/dev/null || true)"
 if [[ -z "$TIMER_JSON" ]]; then
   TIMER_ACTION_FILE="$WORKDIR/timer-action.json"
-  FUNCTION_TAG='$latest'
   cat > "$TIMER_ACTION_FILE" <<JSON
 {"invoke_function":{"function_id":"$FUNCTION_ID","function_tag":"$FUNCTION_TAG","service_account_id":"$SA_ID"}}
 JSON
@@ -374,6 +374,22 @@ JSON
     --action "@$TIMER_ACTION_FILE" || fail "Не удалось создать таймер ежедневной сводки"
 else
   echo "    Таймер ежедневной сводки уже существует."
+fi
+
+INACTIVITY_TIMER_NAME="put-k-sebe-inactivity-reminder"
+INACTIVITY_TIMER_JSON="$(yc serverless trigger v2 get "$INACTIVITY_TIMER_NAME" --format json 2>/dev/null || true)"
+if [[ -z "$INACTIVITY_TIMER_JSON" ]]; then
+  INACTIVITY_TIMER_ACTION_FILE="$WORKDIR/inactivity-timer-action.json"
+  cat > "$INACTIVITY_TIMER_ACTION_FILE" <<JSON
+{"invoke_function":{"function_id":"$FUNCTION_ID","function_tag":"$FUNCTION_TAG","service_account_id":"$SA_ID"}}
+JSON
+  yc serverless trigger v2 create timer "$INACTIVITY_TIMER_NAME" \
+    --description "Hourly inactivity reminder for users inactive 20+ hours" \
+    --cron-expression '0 * * * ? *' \
+    --payload '{"job":"inactivity_reminder"}' \
+    --action "@$INACTIVITY_TIMER_ACTION_FILE" || fail "Не удалось создать таймер напоминаний о неактивности"
+else
+  echo "    Таймер напоминаний о неактивности уже существует."
 fi
 
 # Cloud Functions copies the package during version creation; remove the temporary object.

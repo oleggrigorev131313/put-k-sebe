@@ -17,6 +17,13 @@ from assistant_quota import (
     PREMIUM_DAILY_LIMIT,
     quota_payload,
 )
+from inactivity_reminder import (
+    INACTIVITY_REMINDER_AFTER_HOURS,
+    INACTIVITY_REMINDER_TEXTS,
+    effective_user_timezone,
+    pick_reminder_variant,
+    should_send_inactivity_reminder,
+)
 from route_override import resolve_request_path
 import ydb.iam
 
@@ -54,7 +61,13 @@ TABLES = (
     "ai_usage_events",
     "imeads_attribution",
     "assistant_quota",
+    "user_reminders",
 )
+
+# Night push at 23:59 is disabled; the timer may still invoke the function.
+DAILY_SUMMARY_TELEGRAM_PUSH_ENABLED = os.environ.get(
+    "DAILY_SUMMARY_TELEGRAM_PUSH_ENABLED", ""
+).strip().lower() in ("1", "true", "yes")
 
 _MISSING_TABLE_MARKERS = (
     "does not exist",
@@ -388,6 +401,21 @@ def _imeads_check_signup(user_id):
         pass
 
 
+def _touch_user_last_seen(user_id):
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    _execute(
+        """
+        DECLARE $user_id AS Utf8;
+        DECLARE $seen AS Utf8;
+        UPDATE user_profiles SET last_seen = $seen WHERE user_id = $user_id;
+        """,
+        parameters={"$user_id": str(user_id), "$seen": now},
+        table="user_profiles",
+    )
+
+
 def _upsert_profile(user_id, profile, timezone_name="UTC"):
     from datetime import datetime, timezone
     profile = profile if isinstance(profile, dict) else {}
@@ -543,6 +571,36 @@ def _telegram_user(init_data):
         raise ValueError("Telegram user is missing") from exc
 
     return user_id
+
+
+def _auth_telegram_user(headers):
+    """Validate Telegram init data and refresh last_seen on any authorized API call."""
+    user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+    try:
+        _touch_user_last_seen(user_id)
+        _clear_telegram_blocked_flag(user_id)
+    except TableMissing:
+        raise
+    except Exception:
+        LOG.debug("last_seen touch failed user_id=%s", user_id)
+    return user_id
+
+
+def _clear_telegram_blocked_flag(user_id):
+    try:
+        _execute(
+            """
+            DECLARE $user_id AS Utf8;
+            UPDATE user_reminders SET telegram_blocked = false
+            WHERE user_id = $user_id AND telegram_blocked = true;
+            """,
+            parameters={"$user_id": str(user_id)},
+            table="user_reminders",
+        )
+    except TableMissing:
+        raise
+    except Exception:
+        pass
 
 
 def _read_state(user_id):
@@ -1936,9 +1994,175 @@ def _local_day_key(timezone_name, now):
     return now.astimezone(_safe_user_timezone(timezone_name)).date().isoformat()
 
 
+def build_inactivity_reminder(chat_id, variant):
+    index = int(variant)
+    if index < 0 or index >= len(INACTIVITY_REMINDER_TEXTS):
+        raise ValueError("invalid reminder variant")
+    return {
+        "chat_id": int(chat_id),
+        "text": INACTIVITY_REMINDER_TEXTS[index],
+        "reply_markup": _diary_reply_markup(),
+    }
+
+
+def _load_reminder_rows():
+    rows = {}
+    result = _execute(
+        """
+        SELECT user_id, reminder_sent_at, last_reminder_variant, telegram_blocked
+        FROM user_reminders;
+        """,
+        table="user_reminders",
+    )
+    for result_set in result:
+        for row in result_set.rows:
+            uid = str(row.user_id)
+            rows[uid] = {
+                "reminder_sent_at": str(row.reminder_sent_at or ""),
+                "last_reminder_variant": int(row.last_reminder_variant)
+                if row.last_reminder_variant is not None
+                else -1,
+                "telegram_blocked": bool(row.telegram_blocked),
+            }
+    return rows
+
+
+def _upsert_reminder_row(user_id, reminder_sent_at, variant, telegram_blocked):
+    _execute(
+        """
+        DECLARE $user_id AS Utf8;
+        DECLARE $reminder_sent_at AS Utf8;
+        DECLARE $last_reminder_variant AS Int32;
+        DECLARE $telegram_blocked AS Bool;
+        UPSERT INTO user_reminders (
+            user_id, reminder_sent_at, last_reminder_variant, telegram_blocked
+        )
+        VALUES ($user_id, $reminder_sent_at, $last_reminder_variant, $telegram_blocked);
+        """,
+        parameters={
+            "$user_id": str(user_id),
+            "$reminder_sent_at": str(reminder_sent_at or "")[:40],
+            "$last_reminder_variant": int(variant),
+            "$telegram_blocked": bool(telegram_blocked),
+        },
+        table="user_reminders",
+    )
+
+
+def _run_inactivity_reminders(now=None):
+    from datetime import datetime, timezone
+
+    global _telegram_consecutive_network_failures
+    _telegram_consecutive_network_failures = 0
+    if now is None:
+        now = datetime.now(timezone.utc)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    try:
+        profiles = _execute(
+            "SELECT user_id, timezone, last_seen FROM user_profiles;",
+            table="user_profiles",
+        )
+        reminders = _load_reminder_rows()
+    except TableMissing as exc:
+        LOG.error("Inactivity reminder skipped stage=table_missing:%s", exc.table_name)
+        print("PUT_K_SEBE_503 stage=table_missing:%s" % exc.table_name, flush=True)
+        return
+    for result_set in profiles:
+        for row in result_set.rows:
+            user_id = str(row.user_id)
+            last_seen = str(row.last_seen or "")
+            timezone_name = effective_user_timezone(row.timezone)
+            meta = reminders.get(user_id, {
+                "reminder_sent_at": "",
+                "last_reminder_variant": -1,
+                "telegram_blocked": False,
+            })
+            if not should_send_inactivity_reminder(
+                user_id,
+                last_seen,
+                timezone_name,
+                meta,
+                now,
+                ai_processing=_get_user_consents(user_id).get("ai_processing"),
+            ):
+                continue
+            if _telegram_consecutive_network_failures >= TELEGRAM_MAX_CONSECUTIVE_NETWORK_FAILURES:
+                LOG.error("Inactivity reminder stopped after network failures")
+                return
+            variant = pick_reminder_variant(meta.get("last_reminder_variant", -1))
+            if not _claim_inactivity_reminder(user_id, last_seen, now.isoformat()):
+                continue
+            _pace_telegram_send()
+            result = _send_telegram_message(
+                "sendMessage",
+                build_inactivity_reminder(int(user_id), variant),
+            )
+            if result == "ok":
+                _upsert_reminder_row(user_id, now.isoformat(), variant, False)
+            elif result == "blocked":
+                _upsert_reminder_row(user_id, now.isoformat(), variant, True)
+            elif result == "network":
+                _telegram_consecutive_network_failures += 1
+                _release_inactivity_reminder(user_id, last_seen)
+            else:
+                _release_inactivity_reminder(user_id, last_seen)
+            LOG.info("inactivity reminder user=%s result=%s", user_id, result)
+
+
+def _inactivity_claim_key(last_seen):
+    return "inactivity:" + hashlib.sha256(last_seen.encode("utf-8")).hexdigest()[:24]
+
+
+def _claim_inactivity_reminder(user_id, last_seen, created_at):
+    claim_key = _inactivity_claim_key(last_seen)
+    try:
+        _execute(
+            """
+            DECLARE $user_id AS Utf8;
+            DECLARE $day_key AS Utf8;
+            DECLARE $created_at AS Utf8;
+            INSERT INTO daily_summary_claims (user_id, day_key, created_at)
+            VALUES ($user_id, $day_key, $created_at);
+            """,
+            parameters={
+                "$user_id": user_id,
+                "$day_key": claim_key,
+                "$created_at": created_at,
+            },
+            table="daily_summary_claims",
+        )
+        return True
+    except TableMissing:
+        raise
+    except Exception:
+        return False
+
+
+def _release_inactivity_reminder(user_id, last_seen):
+    claim_key = _inactivity_claim_key(last_seen)
+    try:
+        _execute(
+            """
+            DECLARE $user_id AS Utf8;
+            DECLARE $day_key AS Utf8;
+            DELETE FROM daily_summary_claims WHERE user_id=$user_id AND day_key=$day_key;
+            """,
+            parameters={"$user_id": user_id, "$day_key": claim_key},
+            table="daily_summary_claims",
+        )
+    except TableMissing:
+        raise
+    except Exception as exc:
+        LOG.error("inactivity reminder release failed type=%s", type(exc).__name__)
+
+
 def _run_due_daily_summaries(now=None):
     from datetime import datetime, timezone
     global _telegram_consecutive_network_failures
+    if not DAILY_SUMMARY_TELEGRAM_PUSH_ENABLED:
+        LOG.info("Scheduled daily summary push disabled (DAILY_SUMMARY_TELEGRAM_PUSH_ENABLED)")
+        return
     _telegram_consecutive_network_failures = 0
     if now is None:
         now = datetime.now(timezone.utc)
@@ -2153,7 +2377,11 @@ def handler(event, context):
             for msg in messages:
                 try: payload=json.loads((msg.get("details") or {}).get("payload") or "{}")
                 except (TypeError,json.JSONDecodeError): payload={}
-                if payload.get("job")=="daily_summary": _run_due_daily_summaries()
+                job = payload.get("job")
+                if job == "daily_summary":
+                    _run_due_daily_summaries()
+                elif job == "inactivity_reminder":
+                    _run_inactivity_reminders()
             return {"statusCode":200,"body":"ok"}
         method, path, headers, body, query = _request_parts(event)
 
@@ -2242,7 +2470,7 @@ def handler(event, context):
             )
 
         if path == "/v1/consents" and method in ("GET", "PUT"):
-            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            user_id = _auth_telegram_user(headers)
             if method == "GET":
                 return _json_response(200, {"ok": True, "consents": _get_user_consents(user_id)})
             try:
@@ -2264,7 +2492,7 @@ def handler(event, context):
                     pass
             return _json_response(200, {"ok": True, "consents": saved})
         if path == "/v1/profile" and method == "POST":
-            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            user_id = _auth_telegram_user(headers)
             try:
                 payload = json.loads(body or "{}")
                 _upsert_profile(user_id,payload.get("user") or {},str(payload.get("timezone") or "UTC"))
@@ -2279,13 +2507,13 @@ def handler(event, context):
                 return _json_response(400,{"error":"invalid_profile"})
 
         if path == "/v1/premium" and method == "GET":
-            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            user_id = _auth_telegram_user(headers)
             return _json_response(200, _premium_status(user_id))
 
         if path == "/v1/trial" and method == "POST":
             return _json_response(410, {"error": "trial_removed", "message": "Пробный период больше не используется."})
         if path in ("/v1/assistant/hint", "/assistant/hint") and method == "POST":
-            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            user_id = _auth_telegram_user(headers)
             try:
                 payload = json.loads(body or "{}")
                 if not isinstance(payload, dict):
@@ -2295,12 +2523,12 @@ def handler(event, context):
             timezone_name = _resolve_timezone(headers, query, payload)
             return _deepseek_assistant_hint(user_id, payload, timezone_name)
         if path == "/v1/ai/test" and method == "POST":
-            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            user_id = _auth_telegram_user(headers)
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error": "deepseek_not_configured"})
             return _deepseek_connection_test()
         if path == "/v1/ai/analyze-onboarding" and method == "POST":
-            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            user_id = _auth_telegram_user(headers)
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error":"deepseek_not_configured"})
             denied = _require_ai_processing(user_id)
@@ -2309,7 +2537,7 @@ def handler(event, context):
             return _deepseek_analyze_onboarding(user_id)
 
         if path == "/v1/ai/daily-summary" and method == "POST":
-            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            user_id = _auth_telegram_user(headers)
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error":"deepseek_not_configured"})
             denied = _require_ai_processing(user_id)
@@ -2327,13 +2555,13 @@ def handler(event, context):
             return _deepseek_daily_summary(user_id, timezone_name, False)
 
         if path == "/v1/ai/usage" and method == "GET":
-            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            user_id = _auth_telegram_user(headers)
             timezone_name = _resolve_timezone(headers, query, None)
             status = _assistant_quota_status(user_id, timezone_name)
             return _json_response(200, status)
 
         if path == "/v1/ai/analyze-entry" and method == "POST":
-            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            user_id = _auth_telegram_user(headers)
             if not DEEPSEEK_API_KEY:
                 return _json_response(503, {"error": "deepseek_not_configured"})
             denied = _require_ai_processing(user_id)
@@ -2381,7 +2609,7 @@ def handler(event, context):
             )
 
         if path == "/v1/events" and method == "POST":
-            user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+            user_id = _auth_telegram_user(headers)
             try:
                 payload = json.loads(body or "{}")
                 event_name = payload.get("event")
@@ -2514,7 +2742,7 @@ def handler(event, context):
         if method not in ("GET", "PUT", "DELETE"):
             return _json_response(405, {"error": "method_not_allowed"})
 
-        user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
+        user_id = _auth_telegram_user(headers)
 
         if method == "GET":
             state = _read_state(user_id)
