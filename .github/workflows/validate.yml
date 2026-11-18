@@ -26,6 +26,8 @@ jobs:
         run: python backend/test_telegram_start.py
       - name: Check deployment script syntax
         run: bash -n backend/deploy.sh
+      - name: Check Cloud Function package modules
+        run: python3 -m unittest tests.test_deploy_package -v
       - name: Check frontend JavaScript syntax
         run: |
           python - <<'PY'

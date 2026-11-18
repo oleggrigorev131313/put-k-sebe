@@ -148,9 +148,18 @@ python3 -m pip install --disable-pip-version-check --quiet \
   --python-version 3.12 --implementation cp --abi cp312 \
   --platform manylinux2014_x86_64 --only-binary=:all: \
   -r "$WORKDIR/backend/requirements.txt" || fail "Не удалось установить зависимости Python"
-cp "$WORKDIR/backend/index.py" "$BUILD_DIR/index.py"
-cp "$WORKDIR/backend/route_override.py" "$BUILD_DIR/route_override.py"
-cp "$WORKDIR/backend/assistant_quota.py" "$BUILD_DIR/assistant_quota.py"
+DEPLOY_PY_EXCLUDE=(migrate.py reset_premium.py)
+for py in "$WORKDIR"/backend/*.py; do
+  base="$(basename "$py")"
+  [[ "$base" == test_* ]] && continue
+  skip=0
+  for ex in "${DEPLOY_PY_EXCLUDE[@]}"; do
+    [[ "$base" == "$ex" ]] && skip=1 && break
+  done
+  [[ "$skip" -eq 1 ]] && continue
+  cp "$py" "$BUILD_DIR/$base"
+done
+[[ -f "$BUILD_DIR/index.py" ]] || fail "В пакет не попал index.py"
 python3 - "$BUILD_DIR" "$ZIP_FILE" <<'PY'
 import os, sys, zipfile
 root, target = sys.argv[1], sys.argv[2]
