@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import random
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 INACTIVITY_REMINDER_AFTER_HOURS = 20
 DEFAULT_REMINDER_TIMEZONE = "Europe/Moscow"
@@ -15,13 +14,6 @@ INACTIVITY_REMINDER_TEXTS = (
     "Ты уже начал(а) менять привычные мысли — не останавливайся сейчас 💪 Результат дают ежедневные короткие записи, а не редкие длинные. Загляни сегодня.",
     "Мысли, которые не записаны, продолжают крутиться по кругу. Выгрузи их в ПЕРЕСМОТР — и посмотрим на них вместе спокойно.",
 )
-
-
-def safe_timezone(name):
-    try:
-        return ZoneInfo(str(name or "UTC")[:80])
-    except ZoneInfoNotFoundError:
-        return timezone.utc
 
 
 def parse_iso_datetime(value):
@@ -39,13 +31,6 @@ def effective_user_timezone(timezone_name):
     if not tz or tz.upper() == "UTC":
         return DEFAULT_REMINDER_TIMEZONE
     return tz[:80]
-
-
-def is_reminder_quiet_hours(timezone_name, now):
-    """No sends between 23:00 and 09:00 in the user's local timezone."""
-    local = now.astimezone(safe_timezone(effective_user_timezone(timezone_name)))
-    hour = local.hour
-    return hour >= 23 or hour < 9
 
 
 def inactivity_hours_elapsed(last_seen, now):
@@ -75,7 +60,6 @@ def pick_reminder_variant(previous):
 def should_send_inactivity_reminder(
     user_id,
     last_seen,
-    timezone_name,
     reminder_meta,
     now,
     *,
@@ -86,8 +70,6 @@ def should_send_inactivity_reminder(
     if reminder_meta.get("telegram_blocked"):
         return False
     if not ai_processing:
-        return False
-    if is_reminder_quiet_hours(timezone_name, now):
         return False
     hours = inactivity_hours_elapsed(last_seen, now)
     if hours is None or hours < INACTIVITY_REMINDER_AFTER_HOURS:

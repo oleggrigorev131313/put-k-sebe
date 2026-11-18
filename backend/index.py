@@ -18,9 +18,7 @@ from assistant_quota import (
     quota_payload,
 )
 from inactivity_reminder import (
-    INACTIVITY_REMINDER_AFTER_HOURS,
     INACTIVITY_REMINDER_TEXTS,
-    effective_user_timezone,
     pick_reminder_variant,
     should_send_inactivity_reminder,
 )
@@ -2072,7 +2070,6 @@ def _run_inactivity_reminders(now=None):
         for row in result_set.rows:
             user_id = str(row.user_id)
             last_seen = str(row.last_seen or "")
-            timezone_name = effective_user_timezone(row.timezone)
             meta = reminders.get(user_id, {
                 "reminder_sent_at": "",
                 "last_reminder_variant": -1,
@@ -2081,7 +2078,6 @@ def _run_inactivity_reminders(now=None):
             if not should_send_inactivity_reminder(
                 user_id,
                 last_seen,
-                timezone_name,
                 meta,
                 now,
                 ai_processing=_get_user_consents(user_id).get("ai_processing"),
