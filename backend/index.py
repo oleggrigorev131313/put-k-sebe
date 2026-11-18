@@ -438,7 +438,7 @@ def _cors_headers():
         "Cache-Control": "no-store",
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET,PUT,DELETE,POST,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type,X-Telegram-Init-Data,X-Admin-Password,X-Route-Path",
+        "Access-Control-Allow-Headers": "Content-Type,X-Telegram-Init-Data,X-Admin-Password,X-Route-Path,X-User-Timezone",
     }
 
 
@@ -487,12 +487,14 @@ def _request_parts(event):
         or "/"
     )
     path, query = resolve_request_path(path, headers, query)
-    if query.get("timezone"):
+    if query.get("tz"):
+        headers["x-user-timezone"] = str(query.get("tz"))[:80]
+    elif query.get("timezone"):
         headers["x-user-timezone"] = str(query.get("timezone"))[:80]
     body = event.get("body") or ""
     if event.get("isBase64Encoded") and body:
         body = base64.b64decode(body).decode("utf-8")
-    return method, path, headers, body
+    return method, path, headers, body, query
 
 
 def _telegram_user(init_data):
@@ -1186,6 +1188,21 @@ def _deepseek_analyze_entry(user_id, entry_id, timezone_name="UTC"):
             "detail": stage + ": " + type(exc).__name__ + ": " + safe_detail,
         })
 
+
+
+def _resolve_timezone(headers, query=None, payload=None):
+    q = query if isinstance(query, dict) else {}
+    if isinstance(payload, dict):
+        for key in ("timezone", "tz"):
+            if payload.get(key):
+                return str(payload.get(key))[:80]
+    if headers.get("x-user-timezone"):
+        return str(headers.get("x-user-timezone"))[:80]
+    if q.get("tz"):
+        return str(q.get("tz"))[:80]
+    if q.get("timezone"):
+        return str(q.get("timezone"))[:80]
+    return "UTC"
 
 
 def _safe_user_timezone(name):
@@ -2138,7 +2155,7 @@ def handler(event, context):
                 except (TypeError,json.JSONDecodeError): payload={}
                 if payload.get("job")=="daily_summary": _run_due_daily_summaries()
             return {"statusCode":200,"body":"ok"}
-        method, path, headers, body = _request_parts(event)
+        method, path, headers, body, query = _request_parts(event)
 
         if method == "OPTIONS":
             return _preflight_response()
@@ -2275,7 +2292,7 @@ def handler(event, context):
                     raise ValueError("invalid_body")
             except (json.JSONDecodeError, ValueError, TypeError):
                 return _json_response(400, {"error": "invalid_body"})
-            timezone_name = str(payload.get("timezone") or headers.get("x-user-timezone") or "UTC")
+            timezone_name = _resolve_timezone(headers, query, payload)
             return _deepseek_assistant_hint(user_id, payload, timezone_name)
         if path == "/v1/ai/test" and method == "POST":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
@@ -2300,10 +2317,10 @@ def handler(event, context):
                 return denied
             try:
                 payload = json.loads(body or "{}")
-                timezone_name = str(payload.get("timezone") or "UTC")
+                timezone_name = _resolve_timezone(headers, query, payload)
                 action = str(payload.get("action") or "")
             except (json.JSONDecodeError, TypeError):
-                timezone_name = "UTC"
+                timezone_name = _resolve_timezone(headers, query, None)
                 action = ""
             if action == "previous":
                 return _get_previous_daily_summary(user_id, timezone_name)
@@ -2311,7 +2328,7 @@ def handler(event, context):
 
         if path == "/v1/ai/usage" and method == "GET":
             user_id = _telegram_user(headers.get("x-telegram-init-data", ""))
-            timezone_name = headers.get("x-user-timezone", "UTC")
+            timezone_name = _resolve_timezone(headers, query, None)
             status = _assistant_quota_status(user_id, timezone_name)
             return _json_response(200, status)
 
@@ -2329,7 +2346,7 @@ def handler(event, context):
                     raise ValueError("invalid_entry_id")
             except (json.JSONDecodeError, ValueError, TypeError):
                 return _json_response(400, {"error": "invalid_request"})
-            timezone_name = str(payload.get("timezone") or "UTC")
+            timezone_name = _resolve_timezone(headers, query, payload)
             return _deepseek_analyze_entry(user_id, entry_id, timezone_name)
 
         if path == "/v1/admin/imeads/test" and method == "POST":
