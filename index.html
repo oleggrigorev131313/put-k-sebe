@@ -465,12 +465,28 @@ var PLANS=[
 ];
 function assistantQuotaLabel(){
  var q=aiUsage||{};
- var premium=!!(q.paid_premium||q.mode==="daily"||premiumStatus.active);
+ var premium=!!(q.paid_premium||q.mode==="daily");
  var limit=premium?(Number(q.limit)||10):(Number(q.lifetime_limit||q.limit)||15);
- var used=Number(q.used)||0;
- var rem=q.remaining!=null&&!isNaN(Number(q.remaining))?Math.max(0,Number(q.remaining)):Math.max(0,limit-used);
+ var rem=q.remaining!=null&&!isNaN(Number(q.remaining))?Math.max(0,Number(q.remaining)):Math.max(0,limit-(Number(q.used)||0));
  if(premium)return "Сегодня: "+rem+" из "+limit;
  return "Подсказок: "+rem+" из "+limit;
+}
+function applyAiUsageFromApi(data){
+ if(!data||typeof data!=="object")return;
+ var keep=Array.isArray(data.suggestions)?{}:data;
+ aiUsage=Object.assign({},aiUsage,keep);
+ if(data.remaining!=null)aiUsage.remaining=Math.max(0,Number(data.remaining));
+ if(data.used!=null)aiUsage.used=Number(data.used);
+ if(data.limit!=null)aiUsage.limit=Number(data.limit);
+ if(data.exhausted!=null)aiUsage.exhausted=!!data.exhausted;
+ if(data.mode)aiUsage.mode=data.mode;
+ if(data.lifetime_limit!=null)aiUsage.lifetime_limit=Number(data.lifetime_limit);
+ if(data.lifetime_used!=null)aiUsage.lifetime_used=Number(data.lifetime_used);
+ if(data.paid_premium!=null)aiUsage.paid_premium=!!data.paid_premium;
+ aiUsage.loading=false;
+ aiUsage._fromServer=true;
+ if(page==="journal"&&step<6)paintChrome();
+ else if(page==="home"||page==="subscription"||page==="summary")render();
 }
 function showHintsExhaustedSheet(){
  modal('<h2>Бесплатные подсказки закончились</h2><p><strong>15 из 15 использовано</strong></p><p>Записи в дневнике остаются бесплатными и без лимита. Premium даёт 10 подсказок персонального ассистента в день.</p><div class="modal-actions stack"><button class="btn primary full" type="button" id="hints-go-premium">Перейти на Премиум</button><button class="btn soft full" type="button" id="hints-continue">Продолжить без подсказок</button></div>');
@@ -507,10 +523,10 @@ async function requestAssistantHint(step,field){
   var r=await apiFetch("/v1/assistant/hint",{method:"POST",headers:apiHeaders(),body:JSON.stringify({step:step,field:field,thought:draft.thought||"",for_text:draft.forText||"",against:draft.against||"",context:context,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
   var data=await r.json();
   if(!r.ok){
-   if(r.status===429){aiUsage=data;showHintsExhaustedSheet();refreshAiUsage();return;}
+   if(r.status===429){applyAiUsageFromApi(data);showHintsExhaustedSheet();return;}
    throw new Error(data.message||data.error||"Не удалось получить подсказку");
   }
-  aiUsage=data;refreshAiUsage();
+  applyAiUsageFromApi(data);
   var suggestions=(data.suggestions||[]).slice(0,3);
   if(!suggestions.length){toast("Подсказки не пришли. Попробуй ещё раз.");return;}
   showAssistantSuggestionSheet(step,field,suggestions);
@@ -557,7 +573,9 @@ async function refreshPremium(){
 }
 async function refreshAiUsage(){
  if(!tg||!tg.initData||!API_BASE){
-  aiUsage=Object.assign({limit:15,lifetime_limit:15,used:0,remaining:15,mode:"lifetime",exhausted:false},aiUsage||{});
+  if(!aiUsage._fromServer){
+   aiUsage=Object.assign({limit:15,lifetime_limit:15,used:0,remaining:15,mode:"lifetime",exhausted:false},aiUsage||{});
+  }
   aiUsage.loading=false;
   if(page==="journal"&&step<6)paintChrome();
   return;
@@ -565,7 +583,7 @@ async function refreshAiUsage(){
  try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
  var usageHeaders=apiHeaders();usageHeaders["X-User-Timezone"]=tz;
  var r=await apiFetch("/v1/ai/usage",{method:"GET",headers:usageHeaders,cache:"no-store"});
- if(r.ok){aiUsage=await r.json();aiUsage.loading=false;if(page==="home"||page==="subscription"||page==="summary")render();if(page==="journal"&&step<6)paintChrome();}}catch(e){aiUsage.loading=false;}
+ if(r.ok)applyAiUsageFromApi(await r.json());else aiUsage.loading=false;}catch(e){aiUsage.loading=false;}
 }
 function formatAnalysis(raw){
  var safe=esc(String(raw||""));
@@ -614,7 +632,7 @@ async function analyzeEntry(id,buttonEl){
   var response=await apiFetch("/v1/ai/analyze-entry",{method:"POST",headers:apiHeaders(),body:JSON.stringify({entry_id:String(id),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
   var data=await response.json();
   if(!response.ok){
-   if(response.status===429){aiUsage=data;showHintsExhaustedSheet();refreshAiUsage();throw new Error(data.message||"Подсказки ассистента закончились.");}
+   if(response.status===429){applyAiUsageFromApi(data);showHintsExhaustedSheet();throw new Error(data.message||"Подсказки ассистента закончились.");}
    if(response.status===422)throw new Error(data.message||"Не удалось выполнить анализ ситуации. Проверь, достаточно ли в записи понятного текста.");
    if(response.status===429)throw new Error(data.message||"Дневной лимит анализов исчерпан.");
    var diagnostic=data.detail||data.provider_code||data.error||"Неизвестная ошибка";
@@ -863,7 +881,7 @@ function go(p,replace){
  render();
  window.scrollTo(0,0);
  if(p==="subscription"||p==="home")refreshPremium().then(function(){if(page===p)render();});
- if(p==="home"||p==="summary"||p==="subscription")refreshAiUsage();
+ if(p==="home"||p==="summary"||p==="subscription"||(p==="journal"&&step<6))refreshAiUsage();
 }
 function initial(){return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8.2" r="3.1"/><path d="M5.6 19.2c1.1-3 3.3-4.5 6.4-4.5s5.3 1.5 6.4 4.5" stroke-linecap="round"/></svg>';}
 function paintChrome(){
@@ -1281,7 +1299,7 @@ function act(a){
   }).catch(function(e){toast(e.message||"Не удалось сохранить согласия. Попробуй ещё раз.");render();});
   return;
  }
- if(a==="new"){editingId=null;draft=blank();step=0;if(page!=="journal")go("journal");else render();return;}
+ if(a==="new"){editingId=null;draft=blank();step=0;if(page!=="journal")go("journal");else{render();refreshAiUsage();}return;}
  if(a==="next"||a==="save"||a==="save-analyze"){
   var checks=[!!String(draft.situation||"").trim(),selectedEmotions().length>0,!!String(draft.thought||"").trim(),!!(String(draft.forText||"").trim()||String(draft.against||"").trim()),!!String(draft.balanced||"").trim(),!!String(draft.action||"").trim()];
   var prompts=["Опиши ситуацию, чтобы продолжить.","Выбери хотя бы одну эмоцию.","Запиши автоматическую мысль.","Добавь хотя бы один факт за или против этой мысли.","Сформулируй более точный взгляд.","Укажи один небольшой следующий шаг."];
@@ -1320,7 +1338,7 @@ function beginEdit(id){
  editingId=String(entry.id);
  step=0;
  closeModal();
- if(page!=="journal")go("journal");else render();
+ if(page!=="journal")go("journal");else{render();refreshAiUsage();}
 }
 function saveEditedEntry(){
  var index=state.entries.findIndex(function(item){return String(item.id)===String(editingId);});
