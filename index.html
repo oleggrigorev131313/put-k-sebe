@@ -456,37 +456,51 @@ var page=entered()?"home":"welcome";
 var step=6,draft=blank(),editingId=null,journalFilter="all",libraryTab="plan",showRejected=false;
 var progressPeriod=normalizeProgressPeriod(state.progressPeriod!=null?state.progressPeriod:"week");
 var pageHistory=[],cloudReady=false,cloudSyncTimer=null,cloudRetryTimer=null,cloudRetryAttempt=0,cloudInitInFlight=false,cloudLastToast="",cloudErrorShown=false,cloudStatus="paused",cloudErrorText="";
-var premiumStatus={active:false,trial_used:false},premiumLoading=false,aiUsage={limit:15,lifetime_limit:15,used:0,remaining:15,mode:"lifetime",exhausted:false,loading:false};
+var premiumStatus={active:false,trial_used:false},premiumLoading=false,aiUsage={limit:15,lifetime_limit:15,used:null,remaining:null,mode:"lifetime",exhausted:false,loading:true,_fromServer:false};
+var aiUsageRefreshPromise=null;
 var summaryView=null,expandedEmotionGroups={},activityPointPick=null,pendingAnalysisEntryId=null,entryMenuEscHandler=null;
 var PLANS=[
  {id:"month",title:"1 месяц · 490 ₽",text:"Разовая покупка. Автоматического списания нет.",href:"https://web.tribute.tg/p/K96"},
  {id:"quarter",title:"3 месяца · 1 323 ₽",text:"Разовая покупка · скидка 10% · 441 ₽ в месяц.",href:"https://web.tribute.tg/p/KbC"},
  {id:"year",title:"12 месяцев · 4 704 ₽",text:"Разовая покупка · скидка 20% · 392 ₽ в месяц.",href:"https://web.tribute.tg/p/KbD"}
 ];
+function normalizeQuotaPayload(data){
+ if(!data||typeof data!=="object")return {};
+ var premium=!!(data.paid_premium||data.mode==="daily");
+ var out=Object.assign({},data);
+ if(out.remaining==null||isNaN(Number(out.remaining))){
+  var limit=premium?(Number(out.daily_limit||out.limit)||10):(Number(out.lifetime_limit||out.limit)||15);
+  var used=premium?(Number(out.daily_used!=null?out.daily_used:out.used)||0):(Number(out.lifetime_used!=null?out.lifetime_used:out.used)||0);
+  out.remaining=Math.max(0,limit-used);
+  out.used=used;
+  out.limit=limit;
+ }
+ out.remaining=Math.max(0,Number(out.remaining));
+ if(out.exhausted==null)out.exhausted=out.remaining<=0;
+ return out;
+}
 function assistantQuotaLabel(){
  var q=aiUsage||{};
+ if(!q._fromServer)return q.mode==="daily"||q.paid_premium?"Сегодня: …":"Подсказок: …";
  var premium=!!(q.paid_premium||q.mode==="daily");
  var limit=premium?(Number(q.limit)||10):(Number(q.lifetime_limit||q.limit)||15);
- var rem=q.remaining!=null&&!isNaN(Number(q.remaining))?Math.max(0,Number(q.remaining)):Math.max(0,limit-(Number(q.used)||0));
+ var rem=Math.max(0,Number(q.remaining));
  if(premium)return "Сегодня: "+rem+" из "+limit;
  return "Подсказок: "+rem+" из "+limit;
 }
-function applyAiUsageFromApi(data){
- if(!data||typeof data!=="object")return;
- var keep=Array.isArray(data.suggestions)?{}:data;
- aiUsage=Object.assign({},aiUsage,keep);
- if(data.remaining!=null)aiUsage.remaining=Math.max(0,Number(data.remaining));
- if(data.used!=null)aiUsage.used=Number(data.used);
- if(data.limit!=null)aiUsage.limit=Number(data.limit);
- if(data.exhausted!=null)aiUsage.exhausted=!!data.exhausted;
- if(data.mode)aiUsage.mode=data.mode;
- if(data.lifetime_limit!=null)aiUsage.lifetime_limit=Number(data.lifetime_limit);
- if(data.lifetime_used!=null)aiUsage.lifetime_used=Number(data.lifetime_used);
- if(data.paid_premium!=null)aiUsage.paid_premium=!!data.paid_premium;
- aiUsage.loading=false;
- aiUsage._fromServer=true;
+function syncQuotaChrome(){
  if(page==="journal"&&step<6)paintChrome();
  else if(page==="home"||page==="subscription"||page==="summary")render();
+}
+function applyAiUsageFromApi(data){
+ if(!data||typeof data!=="object")return;
+ var quota=normalizeQuotaPayload(data);
+ ["remaining","used","limit","exhausted","mode","lifetime_limit","lifetime_used","daily_limit","daily_used","paid_premium","premium_active","summary_done"].forEach(function(k){
+  if(quota[k]!=null)aiUsage[k]=quota[k];
+ });
+ aiUsage.loading=false;
+ aiUsage._fromServer=true;
+ syncQuotaChrome();
 }
 function showHintsExhaustedSheet(){
  modal('<h2>Бесплатные подсказки закончились</h2><p><strong>15 из 15 использовано</strong></p><p>Записи в дневнике остаются бесплатными и без лимита. Premium даёт 10 подсказок персонального ассистента в день.</p><div class="modal-actions stack"><button class="btn primary full" type="button" id="hints-go-premium">Перейти на Премиум</button><button class="btn soft full" type="button" id="hints-continue">Продолжить без подсказок</button></div>');
@@ -573,17 +587,24 @@ async function refreshPremium(){
 }
 async function refreshAiUsage(){
  if(!tg||!tg.initData||!API_BASE){
-  if(!aiUsage._fromServer){
-   aiUsage=Object.assign({limit:15,lifetime_limit:15,used:0,remaining:15,mode:"lifetime",exhausted:false},aiUsage||{});
-  }
   aiUsage.loading=false;
-  if(page==="journal"&&step<6)paintChrome();
+  syncQuotaChrome();
   return;
  }
- try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
- var usageHeaders=apiHeaders();usageHeaders["X-User-Timezone"]=tz;
- var r=await apiFetch("/v1/ai/usage",{method:"GET",headers:usageHeaders,cache:"no-store"});
- if(r.ok)applyAiUsageFromApi(await r.json());else aiUsage.loading=false;}catch(e){aiUsage.loading=false;}
+ if(aiUsageRefreshPromise)return aiUsageRefreshPromise;
+ aiUsage.loading=true;
+ syncQuotaChrome();
+ aiUsageRefreshPromise=(async function(){
+  try{
+   var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
+   var usageHeaders=apiHeaders();usageHeaders["X-User-Timezone"]=tz;
+   var r=await apiFetch("/v1/ai/usage",{method:"GET",headers:usageHeaders,cache:"no-store"});
+   if(r.ok)applyAiUsageFromApi(await r.json());
+   else aiUsage.loading=false;
+  }catch(e){aiUsage.loading=false;}
+  finally{aiUsageRefreshPromise=null;syncQuotaChrome();}
+ })();
+ return aiUsageRefreshPromise;
 }
 function formatAnalysis(raw){
  var safe=esc(String(raw||""));
@@ -827,6 +848,7 @@ async function initCloud(){
   clearCloudRetry();
   await cloudSaveNow(false);
   await refreshPremium();
+  await refreshAiUsage();
   render();
  }catch(e){
   cloudReady=false;cloudStatus="error";cloudErrorText=e&&e.message?e.message:"Ошибка соединения";
@@ -1299,7 +1321,7 @@ function act(a){
   }).catch(function(e){toast(e.message||"Не удалось сохранить согласия. Попробуй ещё раз.");render();});
   return;
  }
- if(a==="new"){editingId=null;draft=blank();step=0;if(page!=="journal")go("journal");else{render();refreshAiUsage();}return;}
+ if(a==="new"){editingId=null;draft=blank();step=0;if(page!=="journal")go("journal");else{render();refreshAiUsage().then(syncQuotaChrome);}return;}
  if(a==="next"||a==="save"||a==="save-analyze"){
   var checks=[!!String(draft.situation||"").trim(),selectedEmotions().length>0,!!String(draft.thought||"").trim(),!!(String(draft.forText||"").trim()||String(draft.against||"").trim()),!!String(draft.balanced||"").trim(),!!String(draft.action||"").trim()];
   var prompts=["Опиши ситуацию, чтобы продолжить.","Выбери хотя бы одну эмоцию.","Запиши автоматическую мысль.","Добавь хотя бы один факт за или против этой мысли.","Сформулируй более точный взгляд.","Укажи один небольшой следующий шаг."];
@@ -1338,7 +1360,7 @@ function beginEdit(id){
  editingId=String(entry.id);
  step=0;
  closeModal();
- if(page!=="journal")go("journal");else{render();refreshAiUsage();}
+ if(page!=="journal")go("journal");else{render();refreshAiUsage().then(syncQuotaChrome);}
 }
 function saveEditedEntry(){
  var index=state.entries.findIndex(function(item){return String(item.id)===String(editingId);});
@@ -1559,12 +1581,13 @@ render();
 trackInitialSession();
 initCloud();
 document.addEventListener("visibilitychange",function(){
- if(document.visibilityState!=="visible"||cloudStatus!=="error")return;
+ if(document.visibilityState!=="visible"){if(tg&&tg.initData)refreshAiUsage();return;}
+ if(cloudStatus!=="error")return;
  if(cloudRetryTimer){clearTimeout(cloudRetryTimer);cloudRetryTimer=null;}
  initCloud();
 });
 refreshPremium();
-refreshAiUsage();
+if(tg&&tg.initData)refreshAiUsage();
 })();
 </script>
 </body>
