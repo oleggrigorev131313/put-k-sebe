@@ -594,6 +594,17 @@ paths:
         function_id: "$FUNCTION_ID"
         service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
+  /v1/journal/funnel:
+    post:
+      operationId: postJournalFunnelEvent
+      responses:
+        "202":
+          description: Journal funnel event accepted
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
   /v1/events:
     post:
       operationId: postAnalyticsEvent
@@ -622,6 +633,17 @@ paths:
       responses:
         "200":
           description: Admin user details
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /v1/admin/journal-funnel:
+    get:
+      operationId: getAdminJournalFunnel
+      responses:
+        "200":
+          description: Journal wizard funnel stats
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
