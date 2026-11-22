@@ -768,12 +768,21 @@ function todayActivity(){var k=localDayKey();function same(v){return dayKey(v)==
 function todayActivitySignature(){var a=todayActivity();return a.entries.map(function(x){return "e"+x.id+":"+x.date;}).concat(a.practices.map(function(x){return "p"+x.id+":"+x.completedAt;})).sort().join("|");}
 function summaryButtonState(){var a=todayActivity(),has=a.entries.length+a.practices.length>0;return {has:has,done:!!(aiUsage&&aiUsage.summary_done)||(!!(state.dailySummaryMeta&&state.dailySummaryMeta.day===localDayKey()))};}
 var journalFunnelLastStep=-1;
+var JOURNAL_FUNNEL_STEP_LABELS=["Ситуация","Эмоции","Автоматическая мысль","Факты за / против","Новый взгляд","Следующий шаг"];
 function trackJournalFunnel(kind,step){
- if(!tg||!tg.initData)return;
+ if(!API_BASE||!tg||!tg.initData)return;
+ var meta={};
+ if(kind==="step_opened"){
+  meta={step:step,step_label:JOURNAL_FUNNEL_STEP_LABELS[step]||""};
+  trackEvent("journal_step_opened",meta);
+ }else if(kind==="entry_completed"){
+  trackEvent("journal_entry_completed",{});
+ }
  apiFetch("/v1/journal/funnel",{method:"POST",headers:apiHeaders(),body:JSON.stringify({kind:kind,step:step})}).catch(function(){});
 }
 function maybeTrackJournalStep(){
  if(page!=="journal"||step>=6)return;
+ if(!API_BASE||!tg||!tg.initData)return;
  if(step===journalFunnelLastStep)return;
  journalFunnelLastStep=step;
  trackJournalFunnel("step_opened",step);
@@ -883,6 +892,7 @@ async function initCloud(){
   if(page==="welcome"||page==="consent"||page==="privacy"||page==="onboarding")page="home";
   saveLocalOnly();cloudReady=true;cloudStatus="connected";cloudErrorText="";
   clearCloudRetry();
+  maybeTrackJournalStep();
   await cloudSaveNow(false);
   await refreshPremium();
   await refreshAiUsage();

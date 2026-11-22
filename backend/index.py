@@ -2692,6 +2692,7 @@ def handler(event, context):
                     "pattern_created", "pattern_updated", "pattern_deleted",
                     "personal_practice_added", "personal_practice_completed",
                     "daily_summary_created", "ai_analysis_created",
+                    "journal_step_opened", "journal_entry_completed",
                 }
                 if event_name not in allowed: raise ValueError("Invalid event")
                 metadata=payload.get("metadata") if isinstance(payload.get("metadata"),dict) else {}
