@@ -148,9 +148,18 @@ python3 -m pip install --disable-pip-version-check --quiet \
   --python-version 3.12 --implementation cp --abi cp312 \
   --platform manylinux2014_x86_64 --only-binary=:all: \
   -r "$WORKDIR/backend/requirements.txt" || fail "Не удалось установить зависимости Python"
-cp "$WORKDIR/backend/index.py" "$BUILD_DIR/index.py"
-cp "$WORKDIR/backend/route_override.py" "$BUILD_DIR/route_override.py"
-cp "$WORKDIR/backend/assistant_quota.py" "$BUILD_DIR/assistant_quota.py"
+DEPLOY_PY_EXCLUDE=(migrate.py reset_premium.py)
+for py in "$WORKDIR"/backend/*.py; do
+  base="$(basename "$py")"
+  [[ "$base" == test_* ]] && continue
+  skip=0
+  for ex in "${DEPLOY_PY_EXCLUDE[@]}"; do
+    [[ "$base" == "$ex" ]] && skip=1 && break
+  done
+  [[ "$skip" -eq 1 ]] && continue
+  cp "$py" "$BUILD_DIR/$base"
+done
+[[ -f "$BUILD_DIR/index.py" ]] || fail "В пакет не попал index.py"
 python3 - "$BUILD_DIR" "$ZIP_FILE" <<'PY'
 import os, sys, zipfile
 root, target = sys.argv[1], sys.argv[2]
@@ -316,10 +325,13 @@ echo "    Версия \$latest до обновления: $PREV_VERSION_ID"
 NEW_VERSION_ID=""
 rollback_hint() {
   echo "Проверка не пройдена. Новая версия уже может быть \$latest." >&2
-  echo "Верните предыдущую версию командой:" >&2
-  echo "yc serverless function version set-tag --id ${PREV_VERSION_ID} --tag '\$latest'" >&2
+  echo "Откат: редеплой известного рабочего git-ref (тег \$latest через yc set-tag не поддерживается):" >&2
+  echo "  bash backend/deploy.sh --yes --skip-migrate --ref <commit-sha>" >&2
+  echo "  Пример: bash backend/deploy.sh --yes --skip-migrate --ref 0247bb5" >&2
+  echo "Этот запуск собирал ref: ${SOURCE_REF}" >&2
+  echo "Version id до обновления: ${PREV_VERSION_ID}" >&2
   if [[ -n "${NEW_VERSION_ID}" ]]; then
-    echo "Версия, которую нужно снять с \$latest: ${NEW_VERSION_ID}" >&2
+    echo "Version id после обновления (может быть \$latest): ${NEW_VERSION_ID}" >&2
   fi
 }
 
@@ -788,5 +800,6 @@ echo "PREVIOUS_VERSION_ID=$PREV_VERSION_ID"
 echo "NEW_VERSION_ID=$NEW_VERSION_ID"
 echo "=============================================="
 echo "Скопируй сюда только строки API_BASE и TRIBUTE_WEBHOOK_URL. Секреты не присылай."
-echo "Откат на предыдущую версию:"
-echo "yc serverless function version set-tag --id ${PREV_VERSION_ID} --tag '\$latest'"
+echo "Откат при сбое после деплоя:"
+echo "  bash backend/deploy.sh --yes --skip-migrate --ref <commit-sha>"
+echo "  (рабочий пример до неудачного выката: 0247bb5)"
