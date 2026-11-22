@@ -28,6 +28,7 @@ TABLES = (
     "imeads_attribution",
     "assistant_quota",
     "user_reminders",
+    "journal_funnel_events",
 )
 
 # Same columns and primary keys as the application reads and writes.
@@ -138,6 +139,16 @@ DDL = {
             last_reminder_variant Int32,
             telegram_blocked Bool NOT NULL,
             PRIMARY KEY (user_id)
+        );
+    """,
+    "journal_funnel_events": """
+        CREATE TABLE journal_funnel_events (
+            event_id Utf8 NOT NULL,
+            user_id Utf8 NOT NULL,
+            event_kind Utf8 NOT NULL,
+            step_number Int32,
+            created_at Utf8 NOT NULL,
+            PRIMARY KEY (event_id)
         );
     """,
 }

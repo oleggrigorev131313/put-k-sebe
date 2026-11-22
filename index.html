@@ -79,6 +79,11 @@ h2{font-size:22px;margin:0;font-weight:800}
 .thought-pin-text{margin:0;font-family:"PT Serif",Georgia,serif;font-size:17px;line-height:1.45;color:var(--ink)}
 .assistant-hint-btn{width:100%;min-height:48px;margin:12px 0 0;border-radius:16px;background:linear-gradient(135deg,#ffe8d6 0%,#f5c9a8 48%,#f9ddc8 100%);color:#243329;border:1px solid #e0b894;font-size:15px;font-weight:700;box-shadow:0 4px 14px rgba(224,147,100,.22);transition:transform .12s ease,box-shadow .12s ease}
 .assistant-hint-btn:active{transform:scale(.985);box-shadow:0 2px 8px rgba(224,147,100,.18)}
+.assistant-hint-btn.is-loading{opacity:.72;pointer-events:none;animation:assistant-hint-pulse 1.15s ease-in-out infinite}
+.assistant-hint-btn.is-loading:active{transform:none}
+.assistant-thinking-dots::after{content:"";animation:assistant-hint-dots 1.35s steps(4,end) infinite}
+@keyframes assistant-hint-pulse{0%,100%{filter:saturate(.85) brightness(.96)}50%{filter:saturate(1) brightness(1.03)}}
+@keyframes assistant-hint-dots{0%{content:""}25%{content:"."}50%{content:".."}75%,100%{content:"..."}}
 .field-guides{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px;font-size:13px;color:#6f736c;line-height:1.35}
 .field-guides li{position:relative;padding-left:14px}
 .field-guides li::before{content:"";position:absolute;left:0;top:.55em;width:5px;height:5px;border-radius:50%;background:#c4bdb2}
@@ -531,14 +536,34 @@ function showAssistantSuggestionSheet(step,field,suggestions){
   };
  });
 }
-async function requestAssistantHint(step,field){
+var assistantHintBusy=false;
+function setAssistantHintLoading(btn,loading){
+ if(!btn)return;
+ if(loading){
+  btn.disabled=true;
+  btn.classList.add("is-loading");
+  btn.setAttribute("aria-busy","true");
+  btn.innerHTML='Ассистент думает<span class="assistant-thinking-dots" aria-hidden="true"></span>';
+ }else{
+  btn.disabled=false;
+  btn.classList.remove("is-loading");
+  btn.removeAttribute("aria-busy");
+  btn.textContent="✨ Подсказка от ассистента";
+ }
+}
+async function requestAssistantHint(step,field,btn){
+ if(assistantHintBusy)return;
  if(aiUsage&&aiUsage.exhausted){showHintsExhaustedSheet();return;}
  if(!tg||!tg.initData){toast("Открой приложение через Telegram.");return;}
+ if(!btn)btn=document.querySelector('[data-assistant-hint="'+field+'"][data-assistant-step="'+step+'"]');
+ assistantHintBusy=true;
+ setAssistantHintLoading(btn,true);
  var context=[draft.situation,draft.forText,draft.against,draft.balanced,draft.action].map(function(x){return String(x||"").trim();}).filter(Boolean).join(" | ");
  try{
   var r=await apiFetch("/v1/assistant/hint",{method:"POST",headers:apiHeaders(),body:JSON.stringify({step:step,field:field,thought:draft.thought||"",for_text:draft.forText||"",against:draft.against||"",context:context,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"})});
   var data=await r.json();
   if(!r.ok){
+   if(r.status===409&&data.error==="assistant_hint_in_progress"){toast(data.message||"Подсказка уже готовится…");return;}
    if(r.status===429){applyAiUsageFromApi(data);showHintsExhaustedSheet();return;}
    throw new Error(data.message||data.error||"Не удалось получить подсказку");
   }
@@ -547,6 +572,7 @@ async function requestAssistantHint(step,field){
   if(!suggestions.length){toast("Подсказки не пришли. Попробуй ещё раз.");return;}
   showAssistantSuggestionSheet(step,field,suggestions);
  }catch(e){toast(e.message||"Не удалось получить подсказку.");}
+ finally{assistantHintBusy=false;setAssistantHintLoading(btn,false);}
 }
 function thoughtPinCard(kind,label,text){
  if(!String(text||"").trim())return "";
@@ -741,6 +767,17 @@ function localDayKey(){var d=new Date();return d.getFullYear()+"-"+String(d.getM
 function todayActivity(){var k=localDayKey();function same(v){return dayKey(v)===k;}return {entries:(state.entries||[]).filter(function(e){return same(e.date);}),practices:(state.practiceHistory||[]).filter(function(p){return same(p.completedAt);})};}
 function todayActivitySignature(){var a=todayActivity();return a.entries.map(function(x){return "e"+x.id+":"+x.date;}).concat(a.practices.map(function(x){return "p"+x.id+":"+x.completedAt;})).sort().join("|");}
 function summaryButtonState(){var a=todayActivity(),has=a.entries.length+a.practices.length>0;return {has:has,done:!!(aiUsage&&aiUsage.summary_done)||(!!(state.dailySummaryMeta&&state.dailySummaryMeta.day===localDayKey()))};}
+var journalFunnelLastStep=-1;
+function trackJournalFunnel(kind,step){
+ if(!tg||!tg.initData)return;
+ apiFetch("/v1/journal/funnel",{method:"POST",headers:apiHeaders(),body:JSON.stringify({kind:kind,step:step})}).catch(function(){});
+}
+function maybeTrackJournalStep(){
+ if(page!=="journal"||step>=6)return;
+ if(step===journalFunnelLastStep)return;
+ journalFunnelLastStep=step;
+ trackJournalFunnel("step_opened",step);
+}
 function trackEvent(name,metadata){
  if(!API_BASE||!tg||!tg.initData)return;
  apiFetch("/v1/events",{method:"POST",headers:apiHeaders(),body:JSON.stringify({event:name,metadata:metadata||{}})}).catch(function(){});
@@ -1234,6 +1271,7 @@ function render(){
  app.innerHTML=(views[page]||home)();
  paintChrome();
  bind();
+ maybeTrackJournalStep();
 }
 function snapThemeCarousel(row){
  var target=null,best=Infinity;
@@ -1285,7 +1323,7 @@ function bind(){
  var daily=document.getElementById("daily-summary");if(daily)daily.onclick=function(){runDailySummary(daily);};
  var prev=document.getElementById("daily-summary-previous");if(prev)prev.onclick=function(){openPreviousDailySummary(prev);};
  app.querySelectorAll("[data-theme-filter]").forEach(function(b){b.onclick=function(){var target=b.dataset.themeFilter||"";var def=THEME_DEFS.filter(function(t){return t.name===target;})[0];var found=(state.entries||[]).slice().sort(function(a,c){return new Date(c.date)-new Date(a.date);}).find(function(e){return def&&themeMatches(e,def);});if(found){entryDetail(found.id);}else{journalFilter="all";step=6;editingId=null;go("journal");}};});
- app.querySelectorAll("[data-assistant-hint]").forEach(function(b){b.onclick=function(ev){ev.preventDefault();requestAssistantHint(Number(b.dataset.assistantStep),b.dataset.assistantHint);};});
+ app.querySelectorAll("[data-assistant-hint]").forEach(function(b){b.onclick=function(ev){ev.preventDefault();if(assistantHintBusy||b.disabled)return;requestAssistantHint(Number(b.dataset.assistantStep),b.dataset.assistantHint,b);};});
  app.querySelectorAll("[data-practice-done]").forEach(function(b){b.onclick=function(ev){ev.stopPropagation();var p=(state.personalPractices||[]).find(function(x){return String(x.id)===String(b.dataset.practiceDone);});if(!p)return;if(p.status==="completed"){p.status="active";delete p.completedAt;}else{p.status="completed";p.completedAt=new Date().toISOString();state.practiceHistory=state.practiceHistory||[];state.practiceHistory.push({id:"ph"+Date.now(),personalPracticeId:p.id,title:p.title,completedAt:p.completedAt});trackEvent("personal_practice_completed",{practice_id:p.id});}save();render();};});
  app.querySelectorAll("[data-pp-menu]").forEach(function(b){b.onclick=function(ev){ev.stopPropagation();openPracticePlanMenu(b.dataset.ppMenu);};});
  bindHorizontalScroll(app);
@@ -1321,7 +1359,7 @@ function act(a){
   }).catch(function(e){toast(e.message||"Не удалось сохранить согласия. Попробуй ещё раз.");render();});
   return;
  }
- if(a==="new"){editingId=null;draft=blank();step=0;if(page!=="journal")go("journal");else{render();refreshAiUsage().then(syncQuotaChrome);}return;}
+ if(a==="new"){editingId=null;draft=blank();step=0;journalFunnelLastStep=-1;if(page!=="journal")go("journal");else{render();refreshAiUsage().then(syncQuotaChrome);}return;}
  if(a==="next"||a==="save"||a==="save-analyze"){
   var checks=[!!String(draft.situation||"").trim(),selectedEmotions().length>0,!!String(draft.thought||"").trim(),!!(String(draft.forText||"").trim()||String(draft.against||"").trim()),!!String(draft.balanced||"").trim(),!!String(draft.action||"").trim()];
   var prompts=["Опиши ситуацию, чтобы продолжить.","Выбери хотя бы одну эмоцию.","Запиши автоматическую мысль.","Добавь хотя бы один факт за или против этой мысли.","Сформулируй более точный взгляд.","Укажи один небольшой следующий шаг."];
@@ -1482,7 +1520,7 @@ function persistNewWizardEntry(){
  draft.emotions=selectedEmotions().slice();draft.emotion=draft.emotions.join(", ");
  draft.date=new Date().toISOString();draft.id=Date.now().toString();
  var id=draft.id;
- state.entries.unshift(Object.assign({},draft));save();trackEvent("diary_entry_created");
+ state.entries.unshift(Object.assign({},draft));save();trackEvent("diary_entry_created");trackJournalFunnel("entry_completed",-1);
  var actionText=String(draft.action||"").trim();
  if(actionText){
   state.personalPractices=state.personalPractices||[];

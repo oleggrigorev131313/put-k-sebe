@@ -22,6 +22,7 @@ from inactivity_reminder import (
     pick_reminder_variant,
     should_send_inactivity_reminder,
 )
+from journal_funnel import build_funnel_stats
 from route_override import resolve_request_path
 import ydb.iam
 
@@ -60,6 +61,7 @@ TABLES = (
     "imeads_attribution",
     "assistant_quota",
     "user_reminders",
+    "journal_funnel_events",
 )
 
 # Night push at 23:59 is disabled; the timer may still invoke the function.
@@ -940,6 +942,34 @@ def _parse_assistant_suggestions(text, max_len=160):
     return lines[:3]
 
 
+def _hint_inflight_claim_key(step, field):
+    return f"hint-inflight:{step}:{field}"
+
+
+def _record_journal_funnel_event(user_id, event_kind, step_number, created_at):
+    _execute(
+        """
+        DECLARE $event_id AS Utf8;
+        DECLARE $user_id AS Utf8;
+        DECLARE $event_kind AS Utf8;
+        DECLARE $step_number AS Int32;
+        DECLARE $created_at AS Utf8;
+        INSERT INTO journal_funnel_events (
+            event_id, user_id, event_kind, step_number, created_at
+        )
+        VALUES ($event_id, $user_id, $event_kind, $step_number, $created_at);
+        """,
+        parameters={
+            "$event_id": str(uuid.uuid4()),
+            "$user_id": str(user_id),
+            "$event_kind": str(event_kind)[:40],
+            "$step_number": int(step_number),
+            "$created_at": str(created_at)[:40],
+        },
+        table="journal_funnel_events",
+    )
+
+
 def _deepseek_assistant_hint(user_id, payload, timezone_name="UTC"):
     from datetime import datetime, timezone
 
@@ -999,6 +1029,17 @@ def _deepseek_assistant_hint(user_id, payload, timezone_name="UTC"):
             f"Уже написано пользователем: {context}\n"
             "Верни 3 подсказки, каждая с новой строки, до 120 символов."
         )
+    inflight_key = _hint_inflight_claim_key(step, field)
+    created = datetime.now(timezone.utc).isoformat()
+    if not _claim_summary_notification(user_id, inflight_key, created):
+        return _json_response(
+            409,
+            {
+                "error": "assistant_hint_in_progress",
+                "message": "Подсказка уже готовится. Подожди несколько секунд.",
+                **_assistant_quota_status(user_id, timezone_name),
+            },
+        )
     try:
         data = _deepseek_chat(
             [{"role": "system", "content": system}, {"role": "user", "content": user_message}],
@@ -1031,14 +1072,18 @@ def _deepseek_assistant_hint(user_id, payload, timezone_name="UTC"):
                     "Опиши, что произошло, без оценок себя.",
                     "Отдели факты от предположений.",
                 ]
-        created = datetime.now(timezone.utc).isoformat()
         request_key = f"{step}:{field}:{uuid.uuid4().hex[:8]}"
         _record_chargeable_assistant_use(user_id, "assistant_hint", request_key, created)
         quota = _assistant_quota_status(user_id, timezone_name)
         return _json_response(200, {"ok": True, "suggestions": suggestions[:3], **quota})
     except Exception:
         LOG.exception("assistant hint failed")
-        return _json_response(502, {"error": "assistant_hint_failed", "message": "Не удалось получить подсказку. Попробуй позже."})
+        return _json_response(
+            502,
+            {"error": "assistant_hint_failed", "message": "Не удалось получить подсказку. Попробуй позже."},
+        )
+    finally:
+        _release_summary_notification(user_id, inflight_key)
 
 
 def _diary_entry_quality_error(entry):
@@ -2604,6 +2649,38 @@ def handler(event, context):
                 },
             )
 
+        if path == "/v1/journal/funnel" and method == "POST":
+            user_id = _auth_telegram_user(headers)
+            try:
+                payload = json.loads(body or "{}")
+                event_kind = str(payload.get("kind") or payload.get("event_kind") or "").strip()
+                if event_kind not in ("step_opened", "entry_completed"):
+                    raise ValueError("invalid_kind")
+                step_raw = payload.get("step", payload.get("step_number", -1))
+                step_number = int(step_raw)
+                if event_kind == "step_opened":
+                    if step_number < 0 or step_number > 5:
+                        raise ValueError("invalid_step")
+                else:
+                    step_number = -1
+            except (json.JSONDecodeError, ValueError, TypeError) as exc:
+                return _json_response(400, {"error": str(exc)})
+            from datetime import datetime, timezone
+
+            try:
+                _record_journal_funnel_event(
+                    user_id,
+                    event_kind,
+                    step_number,
+                    datetime.now(timezone.utc).isoformat(),
+                )
+                return _json_response(202, {"ok": True})
+            except TableMissing:
+                raise
+            except Exception as exc:
+                LOG.error("journal funnel event failed type=%s", type(exc).__name__)
+                return _json_response(503, {"error": "journal_funnel_unavailable"})
+
         if path == "/v1/events" and method == "POST":
             user_id = _auth_telegram_user(headers)
             try:
@@ -2677,6 +2754,52 @@ def handler(event, context):
                 state=dict(state); state["entries"]=[dict(x,analysis=None) for x in (state.get("entries") or [])]; state["chat"]=[]
             return _json_response(200,{"ok":True,"telegram_id":target_id,"state":state,"consents":consents,
                 "events":events,"ai_history":ai_history,"premium":_premium_status(target_id)})
+
+        if path == "/v1/admin/journal-funnel" and method == "GET":
+            if not ADMIN_PASSWORD or not hmac.compare_digest(
+                headers.get("x-admin-password", ""), ADMIN_PASSWORD
+            ):
+                return _json_response(401, {"error": "unauthorized"})
+            period_raw = str((query or {}).get("days") or "30").strip()
+            try:
+                period_days = int(period_raw)
+            except ValueError:
+                period_days = 30
+            if period_days not in (0, 7, 30):
+                period_days = 30
+            try:
+                result = _execute(
+                    """
+                    SELECT user_id, event_kind, step_number, created_at
+                    FROM journal_funnel_events
+                    ORDER BY created_at DESC
+                    LIMIT 200000;
+                    """,
+                    table="journal_funnel_events",
+                )
+            except TableMissing:
+                return _json_response(
+                    503,
+                    {"error": "table_missing", "message": "journal_funnel_events"},
+                )
+            rows = []
+            for result_set in result:
+                for row in result_set.rows:
+                    rows.append(
+                        {
+                            "user_id": str(row.user_id),
+                            "event_kind": str(row.event_kind),
+                            "step_number": int(row.step_number)
+                            if row.step_number is not None
+                            else -1,
+                            "created_at": str(row.created_at),
+                        }
+                    )
+            stats = build_funnel_stats(
+                rows,
+                days=None if period_days == 0 else period_days,
+            )
+            return _json_response(200, {"ok": True, **stats})
 
         if path == "/v1/admin/analytics" and method == "GET":
             if not ADMIN_PASSWORD or not hmac.compare_digest(
