@@ -8,7 +8,7 @@ import re
 import time
 import uuid
 from threading import RLock
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, unquote
 
 import ydb
 from assistant_quota import (
@@ -27,6 +27,7 @@ from route_override import resolve_request_path
 from source_tags import (
     SOURCE_CHANNELS,
     SOURCE_TAG_RE,
+    admin_source_error,
     build_tag_slug,
     diary_users_per_tag,
     enrich_tags_with_stats,
@@ -75,6 +76,7 @@ TABLES = (
     "source_tags",
     "user_sources",
     "source_clicks",
+    "source_starts",
 )
 
 # Night push at 23:59 is disabled; the timer may still invoke the function.
@@ -500,6 +502,82 @@ def _source_increment_click(tag):
         raise
 
 
+def _source_ensure_click_row(tag):
+    try:
+        _execute(
+            """
+            DECLARE $tag AS Utf8;
+            DECLARE $count AS Uint64;
+            UPSERT INTO source_clicks (tag, click_count)
+            VALUES ($tag, $count);
+            """,
+            parameters={"$tag": tag, "$count": 0},
+            table="source_clicks",
+        )
+    except TableMissing:
+        raise
+    except Exception:
+        LOG.exception("source_clicks bootstrap failed tag=%s", tag)
+
+
+def _source_increment_start(tag):
+    tag = str(tag or "").strip()
+    if not parse_source_tag(tag):
+        return
+    count = 0
+    try:
+        result = _execute(
+            """
+            DECLARE $tag AS Utf8;
+            SELECT start_count FROM source_starts WHERE tag = $tag;
+            """,
+            parameters={"$tag": tag},
+            table="source_starts",
+        )
+        for rs in result:
+            for row in rs.rows:
+                count = int(row.start_count)
+        _execute(
+            """
+            DECLARE $tag AS Utf8;
+            DECLARE $count AS Uint64;
+            UPSERT INTO source_starts (tag, start_count)
+            VALUES ($tag, $count);
+            """,
+            parameters={"$tag": tag, "$count": count + 1},
+            table="source_starts",
+        )
+    except TableMissing:
+        return
+
+
+def _source_delete_tag(tag):
+    tag = str(tag or "").strip()
+    if not SOURCE_TAG_RE.fullmatch(tag):
+        raise ValueError("invalid_tag")
+    if not _source_tag_exists(tag):
+        raise ValueError("unknown_tag")
+    _execute(
+        """
+        DECLARE $tag AS Utf8;
+        DELETE FROM source_tags WHERE tag = $tag;
+        """,
+        parameters={"$tag": tag},
+        table="source_tags",
+    )
+    try:
+        _execute(
+            """
+            DECLARE $tag AS Utf8;
+            DELETE FROM source_clicks WHERE tag = $tag;
+            """,
+            parameters={"$tag": tag},
+            table="source_clicks",
+        )
+    except TableMissing:
+        pass
+
+
 def _source_list_tags_with_stats():
     tags = []
     try:
@@ -549,6 +627,17 @@ def _source_list_tags_with_stats():
                 )
     except TableMissing:
         pass
+    all_starts_by_tag = {}
+    try:
+        start_result = _execute(
+            "SELECT tag, start_count FROM source_starts;",
+            table="source_starts",
+        )
+        for rs in start_result:
+            for row in rs.rows:
+                all_starts_by_tag[str(row.tag)] = int(row.start_count)
+    except TableMissing:
+        pass
     users_by_tag = group_users_by_tag(user_rows)
     all_uids = set()
     for uids in users_by_tag.values():
@@ -562,7 +651,9 @@ def _source_list_tags_with_stats():
         return diary_cache[uid]
 
     diary_by_tag = diary_users_per_tag(users_by_tag, has_diary)
-    return enrich_tags_with_stats(tags, clicks_by_tag, users_by_tag, diary_by_tag)
+    return enrich_tags_with_stats(
+        tags, clicks_by_tag, all_starts_by_tag, users_by_tag, diary_by_tag
+    )
 
 
 def _source_create_tag(payload):
@@ -596,34 +687,36 @@ def _source_create_tag(payload):
     from datetime import datetime, timezone
 
     now = datetime.now(timezone.utc).isoformat()
-    _execute(
-        """
-        DECLARE $tag AS Utf8;
-        DECLARE $name AS Utf8;
-        DECLARE $channel AS Utf8;
-        DECLARE $campaign AS Utf8;
-        DECLARE $created AS Utf8;
-        INSERT INTO source_tags (tag, name, channel, campaign, created_at)
-        VALUES ($tag, $name, $channel, $campaign, $created);
-        """,
-        parameters={
-            "$tag": tag,
-            "$name": name,
-            "$channel": channel,
-            "$campaign": campaign,
-            "$created": now,
-        },
-        table="source_tags",
-    )
-    _execute(
-        """
-        DECLARE $tag AS Utf8;
-        DECLARE $count AS Uint64;
-        INSERT INTO source_clicks (tag, click_count) VALUES ($tag, $count);
-        """,
-        parameters={"$tag": tag, "$count": 0},
-        table="source_clicks",
-    )
+    try:
+        _execute(
+            """
+            DECLARE $tag AS Utf8;
+            DECLARE $name AS Utf8;
+            DECLARE $channel AS Utf8;
+            DECLARE $campaign AS Utf8;
+            DECLARE $created AS Utf8;
+            INSERT INTO source_tags (tag, name, channel, campaign, created_at)
+            VALUES ($tag, $name, $channel, $campaign, $created);
+            """,
+            parameters={
+                "$tag": tag,
+                "$name": name,
+                "$channel": channel,
+                "$campaign": campaign,
+                "$created": now,
+            },
+            table="source_tags",
+        )
+    except Exception as exc:
+        if _source_tag_exists(tag):
+            raise ValueError("tag_exists") from exc
+        raise
+    try:
+        _source_ensure_click_row(tag)
+    except TableMissing:
+        raise
+    except Exception:
+        LOG.exception("source_clicks init failed after tag create tag=%s", tag)
     return {
         "tag": tag,
         "name": name,
@@ -2683,6 +2776,12 @@ def _handle_telegram_webhook(headers, body):
                 _source_capture_first_touch(str(uid), payload)
             except Exception:
                 pass
+            try:
+                src_tag = parse_source_tag(payload)
+                if src_tag:
+                    _source_increment_start(src_tag)
+            except Exception:
+                pass
         LOG.info("Telegram /start inline reply")
         return _webhook_response(_start_webhook_method(chat_id))
     except Exception as exc:
@@ -2934,7 +3033,10 @@ def handler(event, context):
                     503, {"error": "table_missing", "table": exc.table_name}
                 )
             except ValueError as exc:
-                return _json_response(400, {"error": str(exc)})
+                return _json_response(
+                    400,
+                    {"error": str(exc), "message": admin_source_error(str(exc))},
+                )
             gateway_base = os.environ.get("PUBLIC_GATEWAY_URL", "").strip().rstrip("/")
             track_url = (
                 f"{gateway_base}/go/{created['tag']}" if gateway_base else ""
@@ -2948,6 +3050,27 @@ def handler(event, context):
                     "telegram_url": created["telegram_url"],
                 },
             )
+
+        if path.startswith("/v1/admin/source-tags/") and method == "DELETE":
+            if not ADMIN_PASSWORD or not hmac.compare_digest(
+                headers.get("x-admin-password", ""), ADMIN_PASSWORD
+            ):
+                return _json_response(401, {"error": "unauthorized"})
+            tag = path[len("/v1/admin/source-tags/") :].strip("/")
+            if tag:
+                tag = unquote(tag)
+            try:
+                _source_delete_tag(tag)
+            except TableMissing as exc:
+                return _json_response(
+                    503, {"error": "table_missing", "table": exc.table_name}
+                )
+            except ValueError as exc:
+                return _json_response(
+                    400,
+                    {"error": str(exc), "message": admin_source_error(str(exc))},
+                )
+            return _json_response(200, {"ok": True, "deleted": True, "tag": tag})
 
         if path == "/v1/admin/imeads/test" and method == "POST":
             if not ADMIN_PASSWORD or not hmac.compare_digest(headers.get("x-admin-password", ""), ADMIN_PASSWORD):

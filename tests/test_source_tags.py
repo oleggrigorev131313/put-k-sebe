@@ -12,7 +12,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "backend"))
 
 from source_tags import (  # noqa: E402
+    admin_source_error,
     build_tag_slug,
+    enrich_tags_with_stats,
     is_imeads_start_payload,
     parse_source_tag,
     telegram_start_url,
@@ -44,6 +46,25 @@ class SourceTagSlugTest(unittest.TestCase):
         slug = build_tag_slug("Летняя кампания", "tiktok", "june")
         self.assertRegex(slug, r"^[A-Za-z0-9_-]{1,64}$")
         self.assertTrue(slug.startswith("tiktok"))
+
+
+class SourceTagStatsTest(unittest.TestCase):
+    def test_enrich_tags_splits_starts_and_new_users(self):
+        rows = [{"tag": "tiktok_a", "name": "A", "channel": "tiktok", "campaign": "", "created_at": ""}]
+        out = enrich_tags_with_stats(
+            rows,
+            {"tiktok_a": 3},
+            {"tiktok_a": 7},
+            {"tiktok_a": {"u1", "u2"}},
+            {"tiktok_a": 1},
+        )
+        self.assertEqual(out[0]["clicks"], 3)
+        self.assertEqual(out[0]["all_starts"], 7)
+        self.assertEqual(out[0]["new_users"], 2)
+        self.assertEqual(out[0]["diary_users"], 1)
+
+    def test_admin_tag_exists_ru(self):
+        self.assertIn("уже существует", admin_source_error("tag_exists"))
 
 
 class SourceRedirectTest(unittest.TestCase):

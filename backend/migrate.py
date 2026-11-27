@@ -32,6 +32,7 @@ TABLES = (
     "source_tags",
     "user_sources",
     "source_clicks",
+    "source_starts",
 )
 
 # Same columns and primary keys as the application reads and writes.
@@ -176,6 +177,13 @@ DDL = {
         CREATE TABLE source_clicks (
             tag Utf8 NOT NULL,
             click_count Uint64 NOT NULL,
+            PRIMARY KEY (tag)
+        );
+    """,
+    "source_starts": """
+        CREATE TABLE source_starts (
+            tag Utf8 NOT NULL,
+            start_count Uint64 NOT NULL,
             PRIMARY KEY (tag)
         );
     """,
