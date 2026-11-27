@@ -53,7 +53,23 @@ def telegram_start_url(tag):
     return f"https://t.me/{TELEGRAM_BOT_USERNAME}?start={tag}"
 
 
-def enrich_tags_with_stats(tag_rows, clicks_by_tag, users_by_tag, diary_users_by_tag):
+ADMIN_SOURCE_ERRORS_RU = {
+    "tag_exists": "Метка с таким slug уже существует — задайте другое название или укажите slug вручную.",
+    "invalid_name": "Укажите название метки.",
+    "invalid_channel": "Выберите канал из списка.",
+    "invalid_tag": "Slug метки: латиница, цифры, _ и -, до 64 символов.",
+    "unknown_tag": "Метка не найдена.",
+}
+
+
+def admin_source_error(code):
+    key = str(code or "").strip()
+    return ADMIN_SOURCE_ERRORS_RU.get(key, key or "Ошибка")
+
+
+def enrich_tags_with_stats(
+    tag_rows, clicks_by_tag, all_starts_by_tag, users_by_tag, diary_users_by_tag
+):
     """tag_rows: list of dicts with tag, name, channel, campaign, created_at."""
     out = []
     for row in tag_rows:
@@ -62,7 +78,8 @@ def enrich_tags_with_stats(tag_rows, clicks_by_tag, users_by_tag, diary_users_by
             {
                 **row,
                 "clicks": int(clicks_by_tag.get(tag, 0)),
-                "starts": len(users_by_tag.get(tag, set())),
+                "all_starts": int(all_starts_by_tag.get(tag, 0)),
+                "new_users": len(users_by_tag.get(tag, set())),
                 "diary_users": int(diary_users_by_tag.get(tag, 0)),
             }
         )

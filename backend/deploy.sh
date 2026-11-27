@@ -487,8 +487,25 @@ paths:
     post:
       operationId: createAdminSourceTag
       responses:
-        "201":
+        "200":
           description: Source tag created
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /v1/admin/source-tags/{tag}:
+    delete:
+      operationId: deleteAdminSourceTag
+      parameters:
+        - name: tag
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Source tag deleted
       x-yc-apigateway-integration:
         type: cloud_functions
         function_id: "$FUNCTION_ID"
