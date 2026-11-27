@@ -454,6 +454,46 @@ paths:
         function_id: "$FUNCTION_ID"
         service_account_id: "$GATEWAY_SA_ID"
         payload_format_version: "1.0"
+  /go/{tag}:
+    get:
+      operationId: getSourceRedirect
+      parameters:
+        - name: tag
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to Telegram bot deep link
+        "404":
+          description: Unknown tag
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+  /v1/admin/source-tags:
+    get:
+      operationId: getAdminSourceTags
+      responses:
+        "200":
+          description: Source tag list with stats
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
+    post:
+      operationId: createAdminSourceTag
+      responses:
+        "201":
+          description: Source tag created
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: "$FUNCTION_ID"
+        service_account_id: "$GATEWAY_SA_ID"
+        payload_format_version: "1.0"
   /v1/webhooks/telegram:
     post:
       operationId: telegramBotWebhook
