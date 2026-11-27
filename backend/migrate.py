@@ -29,6 +29,9 @@ TABLES = (
     "assistant_quota",
     "user_reminders",
     "journal_funnel_events",
+    "source_tags",
+    "user_sources",
+    "source_clicks",
 )
 
 # Same columns and primary keys as the application reads and writes.
@@ -149,6 +152,31 @@ DDL = {
             step_number Int32,
             created_at Utf8 NOT NULL,
             PRIMARY KEY (event_id)
+        );
+    """,
+    "source_tags": """
+        CREATE TABLE source_tags (
+            tag Utf8 NOT NULL,
+            name Utf8 NOT NULL,
+            channel Utf8 NOT NULL,
+            campaign Utf8 NOT NULL,
+            created_at Utf8 NOT NULL,
+            PRIMARY KEY (tag)
+        );
+    """,
+    "user_sources": """
+        CREATE TABLE user_sources (
+            user_id Utf8 NOT NULL,
+            tag Utf8 NOT NULL,
+            first_seen_at Utf8 NOT NULL,
+            PRIMARY KEY (user_id)
+        );
+    """,
+    "source_clicks": """
+        CREATE TABLE source_clicks (
+            tag Utf8 NOT NULL,
+            click_count Uint64 NOT NULL,
+            PRIMARY KEY (tag)
         );
     """,
 }
